@@ -70,7 +70,7 @@ class FanServices:
         pack = window_pack(engine, minutes, list(session.insights.values()))
         payload = {"task": "catchup", "context": pack, "language": profile.language.value,
                    "profile": _profile_context(session, profile)}
-        draft, err = await call_agent(self.team.catchup, payload, CatchupDraft, budget=self.team.budget)
+        draft, err = await call_agent(self.team.catchup, payload, CatchupDraft)
         source = self.generated_by
         report: FactCheckReport
         if draft is not None:
@@ -110,7 +110,7 @@ class FanServices:
         pack = window_pack(engine, 130, list(session.insights.values()))
         payload = {"task": "recap", "phase": phase, "context": pack, "language": profile.language.value,
                    "profile": _profile_context(session, profile)}
-        draft, err = await call_agent(self.team.recap, payload, RecapDraft, timeout=RECAP_TIMEOUT_S, budget=self.team.budget)
+        draft, err = await call_agent(self.team.recap, payload, RecapDraft, timeout=RECAP_TIMEOUT_S)
         source = self.generated_by
         if draft is not None:
             outcome = check_text(engine, {**pack, "profile": payload["profile"]},

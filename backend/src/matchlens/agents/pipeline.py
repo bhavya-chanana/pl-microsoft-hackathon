@@ -42,7 +42,7 @@ from matchlens.agents.contracts import (
 )
 from matchlens.agents.coordinator import Coordinator, Plan
 from matchlens.agents.factchecker import check_text, merge_reports, rewrite_payload
-from matchlens.agents.llm import CallBudget, ModelClients
+from matchlens.agents.llm import ModelClients
 from matchlens.agents.producer import OverlayScheduler
 from matchlens.interpret.signals import Signal, SignalType
 from matchlens.runtime.session import MatchSession
@@ -70,7 +70,6 @@ class AgentTeam:
     catchup: Agent
     recap: Agent
     label: str
-    budget: CallBudget
 
     @classmethod
     def build(cls, clients: ModelClients) -> AgentTeam:
@@ -90,21 +89,16 @@ class AgentTeam:
             catchup=agent(fast, prompts.CATCHUP, "catchup", "What did I miss?", fo),
             recap=agent(strong, prompts.RECAP, "recap", "Half-time and full-time recaps", so),
             label=clients.label,
-            budget=clients.budget,
         )
 
 
 async def call_agent(agent: Agent, payload: dict[str, Any], fmt: type[T],
-                     timeout: float | None = None, budget: CallBudget | None = None) -> tuple[T | None, str | None]:
+                     timeout: float | None = None) -> tuple[T | None, str | None]:
     """Run one agent with structured output. Returns (value, error)."""
     timeout = AGENT_TIMEOUT_S if timeout is None else timeout
-    if budget is not None and not budget.acquire():
-        return None, f"{agent.name}: call budget exhausted"
     try:
         response = await asyncio.wait_for(
             agent.run(json.dumps(payload, default=str), options={"response_format": fmt}), timeout)
-        if budget is not None:
-            budget.record(response.usage_details)
         value = response.value
         if value is None:
             value = fmt.model_validate_json(response.text)
@@ -184,14 +178,14 @@ class TacticalExecutor(_Stage):
         if job.plan != Plan.FULL:
             await ctx.send_message(DraftResult(job, "tactical", None))
             return
-        draft, err = await call_agent(self.team.tactical, {"task": "tactical", "context": job.pack}, TacticalDraft, budget=self.team.budget)
+        draft, err = await call_agent(self.team.tactical, {"task": "tactical", "context": job.pack}, TacticalDraft)
         await ctx.send_message(DraftResult(job, "tactical", draft, err))
 
 
 class NarratorExecutor(_Stage):
     @handler
     async def run(self, job: SignalJob, ctx: WorkflowContext[DraftResult]) -> None:
-        draft, err = await call_agent(self.team.narrator, {"task": "narrative", "context": job.pack}, NarrativeDraft, budget=self.team.budget)
+        draft, err = await call_agent(self.team.narrator, {"task": "narrative", "context": job.pack}, NarrativeDraft)
         await ctx.send_message(DraftResult(job, "narrator", draft, err))
 
 
@@ -264,7 +258,7 @@ class ProducerExecutor(_Stage):
     async def run(self, item: CheckedInsight, ctx: WorkflowContext[RenderResult]) -> None:
         job = item.job
         payload = {"task": "overlay", "context": job.pack, "headline": item.headline, "body": item.body}
-        plan, err = await call_agent(self.team.producer, payload, OverlayPlan, budget=self.team.budget)
+        plan, err = await call_agent(self.team.producer, payload, OverlayPlan)
         if plan is not None:
             texts = [plan.title, plan.subtitle or ""] + [s.value for s in plan.stats]
             if check_text(self.session.engine, job.pack, texts, []).problems:
@@ -278,7 +272,7 @@ class PersonaliserExecutor(_Stage):
         job = item.job
         payload = {"task": "personalise", "context": job.pack, "headline": item.headline, "body": item.body,
                    "languages": LANGUAGES}
-        draft, err = await call_agent(self.team.personaliser, payload, PersonalisedDraft, budget=self.team.budget)
+        draft, err = await call_agent(self.team.personaliser, payload, PersonalisedDraft)
         await ctx.send_message(RenderResult(item, "personaliser", draft, err))
 
 

@@ -15,8 +15,6 @@ Configuration (environment or backend/.env):
     MATCHLENS_REASONING_FAST     reasoning effort for live agents (default low)
     MATCHLENS_REASONING_STRONG   reasoning effort for recaps (default high)
     MATCHLENS_LLM                "auto" (default: online when an endpoint is set), "online" or "offline"
-    MATCHLENS_MAX_LLM_CALLS      hard cap on model calls per server process (default 200); beyond it
-                                 every agent falls back to data-only text
 """
 
 from __future__ import annotations
@@ -24,7 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from agent_framework import BaseChatClient, ChatResponse, Message
@@ -97,37 +95,11 @@ class OfflineChatClient(BaseChatClient):
         return self._respond(list(messages))
 
 
-class CallBudget:
-    """Process-wide spend guard: counts model calls and tokens, refuses calls past the cap."""
-
-    def __init__(self, max_calls: int) -> None:
-        self.max_calls = max_calls
-        self.calls = 0
-        self.input_tokens = 0
-        self.output_tokens = 0
-
-    def acquire(self) -> bool:
-        if self.calls >= self.max_calls:
-            return False
-        self.calls += 1
-        return True
-
-    def record(self, usage: Any) -> None:
-        if isinstance(usage, dict):
-            self.input_tokens += int(usage.get("input_token_count") or 0)
-            self.output_tokens += int(usage.get("output_token_count") or 0)
-
-    def as_dict(self) -> dict[str, int]:
-        return {"calls": self.calls, "max_calls": self.max_calls,
-                "input_tokens": self.input_tokens, "output_tokens": self.output_tokens}
-
-
 @dataclass
 class ModelClients:
     fast: BaseChatClient
     strong: BaseChatClient
     settings: LlmSettings
-    budget: CallBudget = field(default_factory=lambda: CallBudget(10**9))
 
     @property
     def label(self) -> str:
@@ -168,5 +140,4 @@ def build_clients(settings: LlmSettings | None = None) -> ModelClients:
     fast = make(settings.fast_model)
     strong = fast if settings.strong_model == settings.fast_model else make(settings.strong_model)
     log.info("LLM mode: online (%s) %s/%s", settings.kind, settings.fast_model, settings.strong_model)
-    budget = CallBudget(int(os.getenv("MATCHLENS_MAX_LLM_CALLS", "200")))
-    return ModelClients(fast=fast, strong=strong, settings=settings, budget=budget)
+    return ModelClients(fast=fast, strong=strong, settings=settings)

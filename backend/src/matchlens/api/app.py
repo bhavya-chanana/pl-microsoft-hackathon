@@ -104,7 +104,6 @@ async def health() -> dict[str, Any]:
         "status": "ok",
         "match_active": s is not None,
         "llm": runtime.clients.label if runtime else None,
-        "llm_budget": runtime.clients.budget.as_dict() if runtime else None,
         "processing_ms_p95": _p95(s.latency_ms[-500:]) if s else None,
         "agent_insight_ms_p95": _p95(agent_lat),
     }
