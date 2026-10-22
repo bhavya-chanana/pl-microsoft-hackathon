@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Matchlens: explainable, personalised match intelligence from synthetic football events"
 requires-python = ">=3.12"
 dependencies = [
+    "agent-framework-core==1.23.0",
+    "agent-framework-foundry==1.15.0",
+    "azure-identity==1.26.0",
     "fastapi==0.161.0",
     "mcp==1.30.0",
     "pydantic==2.14.1",
