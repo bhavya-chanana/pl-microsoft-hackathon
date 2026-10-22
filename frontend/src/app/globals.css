@@ -1,0 +1,202 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Matchlens design tokens. Point of view: "floodlit matchday gallery" — the
+ * producer's monitor wall at a night match. Dark is the default: stadium-night
+ * slate, chalk-white lines, team colours carry the data, tally red means on air.
+ * Light is the daytime matchday programme: cool paper and ink.
+ * Components use these tokens only; never raw colour values.
+ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-raised: var(--raised);
+  --color-tally: var(--tally);
+  --color-tally-foreground: var(--tally-foreground);
+  --color-verified: var(--verified);
+  --color-rewritten: var(--rewritten);
+  --color-blocked: var(--blocked);
+  --color-data: var(--data);
+  --color-turf: var(--turf);
+  --color-turf-stripe: var(--turf-stripe);
+  --color-chalk: var(--chalk);
+  --color-graphic: var(--graphic);
+  --color-graphic-foreground: var(--graphic-foreground);
+  --color-graphic-warn: var(--graphic-warn);
+  --color-home: var(--team-home);
+  --color-away: var(--team-away);
+
+  --font-sans: var(--font-text), var(--font-devanagari), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-display), var(--font-devanagari), ui-sans-serif, sans-serif;
+  --font-display: var(--font-display), var(--font-devanagari), ui-sans-serif, sans-serif;
+
+  --text-score: clamp(1.75rem, 1.2rem + 2.4vw, 3rem);
+  --text-score--line-height: 1;
+  --text-display: clamp(1.5rem, 1.1rem + 1.6vw, 2.25rem);
+  --text-display--line-height: 1.1;
+
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 2.5);
+  --radius-4xl: calc(var(--radius) * 3);
+
+  --shadow-raised: var(--elevation-1);
+  --shadow-floating: var(--elevation-2);
+
+  --ease-broadcast: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root {
+  /* Light: matchday programme. */
+  --radius: 0.5rem;
+  --background: oklch(0.975 0.004 250);
+  --foreground: oklch(0.22 0.025 255);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --raised: oklch(0.955 0.006 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.24 0.03 255);
+  --primary-foreground: oklch(0.98 0.004 250);
+  --secondary: oklch(0.935 0.008 250);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.945 0.006 250);
+  --muted-foreground: oklch(0.47 0.02 255);
+  --accent: oklch(0.93 0.01 250);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.55 0.2 27);
+  --border: oklch(0.89 0.008 250);
+  --input: oklch(0.86 0.01 250);
+  --ring: oklch(0.5 0.12 255);
+
+  --tally: oklch(0.56 0.21 27);
+  --tally-foreground: oklch(0.99 0 0);
+  --verified: oklch(0.5 0.13 155);
+  --rewritten: oklch(0.55 0.13 70);
+  --blocked: oklch(0.53 0.2 27);
+  --data: oklch(0.5 0.06 255);
+
+  --turf: oklch(0.6 0.11 150);
+  --turf-stripe: oklch(0.63 0.11 150);
+  --chalk: oklch(0.98 0.01 150 / 0.85);
+  --graphic: oklch(0.22 0.03 255 / 0.94);
+  --graphic-foreground: oklch(0.98 0.004 250);
+  --graphic-warn: oklch(0.83 0.14 78);
+
+  --team-home: oklch(0.55 0.18 258);
+  --team-away: oklch(0.74 0.14 70);
+
+  --elevation-1: 0 1px 2px oklch(0.3 0.03 255 / 0.06), 0 2px 8px oklch(0.3 0.03 255 / 0.05);
+  --elevation-2: 0 4px 12px oklch(0.3 0.03 255 / 0.1), 0 12px 32px oklch(0.3 0.03 255 / 0.08);
+}
+
+.dark {
+  /* Dark: stadium night. */
+  --background: oklch(0.165 0.018 255);
+  --foreground: oklch(0.95 0.006 250);
+  --card: oklch(0.205 0.02 255);
+  --card-foreground: var(--foreground);
+  --raised: oklch(0.245 0.022 255);
+  --popover: oklch(0.235 0.022 255);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.95 0.006 250);
+  --primary-foreground: oklch(0.19 0.02 255);
+  --secondary: oklch(0.26 0.022 255);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.24 0.02 255);
+  --muted-foreground: oklch(0.74 0.015 250);
+  --accent: oklch(0.28 0.024 255);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.68 0.18 25);
+  --border: oklch(0.95 0.01 250 / 0.1);
+  --input: oklch(0.95 0.01 250 / 0.16);
+  --ring: oklch(0.78 0.1 255);
+
+  --tally: oklch(0.63 0.21 27);
+  --tally-foreground: oklch(0.99 0 0);
+  --verified: oklch(0.76 0.13 155);
+  --rewritten: oklch(0.8 0.13 75);
+  --blocked: oklch(0.7 0.17 25);
+  --data: oklch(0.76 0.05 255);
+
+  --turf: oklch(0.31 0.06 152);
+  --turf-stripe: oklch(0.335 0.06 152);
+  --chalk: oklch(0.97 0.01 150 / 0.7);
+  --graphic: oklch(0.15 0.02 255 / 0.92);
+  --graphic-foreground: oklch(0.97 0.004 250);
+  --graphic-warn: oklch(0.83 0.14 78);
+
+  --team-home: oklch(0.66 0.16 258);
+  --team-away: oklch(0.78 0.13 70);
+
+  --elevation-1: 0 1px 0 oklch(1 0 0 / 0.04) inset;
+  --elevation-2: 0 8px 24px oklch(0.05 0.02 255 / 0.5), 0 1px 0 oklch(1 0 0 / 0.05) inset;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "tnum" 1;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+}
+
+@layer components {
+  /* Broadcast graphic edge: the slanted cut every on-air graphic shares. */
+  .graphic-cut {
+    clip-path: polygon(0 0, 100% 0, calc(100% - 0.75rem) 100%, 0 100%);
+  }
+  .graphic-cut-left {
+    clip-path: polygon(0.75rem 0, 100% 0, 100% 100%, 0 100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
