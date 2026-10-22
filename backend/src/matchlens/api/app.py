@@ -13,6 +13,10 @@ from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnec
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from matchlens.agents.contracts import FanProfile, Language, Mode
+from matchlens.agents.llm import build_clients
+from matchlens.agents.pipeline import AgentTeam, InsightPipeline
+from matchlens.agents.services import CATCHUP_WINDOWS, FanServices, personalise_feed
 from matchlens.domain.models import EventType
 from matchlens.mcp_server.server import mcp
 from matchlens.runtime.manager import manager
@@ -21,8 +25,28 @@ from matchlens.runtime.session import event_payload
 log = logging.getLogger(__name__)
 
 
+class AgentRuntime:
+    """Agent team, live insight pipeline and fan services, created at startup."""
+
+    def __init__(self) -> None:
+        self.clients = build_clients()
+        self.team = AgentTeam.build(self.clients)
+        self.pipeline = InsightPipeline(self.team)
+        self.fans = FanServices(self.team)
+
+    async def on_signal(self, signal, session) -> None:
+        await self.pipeline.handle(signal, session)
+
+
+runtime: AgentRuntime | None = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global runtime
+    runtime = AgentRuntime()
+    manager.add_signal_handler(runtime.on_signal)
+    manager.add_reset_hook(lambda: (runtime.pipeline.reset(), runtime.fans.reset()))
     async with mcp.session_manager.run():
         if os.getenv("MATCHLENS_AUTOSTART", "1") == "1":
             await manager.start_synthetic(
@@ -61,15 +85,88 @@ class ControlRequest(BaseModel):
     paused: bool | None = None
 
 
+def _runtime() -> AgentRuntime:
+    if runtime is None:
+        raise HTTPException(503, "agents not ready")
+    return runtime
+
+
+def _p95(values: list[float]) -> float | None:
+    v = sorted(values)
+    return round(v[max(0, int(len(v) * 0.95) - 1)], 2) if v else None
+
+
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
     s = manager.session
-    lat = sorted(s.latency_ms[-500:]) if s and s.latency_ms else []
+    agent_lat = [i["latency_ms"] for i in (s.insights.values() if s else []) if i.get("latency_ms")]
     return {
         "status": "ok",
         "match_active": s is not None,
-        "processing_ms_p95": round(lat[int(len(lat) * 0.95) - 1], 2) if lat else None,
+        "llm": runtime.clients.label if runtime else None,
+        "processing_ms_p95": _p95(s.latency_ms[-500:]) if s else None,
+        "agent_insight_ms_p95": _p95(agent_lat),
     }
+
+
+def _profile(mode: Mode, language: Language, club_id: str | None, player_id: str | None,
+             metric: str | None) -> FanProfile:
+    return FanProfile(mode=mode, language=language, club_id=club_id, player_id=player_id, metric=metric)
+
+
+@app.get("/api/insights")
+async def insights(
+    mode: Mode = Mode.CASUAL, language: Language = Language.EN, club_id: str | None = None,
+    player_id: str | None = None, metric: str | None = None, limit: int = Query(default=50, le=200),
+) -> list[dict[str, Any]]:
+    """Personalised insight feed (FR-035 to FR-037)."""
+    return personalise_feed(_session(), _profile(mode, language, club_id, player_id, metric), limit)
+
+
+@app.get("/api/insights/{insight_id}")
+async def insight(insight_id: str) -> dict[str, Any]:
+    """Full insight with every variant, evidence ids and the fact-check report."""
+    found = _session().insights.get(insight_id)
+    if not found:
+        raise HTTPException(404, "unknown insight")
+    return found
+
+
+@app.get("/api/overlays")
+async def overlays(active_at: float | None = None) -> list[dict[str, Any]]:
+    """Overlay JSON for the broadcast renderer; optionally only those on screen at a match time."""
+    rows = [o for o in _session().overlays.values() if o["stage"] != "retracted"]
+    if active_at is not None:
+        rows = [o for o in rows if o["start_elapsed"] <= active_at < o["start_elapsed"] + o["duration_s"]]
+    return sorted(rows, key=lambda o: o["start_elapsed"])
+
+
+@app.get("/api/catchup")
+async def catchup(
+    minutes: int = 15, mode: Mode = Mode.CASUAL, language: Language = Language.EN, club_id: str | None = None,
+    player_id: str | None = None, metric: str | None = None,
+) -> dict[str, Any]:
+    """What did I miss? (FR-039)"""
+    if minutes not in CATCHUP_WINDOWS:
+        raise HTTPException(422, f"minutes must be one of {list(CATCHUP_WINDOWS)}")
+    result = await _runtime().fans.catchup(_session(), minutes, _profile(mode, language, club_id, player_id, metric))
+    return result.model_dump(mode="json")
+
+
+@app.get("/api/recap")
+async def recap(
+    mode: Mode = Mode.CASUAL, language: Language = Language.EN, club_id: str | None = None,
+    player_id: str | None = None, metric: str | None = None,
+) -> dict[str, Any]:
+    """Half-time, full-time or on-demand recap (FR-040)."""
+    result = await _runtime().fans.recap(_session(), _profile(mode, language, club_id, player_id, metric))
+    return result.model_dump(mode="json")
+
+
+@app.get("/api/agents/decisions")
+async def decisions(limit: int = Query(default=100, le=1000)) -> list[dict[str, Any]]:
+    """Coordinator routing decisions, for transparency in the demo."""
+    return _runtime().pipeline.decisions[-limit:]
 
 
 @app.post("/api/replay")

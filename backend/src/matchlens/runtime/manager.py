@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from matchlens.ingest.adapters import ReplayControl, SyntheticReplayAdapter
 from matchlens.runtime.session import MatchSession, SignalHandler
 from matchlens.simulator.engine import generate_match
@@ -13,6 +15,11 @@ class SessionManager:
         self.session: MatchSession | None = None
         self.control: ReplayControl | None = None
         self._handlers: list[SignalHandler] = []
+        self._reset_hooks: list[Callable[[], object]] = []
+
+    def add_reset_hook(self, hook: Callable[[], object]) -> None:
+        """Called before a new match starts, so per-match state (caps, caches) is cleared."""
+        self._reset_hooks.append(hook)
 
     def add_signal_handler(self, handler: SignalHandler) -> None:
         self._handlers.append(handler)
@@ -25,6 +32,8 @@ class SessionManager:
         storyline: Storyline | None = None,
     ) -> MatchSession:
         await self.stop()
+        for hook in self._reset_hooks:
+            hook()
         match = generate_match(seed=seed, storyline=storyline)
         self.control = ReplayControl(speed=speed, start_elapsed=start_minute * 60)
         session = MatchSession(SyntheticReplayAdapter(match, self.control))

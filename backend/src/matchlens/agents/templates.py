@@ -286,27 +286,42 @@ def personalised(pack: Pack, languages: list[str] | None = None) -> Personalised
     return PersonalisedDraft(variants=variants, club_angles=angles)
 
 
+WINDOW_TEXT = {
+    "was": {"en": "was", "hi": "पहले", "es": "antes"},
+    "no_change": {"en": "no change", "hi": "कोई बदलाव नहीं", "es": "sin cambios"},
+    "none": {"en": "No key moments in this window.", "hi": "इस दौरान कोई बड़ा पल नहीं।",
+             "es": "Sin momentos clave en este intervalo."},
+    "on_top": {"en": "{team} have been on top.", "hi": "{team} का दबदबा रहा।", "es": "{team} ha dominado."},
+    "even": {"en": "Neither side has been on top.", "hi": "कोई टीम हावी नहीं रही।", "es": "Ningún equipo ha dominado."},
+}
+
+
+def moment_text(pack: Pack, moment: dict[str, Any], lang: str) -> str:
+    """One localised line for a window moment, rendered like a live card."""
+    sub = {"match": pack["match"], "players": pack.get("players", []),
+           "signal": {"type": moment["type"], "minute": moment["minute"], "team_id": moment["team_id"],
+                      "player_ids": moment["player_ids"], "facts": moment["facts"]}}
+    head, _ = data_text(sub, lang)
+    return f"{moment['minute']} {head}"
+
+
 def catchup(pack: Pack, lang: str = "en") -> CatchupDraft:
     m = pack["match"]
-    names = _player_names(pack)
     teams = _team_names(pack)
     start = pack["window"]["score_at_start"]
     h, a = m["home"]["team_id"], m["away"]["team_id"]
-    bullets = []
-    for mo in sorted(pack["moments"][:5], key=lambda mo: mo["elapsed"]):
-        who = names.get(mo["player_ids"][0], "") if mo["player_ids"] else teams.get(mo["team_id"] or "", "")
-        label = mo["insight"] or mo["type"].replace("_", " ")
-        bullets.append(f"{mo['minute']} {label}" + (f" ({who})" if who and who not in label else ""))
-    if not bullets:
-        bullets = ["No key moments in this window."]
+    moments = sorted(pack["moments"][:5], key=lambda mo: mo["elapsed"])
+    bullets = [moment_text(pack, mo, lang) for mo in moments] or [WINDOW_TEXT["none"][lang]]
     idx = pack["momentum"]["now"]
     top = teams[h] if idx > 10 else teams[a] if idx < -10 else None
     changed = start != m["score"]
-    headline = (f"{score_line(pack)}" + (f" (was {start[h]}-{start[a]})" if changed else ", no change"))
+    headline = score_line(pack) + (f" ({WINDOW_TEXT['was'][lang]} {start[h]}-{start[a]})" if changed
+                                   else f", {WINDOW_TEXT['no_change'][lang]}")
+    first = pack["moments"][0] if pack["moments"] else None
     return CatchupDraft(
         headline=headline, bullets=bullets,
-        momentum_summary=f"{top} have been on top." if top else "Neither side has been on top.",
-        spotlight_player_id=pack["moments"][0]["player_ids"][0] if pack["moments"] and pack["moments"][0]["player_ids"] else None,
+        momentum_summary=WINDOW_TEXT["on_top"][lang].format(team=top) if top else WINDOW_TEXT["even"][lang],
+        spotlight_player_id=first["player_ids"][0] if first and first["player_ids"] else None,
         claims=[_score_claim(pack)],
     )
 
