@@ -49,10 +49,10 @@ function LowerThird({ overlay, language }: { overlay: Overlay; language: Languag
   const side = sideOf(meta, overlay.team_id);
   const text = overlayText(overlay, language);
   return (
-    <div className="graphic-cut flex max-w-[min(42rem,92%)] items-stretch bg-graphic text-graphic-foreground shadow-floating">
+    <div className="graphic-cut flex max-w-[min(36rem,80%)] items-stretch bg-graphic text-graphic-foreground shadow-floating">
       <span aria-hidden className={cn("w-1.5 shrink-0", side ? sideTone[side].bg : "bg-graphic-foreground/40")} />
       <div className="flex min-w-0 flex-col gap-0.5 px-3 py-1.5 pr-6 @lg:gap-1 @lg:px-4 @lg:py-2 @lg:pr-8">
-        <p className="font-display text-base leading-tight font-semibold @lg:text-display">{text.headline}</p>
+        <p className="line-clamp-2 font-display text-base leading-tight font-semibold @lg:text-xl @3xl:text-2xl">{text.headline}</p>
         {text.body && (
           <p className="line-clamp-2 max-w-prose text-xs text-graphic-foreground/85 @lg:text-sm">{text.body}</p>
         )}
