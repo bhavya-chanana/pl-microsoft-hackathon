@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import os
+
 import pytest
+
+# Tests never call Azure, even when backend/.env points at a live endpoint.
+os.environ["MATCHLENS_LLM"] = "offline"
 
 from matchlens.simulator.engine import generate_match
 

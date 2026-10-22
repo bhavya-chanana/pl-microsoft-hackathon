@@ -42,7 +42,7 @@ from matchlens.agents.contracts import (
 )
 from matchlens.agents.coordinator import Coordinator, Plan
 from matchlens.agents.factchecker import check_text, merge_reports, rewrite_payload
-from matchlens.agents.llm import ModelClients
+from matchlens.agents.llm import CallBudget, ModelClients
 from matchlens.agents.producer import OverlayScheduler
 from matchlens.interpret.signals import Signal, SignalType
 from matchlens.runtime.session import MatchSession
@@ -70,30 +70,41 @@ class AgentTeam:
     catchup: Agent
     recap: Agent
     label: str
+    budget: CallBudget
 
     @classmethod
     def build(cls, clients: ModelClients) -> AgentTeam:
         fast, strong = clients.fast, clients.strong
+        fo, so = clients.options(), clients.options(strong=True)
+
+        def agent(client, instructions: str, name: str, description: str, options: dict) -> Agent:
+            return Agent(client, instructions, name=name, description=description, default_options=options or None)
+
         return cls(
-            tactical=Agent(fast, prompts.TACTICAL, name="tactical", description="Explains why a moment happened"),
-            narrator=Agent(fast, prompts.NARRATOR, name="narrator", description="Tells the story beat"),
-            factchecker=Agent(fast, prompts.REWRITE, name="fact_checker", description="Fixes unsupported claims"),
-            producer=Agent(fast, prompts.PRODUCER, name="producer", description="Designs the broadcast graphic"),
-            personaliser=Agent(fast, prompts.PERSONALISER, name="personaliser",
-                               description="Adapts insights to fan modes, clubs and languages"),
-            catchup=Agent(fast, prompts.CATCHUP, name="catchup", description="What did I miss?"),
-            recap=Agent(strong, prompts.RECAP, name="recap", description="Half-time and full-time recaps"),
+            tactical=agent(fast, prompts.TACTICAL, "tactical", "Explains why a moment happened", fo),
+            narrator=agent(fast, prompts.NARRATOR, "narrator", "Tells the story beat", fo),
+            factchecker=agent(fast, prompts.REWRITE, "fact_checker", "Fixes unsupported claims", fo),
+            producer=agent(fast, prompts.PRODUCER, "producer", "Designs the broadcast graphic", fo),
+            personaliser=agent(fast, prompts.PERSONALISER, "personaliser",
+                               "Adapts insights to fan modes, clubs and languages", fo),
+            catchup=agent(fast, prompts.CATCHUP, "catchup", "What did I miss?", fo),
+            recap=agent(strong, prompts.RECAP, "recap", "Half-time and full-time recaps", so),
             label=clients.label,
+            budget=clients.budget,
         )
 
 
 async def call_agent(agent: Agent, payload: dict[str, Any], fmt: type[T],
-                     timeout: float | None = None) -> tuple[T | None, str | None]:
+                     timeout: float | None = None, budget: CallBudget | None = None) -> tuple[T | None, str | None]:
     """Run one agent with structured output. Returns (value, error)."""
     timeout = AGENT_TIMEOUT_S if timeout is None else timeout
+    if budget is not None and not budget.acquire():
+        return None, f"{agent.name}: call budget exhausted"
     try:
         response = await asyncio.wait_for(
             agent.run(json.dumps(payload, default=str), options={"response_format": fmt}), timeout)
+        if budget is not None:
+            budget.record(response.usage_details)
         value = response.value
         if value is None:
             value = fmt.model_validate_json(response.text)
@@ -173,14 +184,14 @@ class TacticalExecutor(_Stage):
         if job.plan != Plan.FULL:
             await ctx.send_message(DraftResult(job, "tactical", None))
             return
-        draft, err = await call_agent(self.team.tactical, {"task": "tactical", "context": job.pack}, TacticalDraft)
+        draft, err = await call_agent(self.team.tactical, {"task": "tactical", "context": job.pack}, TacticalDraft, budget=self.team.budget)
         await ctx.send_message(DraftResult(job, "tactical", draft, err))
 
 
 class NarratorExecutor(_Stage):
     @handler
     async def run(self, job: SignalJob, ctx: WorkflowContext[DraftResult]) -> None:
-        draft, err = await call_agent(self.team.narrator, {"task": "narrative", "context": job.pack}, NarrativeDraft)
+        draft, err = await call_agent(self.team.narrator, {"task": "narrative", "context": job.pack}, NarrativeDraft, budget=self.team.budget)
         await ctx.send_message(DraftResult(job, "narrator", draft, err))
 
 
@@ -253,7 +264,7 @@ class ProducerExecutor(_Stage):
     async def run(self, item: CheckedInsight, ctx: WorkflowContext[RenderResult]) -> None:
         job = item.job
         payload = {"task": "overlay", "context": job.pack, "headline": item.headline, "body": item.body}
-        plan, err = await call_agent(self.team.producer, payload, OverlayPlan)
+        plan, err = await call_agent(self.team.producer, payload, OverlayPlan, budget=self.team.budget)
         if plan is not None:
             texts = [plan.title, plan.subtitle or ""] + [s.value for s in plan.stats]
             if check_text(self.session.engine, job.pack, texts, []).problems:
@@ -267,7 +278,7 @@ class PersonaliserExecutor(_Stage):
         job = item.job
         payload = {"task": "personalise", "context": job.pack, "headline": item.headline, "body": item.body,
                    "languages": LANGUAGES}
-        draft, err = await call_agent(self.team.personaliser, payload, PersonalisedDraft)
+        draft, err = await call_agent(self.team.personaliser, payload, PersonalisedDraft, budget=self.team.budget)
         await ctx.send_message(RenderResult(item, "personaliser", draft, err))
 
 
