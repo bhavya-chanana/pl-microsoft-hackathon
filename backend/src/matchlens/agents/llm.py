@@ -129,8 +129,12 @@ def build_clients(settings: LlmSettings | None = None) -> ModelClients:
     if settings.kind == "openai":
         from agent_framework.openai import OpenAIChatClient
 
+        # Agent Framework also reads AZURE_OPENAI_ENDPOINT itself, so pass the same value as
+        # azure_endpoint (resource root) rather than a conflicting base_url.
+        root = settings.endpoint.split("/openai/")[0].rstrip("/") + "/"
+
         def make(model: str) -> BaseChatClient:
-            return OpenAIChatClient(model=model, base_url=settings.endpoint, credential=credential)
+            return OpenAIChatClient(model=model, azure_endpoint=root, credential=credential)
     else:
         from agent_framework.foundry import FoundryChatClient
 
