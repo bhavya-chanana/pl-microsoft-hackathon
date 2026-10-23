@@ -24,6 +24,12 @@ from matchlens.runtime.session import event_payload
 
 log = logging.getLogger(__name__)
 
+# Keep the console readable: Azure SDK request dumps, per-superstep workflow
+# chatter and the "publish is a dead end" validation note (it is the sink by design).
+for noisy in ("azure.core.pipeline.policies.http_logging_policy", "azure.identity",
+              "agent_framework._workflows._runner", "agent_framework._workflows._validation"):
+    logging.getLogger(noisy).setLevel(logging.ERROR)
+
 
 class AgentRuntime:
     """Agent team, live insight pipeline and fan services, created at startup."""

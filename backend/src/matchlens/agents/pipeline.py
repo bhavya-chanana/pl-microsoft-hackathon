@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import logging
 import time
 from dataclasses import dataclass, field
@@ -50,8 +51,12 @@ from matchlens.runtime.session import MatchSession
 log = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
-AGENT_TIMEOUT_S = 8.0
-WORKFLOW_TIMEOUT_S = 15.0
+# Online calls to gpt-5-mini take ~5-10 s each and the workflow has up to three
+# sequential model stages (draft, optional fact-check rewrite, produce/personalise).
+AGENT_TIMEOUT_S = float(os.getenv("MATCHLENS_AGENT_TIMEOUT_S", "25"))
+WORKFLOW_TIMEOUT_S = float(os.getenv("MATCHLENS_WORKFLOW_TIMEOUT_S", "0")) or None  # None: 3 stages + slack
+AGENT_CONCURRENCY = int(os.getenv("MATCHLENS_AGENT_CONCURRENCY", "4"))
+MAX_LAG_MATCH_S = float(os.getenv("MATCHLENS_MAX_LAG_S", "300"))  # older signals keep their data-only insight
 LANGUAGES = [lang.value for lang in Language]
 
 
@@ -380,11 +385,11 @@ def build_overlay(plan: OverlayPlan, insight: Insight, session: MatchSession | N
 class InsightPipeline:
     """Signal handler wired into the live session."""
 
-    def __init__(self, team: AgentTeam, coordinator: Coordinator | None = None, max_concurrent: int = 3) -> None:
+    def __init__(self, team: AgentTeam, coordinator: Coordinator | None = None, max_concurrent: int | None = None) -> None:
         self.team = team
         self.coordinator = coordinator or Coordinator()
         self.scheduler = OverlayScheduler()
-        self._sem = asyncio.Semaphore(max_concurrent)
+        self._sem = asyncio.Semaphore(max_concurrent or AGENT_CONCURRENCY)
         self.decisions: list[dict[str, Any]] = []
         self._pending: set[asyncio.Task[None]] = set()
 
@@ -441,12 +446,21 @@ class InsightPipeline:
             session.publish_overlay(placed.model_dump(mode="json"))
 
     async def _run_agents(self, job: SignalJob, session: MatchSession) -> None:
+        queued_at = session.engine.c.elapsed
         async with self._sem:
+            lag = session.engine.c.elapsed - queued_at  # match time spent waiting for a free slot
+            if lag > MAX_LAG_MATCH_S:
+                log.info("skipping agents for %s: waited %.0fs of match time", job.signal.signal_id, lag)
+                return  # old news by now; the data-only insight stays published
+            limit = WORKFLOW_TIMEOUT_S or 3 * AGENT_TIMEOUT_S + 5
             try:
-                result = await asyncio.wait_for(build_workflow(self.team, session).run(job), WORKFLOW_TIMEOUT_S)
+                result = await asyncio.wait_for(build_workflow(self.team, session).run(job), limit)
                 outputs = result.get_outputs()
+            except TimeoutError:
+                log.warning("workflow timed out after %.0fs for %s", limit, job.signal.signal_id)
+                return
             except Exception as exc:  # noqa: BLE001
-                log.warning("workflow failed for %s: %s", job.signal.signal_id, exc)
+                log.warning("workflow failed for %s: %r", job.signal.signal_id, exc)
                 return  # the data-only insight stays published
         if not outputs:
             return
