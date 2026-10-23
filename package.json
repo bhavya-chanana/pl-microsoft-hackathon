@@ -1,0 +1,19 @@
+{
+  "name": "matchlens",
+  "private": true,
+  "description": "Matchlens: multi-agent live match intelligence (FastAPI backend + Next.js frontend)",
+  "scripts": {
+    "setup": "cd backend && uv sync && cd ../frontend && npm install",
+    "dev": "concurrently -k -n backend,frontend -c blue,magenta \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:offline": "concurrently -k -n backend,frontend -c blue,magenta \"npm:dev:backend:offline\" \"npm:dev:frontend\"",
+    "dev:backend": "cd backend && uv run uvicorn matchlens.api.app:app --port 8765 --reload --reload-dir src",
+    "dev:backend:offline": "cd backend && MATCHLENS_LLM=offline uv run uvicorn matchlens.api.app:app --port 8765 --reload --reload-dir src",
+    "dev:frontend": "cd frontend && npm run dev",
+    "test": "cd backend && uv run pytest -q",
+    "lint": "cd frontend && npm run lint && npm run typecheck",
+    "build": "cd frontend && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "10.0.6"
+  }
+}
