@@ -35,13 +35,18 @@ A miss (an on-demand recap mid-match, a favourite-club catch-up that was not rec
 an endpoint is configured. Offline, a catch-up falls back to an unfocused recording if there is one, otherwise the
 data-only output, labelled as data. A different seed or storyline turns the recording off.
 
-Record or refresh it (about 30 minutes, ~1,300 model calls; needs `az login` and `backend/.env`):
+The committed recording holds 1,516 answers: 149 for the 38 agent-explained signals, 1,349 catch-ups and all 18
+recaps, each in casual, analyst and player-focus modes and English, Hindi and Spanish. Recording it took about
+25 minutes and 1,225 `gpt-5-mini` calls.
+
+Record or refresh it (needs `az login` and `backend/.env`):
 
 ```bash
 npm run record:demo
 ```
 
-Re-running resumes: recorded answers are kept and only missing ones are requested. `--modes` and `--languages`
+Re-running resumes: recorded answers are kept and only missing ones are requested, so a run cut short by
+rate limits (HTTP 429) is finished by running it again, ideally with `--concurrency 4`. `--modes` and `--languages`
 limit the profiles recorded. Delete the file to record from scratch, for example after changing prompts.
 
 Try it locally without Azure:

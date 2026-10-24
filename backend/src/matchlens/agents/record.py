@@ -25,7 +25,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 
 # Recording has no live deadline: give slow answers room rather than lose them.
-os.environ.setdefault("MATCHLENS_AGENT_TIMEOUT_S", "90")
+os.environ.setdefault("MATCHLENS_AGENT_TIMEOUT_S", "180")
 
 from matchlens.agents import services  # noqa: E402
 from matchlens.agents.cassette import Cassette, CassetteChatClient, moments_digest  # noqa: E402
@@ -41,7 +41,7 @@ from matchlens.simulator.engine import generate_match  # noqa: E402
 
 log = logging.getLogger("matchlens.record")
 
-services.RECAP_TIMEOUT_S = 120.0
+services.RECAP_TIMEOUT_S = 400.0  # strong model at high reasoning: ~150 s per recap
 
 
 class LockstepAdapter:
