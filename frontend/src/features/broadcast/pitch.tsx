@@ -1,15 +1,18 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useRef, useState } from "react";
 
 import { useLive } from "@/features/live/live-store";
 import { useProfile } from "@/features/profile/profile-store";
 import type { Entity, MatchMeta } from "@/lib/contract";
-import { cn } from "@/lib/utils";
+import { copy } from "@/lib/copy";
 import { sideOf, sideTone, teamName } from "@/lib/match";
+import { cn } from "@/lib/utils";
 
 const W = 105;
 const H = 68;
+/** A tap this close (screen px) to a player picks them: a 44 px target even on a phone-sized pitch. */
+const TAP_RADIUS_PX = 22;
 
 /** Chalk markings for a 105 x 68 m pitch, drawn once. */
 const Markings = memo(function Markings() {
@@ -39,13 +42,24 @@ const Markings = memo(function Markings() {
   );
 });
 
-function Dot({ entity, meta, tweenMs, favourite }: { entity: Entity; meta: MatchMeta; tweenMs: number; favourite: boolean }) {
+type DotProps = {
+  entity: Entity;
+  meta: MatchMeta;
+  tweenMs: number;
+  favourite: boolean;
+  selected: boolean;
+  onSelect?: (id: string, el: SVGGElement) => void;
+  onHover?: (id: string | null) => void;
+};
+
+function Dot({ entity, meta, tweenMs, favourite, selected, onSelect, onHover }: DotProps) {
   const transition = `transform ${tweenMs}ms linear`;
   if (entity.entity_id === "ball") {
     return (
       <circle
         r={0.75}
-        className="fill-graphic-foreground stroke-graphic"
+        aria-hidden
+        className="pointer-events-none fill-graphic-foreground stroke-graphic"
         strokeWidth={0.2}
         style={{ transform: `translate(${entity.x}px, ${entity.y}px)`, transition }}
       />
@@ -54,15 +68,50 @@ function Dot({ entity, meta, tweenMs, favourite }: { entity: Entity; meta: Match
   const player = meta.players[entity.entity_id];
   const teamId = entity.entity_id.split("-")[0];
   const side = sideOf(meta, teamId) ?? "home";
+  const id = entity.entity_id;
+  const interactive = Boolean(onSelect && player);
   return (
-    <g style={{ transform: `translate(${entity.x}px, ${entity.y}px)`, transition }}>
-      {favourite && <circle r={2.6} className="fill-none stroke-graphic-foreground" strokeWidth={0.35} />}
-      <circle r={1.55} className={cn(sideTone[side].fill, "stroke-graphic")} strokeWidth={0.25} />
+    <g
+      style={{ transform: `translate(${entity.x}px, ${entity.y}px)`, transition }}
+      data-entity={id}
+      className={cn("group outline-none", interactive && "cursor-pointer")}
+      {...(interactive && {
+        role: "button",
+        tabIndex: 0,
+        "aria-label": `#${player.shirt} ${player.name}, ${teamName(meta, teamId)}. ${copy.playerCard.open}`,
+        "aria-haspopup": "dialog" as const,
+        "aria-pressed": selected,
+        onClick: (e: React.MouseEvent<SVGGElement>) => onSelect?.(id, e.currentTarget),
+        onKeyDown: (e: React.KeyboardEvent<SVGGElement>) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect?.(id, e.currentTarget);
+          }
+        },
+        onPointerEnter: () => onHover?.(id),
+        onPointerLeave: () => onHover?.(null),
+        onFocus: () => onHover?.(id),
+        onBlur: () => onHover?.(null),
+      })}
+    >
+      {interactive && <circle r={3.2} fill="transparent" />}
+      <circle
+        r={3.2}
+        className="fill-none stroke-ring opacity-0 transition-opacity group-focus-visible:opacity-100"
+        strokeWidth={0.5}
+      />
+      {selected && <circle r={2.7} className="fill-none stroke-graphic-foreground" strokeWidth={0.5} strokeDasharray="1 0.6" />}
+      {favourite && !selected && <circle r={2.6} className="fill-none stroke-graphic-foreground" strokeWidth={0.35} />}
+      <circle
+        r={1.55}
+        className={cn(sideTone[side].fill, "stroke-graphic transition-transform group-hover:scale-125")}
+        strokeWidth={0.25}
+      />
       {player && (
         <text
           y={0.55}
           textAnchor="middle"
-          className="fill-graphic font-display font-bold"
+          className="pointer-events-none fill-graphic font-display font-bold"
           style={{ fontSize: 1.5 }}
         >
           {player.shirt}
@@ -72,20 +121,86 @@ function Dot({ entity, meta, tweenMs, favourite }: { entity: Entity; meta: Match
   );
 }
 
+/** Name tag above a hovered or focused player; drawn last so no dot covers it. */
+function NameTag({ entity, meta, tweenMs }: { entity: Entity; meta: MatchMeta; tweenMs: number }) {
+  const player = meta.players[entity.entity_id];
+  if (!player) return null;
+  const label = player.short_name;
+  const width = label.length * 0.95 + 2;
+  return (
+    <g
+      aria-hidden
+      className="pointer-events-none"
+      style={{ transform: `translate(${entity.x}px, ${entity.y}px)`, transition: `transform ${tweenMs}ms linear` }}
+    >
+      <rect x={-width / 2} y={-5.6} width={width} height={2.6} rx={0.5} className="fill-graphic" />
+      <text y={-3.75} textAnchor="middle" className="fill-graphic-foreground font-display font-semibold" style={{ fontSize: 1.7 }}>
+        {label}
+      </text>
+    </g>
+  );
+}
+
+type PitchProps = {
+  className?: string;
+  /** Makes players selectable (click, Enter or Space). */
+  onSelectPlayer?: (playerId: string, el: SVGGElement) => void;
+  selectedPlayerId?: string | null;
+  /** Extra layers in pitch coordinates (metres), drawn under the players. */
+  children?: React.ReactNode;
+};
+
+/** Order players home then away by shirt number, ball last: a stable tab order and z-order. */
+function entityOrder(meta: MatchMeta) {
+  return (e: Entity) => {
+    if (e.entity_id === "ball") return 1e6;
+    const p = meta.players[e.entity_id];
+    const away = e.entity_id.startsWith(meta.away.team_id) ? 1000 : 0;
+    return away + (p?.shirt ?? 999);
+  };
+}
+
 /** Live 2D pitch from 1 Hz tracking frames, tweened between frames. */
-export function Pitch({ className }: { className?: string }) {
+export function Pitch({ className, onSelectPlayer, selectedPlayerId = null, children }: PitchProps) {
   const meta = useLive((s) => s.meta);
   const frame = useLive((s) => s.frame);
   const tweenMs = useLive((s) => s.frameIntervalMs);
   const possession = useLive((s) => s.state?.possession_team ?? null);
   const favourite = useProfile((s) => s.playerId);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const interactive = Boolean(onSelectPlayer);
   const label = meta
-    ? `Live pitch view. ${possession ? `${teamName(meta, possession)} in possession.` : ""}`
+    ? `Live pitch view. ${possession ? `${teamName(meta, possession)} in possession.` : ""}${interactive ? ` ${copy.playerCard.hint}.` : ""}`
     : "Live pitch view";
+  const order = meta ? entityOrder(meta) : null;
+  const entities = order && frame ? frame.entities.slice().sort((a, b) => order(a) - order(b)) : [];
+  const tagged = entities.find((e) => e.entity_id === hovered);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  /** Taps that miss every marker go to the nearest player, if one is close enough. */
+  const pickNearest = (e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    const ctm = svg?.getScreenCTM();
+    if (!svg || !ctm || !onSelectPlayer || (e.target as Element).closest("[role=button]")) return;
+    const at = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    let best: Entity | null = null;
+    let bestDistance = Infinity;
+    for (const entity of entities) {
+      if (entity.entity_id === "ball") continue;
+      const distance = Math.hypot(entity.x - at.x, entity.y - at.y);
+      if (distance < bestDistance) [best, bestDistance] = [entity, distance];
+    }
+    if (!best || bestDistance * ctm.a > TAP_RADIUS_PX) return;
+    const marker = svg.querySelector<SVGGElement>(`[data-entity="${best.entity_id}"]`);
+    if (marker) onSelectPlayer(best.entity_id, marker);
+  };
+
   return (
     <svg
+      ref={svgRef}
+      onClick={interactive ? pickNearest : undefined}
       viewBox={`-3 -3 ${W + 6} ${H + 6}`}
-      role="img"
+      role={interactive ? "group" : "img"}
       aria-label={label}
       className={cn("block h-full w-full", className)}
       preserveAspectRatio="xMidYMid meet"
@@ -96,15 +211,25 @@ export function Pitch({ className }: { className?: string }) {
           <rect x={W / 12} width={W / 12} height={H} className="fill-turf-stripe" />
         </pattern>
       </defs>
-      <rect x={-3} y={-3} width={W + 6} height={H + 6} rx={1} fill="url(#turf-stripes)" />
-      <Markings />
+      <g aria-hidden>
+        <rect x={-3} y={-3} width={W + 6} height={H + 6} rx={1} fill="url(#turf-stripes)" />
+        <Markings />
+        {children}
+      </g>
       {meta &&
-        frame?.entities
-          .slice()
-          .sort((a, b) => (a.entity_id === "ball" ? 1 : b.entity_id === "ball" ? -1 : 0))
-          .map((e) => (
-            <Dot key={e.entity_id} entity={e} meta={meta} tweenMs={tweenMs} favourite={e.entity_id === favourite} />
-          ))}
+        entities.map((e) => (
+          <Dot
+            key={e.entity_id}
+            entity={e}
+            meta={meta}
+            tweenMs={tweenMs}
+            favourite={e.entity_id === favourite}
+            selected={e.entity_id === selectedPlayerId}
+            onSelect={onSelectPlayer}
+            onHover={interactive ? setHovered : undefined}
+          />
+        ))}
+      {meta && tagged && <NameTag entity={tagged} meta={meta} tweenMs={tweenMs} />}
     </svg>
   );
 }

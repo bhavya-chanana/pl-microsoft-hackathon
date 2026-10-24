@@ -5,7 +5,10 @@ import { BroadcastMonitor } from "@/features/broadcast/broadcast-monitor";
 import { MomentumBar } from "@/features/broadcast/momentum-bar";
 import { useLive } from "@/features/live/live-store";
 import { ProfilePanel } from "@/features/profile/profile-panel";
+import { useProfile } from "@/features/profile/profile-store";
 import { ReplayControls } from "@/features/replay/replay-controls";
+import { MetricTile } from "@/features/stats/metric-tile";
+import { ShotMapPanel } from "@/features/stats/shot-map";
 import { PlayerCard, TeamComparison } from "@/features/stats/team-stats";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { copy } from "@/lib/copy";
@@ -43,12 +46,15 @@ const trigger = "h-11 flex-1 px-3 text-sm";
 
 export function MatchCentre() {
   const wide = useMediaQuery("(min-width: 1024px)");
+  const analyst = useProfile((s) => s.mode === "analyst");
   return (
     <main className="mx-auto grid max-w-screen-2xl gap-6 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:py-6">
       <div className="flex min-w-0 flex-col gap-4">
         <MatchHeading />
-        <BroadcastMonitor />
+        <BroadcastMonitor interactive />
         <MomentumBar />
+        <MetricTile />
+        {analyst && <ShotMapPanel />}
         {wide && (
           <Tabs defaultValue="timeline" className="gap-4">
             <TabsList className="h-11 w-full max-w-md">

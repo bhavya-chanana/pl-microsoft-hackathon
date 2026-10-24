@@ -1,16 +1,15 @@
 "use client";
 
 import { BadgeCheck } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import { useLive } from "@/features/live/live-store";
 import { useProfile } from "@/features/profile/profile-store";
-import type { Language, Overlay } from "@/lib/contract";
+import type { Language, MatchEvent, Overlay, OverlaySlot } from "@/lib/contract";
 import { copy } from "@/lib/copy";
 import { overlayText, sideOf, sideTone } from "@/lib/match";
 import { cn } from "@/lib/utils";
 
-import { useOverlayDirector } from "./use-overlay-director";
 
 const enter = { duration: 0.3, ease: [0.16, 1, 0.3, 1] as const };
 
@@ -96,9 +95,60 @@ function Banner({ overlay, language }: { overlay: Overlay; language: Language })
   );
 }
 
+export type OnAir = Record<OverlaySlot, string | null>;
+
+/** The pass behind an on-air "pass of note" graphic, if we saw it go by. */
+export function usePassLane(onAir: OnAir): MatchEvent | null {
+  return useLive((s) => {
+    for (const id of Object.values(onAir)) {
+      const overlay = id ? s.overlays[id] : undefined;
+      const insight = overlay ? s.insights[overlay.insight_id] : undefined;
+      if (insight?.signal_type !== "hard_pass") continue;
+      const passId = insight.evidence_event_ids[0];
+      const pass = s.recentPasses.findLast((e) => e.event_id === passId);
+      if (pass?.start && pass.end) return pass;
+    }
+    return null;
+  });
+}
+
+/** Start-to-end arrow for a pass, in pitch metres, drawn inside the pitch SVG. */
+export function PassLane({ pass }: { pass: MatchEvent }) {
+  const meta = useLive((s) => s.meta);
+  const reduce = useReducedMotion();
+  if (!pass.start || !pass.end) return null;
+  const side = sideOf(meta, pass.team_id) ?? "home";
+  const { x: x1, y: y1 } = pass.start;
+  const { x: x2, y: y2 } = pass.end;
+  const angle = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
+  const draw = reduce ? { duration: 0 } : { duration: 0.6, ease: [0.16, 1, 0.3, 1] as const };
+  return (
+    <g key={pass.event_id} className={cn("pointer-events-none", sideTone[side].stroke)}>
+      <motion.path
+        d={`M ${x1} ${y1} L ${x2} ${y2}`}
+        className="fill-none"
+        strokeWidth={0.7}
+        strokeLinecap="round"
+        initial={{ pathLength: 0, opacity: 0 }}
+        animate={{ pathLength: 1, opacity: 1 }}
+        transition={draw}
+      />
+      <circle cx={x1} cy={y1} r={0.9} className={sideTone[side].fill} />
+      <motion.path
+        d="M 0 0 L -2.6 -1.4 L -2.6 1.4 Z"
+        className={sideTone[side].fill}
+        strokeWidth={0}
+        style={{ x: x2, y: y2, rotate: angle }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ ...draw, delay: reduce ? 0 : 0.45 }}
+      />
+    </g>
+  );
+}
+
 /** Timed broadcast graphics over the pitch, one per slot. */
-export function OverlayLayer() {
-  const onAir = useOverlayDirector();
+export function OverlayLayer({ onAir }: { onAir: OnAir }) {
   const overlays = useLive((s) => s.overlays);
   const language = useProfile((s) => s.language);
   const pick = (id: string | null) => (id ? overlays[id] : undefined);

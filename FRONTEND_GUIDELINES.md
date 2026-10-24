@@ -21,9 +21,14 @@ Rules for any agent (or human) building UI in this repo. Follow them in order: s
 
 ## 2. Skills and tools to load first
 
+Project skills live in `.claude/skills/` (the `SKILL.md` format Claude Code, Kiro and other agents read):
+
 - `frontend-design` (anthropics/skills): read before any UI work.
-- `shadcn/ui` skill: `npx skills add shadcn/ui`. Reads `components.json`, so use the project's aliases and installed components.
-- `vercel-react-best-practices` and `web-design-guidelines` (vercel agent-skills): performance and accessibility audits.
+- `ui-creation-fundamentals`: signifiers, hierarchy, spacing, states, microinteractions, overlays.
+- `shadcn` (shadcn-ui/ui, official): project context from `components.json`, composition rules, CLI. Run its commands from `frontend/`.
+- `vercel-react-best-practices` and `vercel-composition-patterns` (vercel-labs/agent-skills): performance and component API patterns.
+- `web-design-guidelines` (vercel-labs, local copy of the rules): accessibility and UX audit before calling work done.
+- `webapp-testing` (anthropics/skills): Playwright scripts for checking the running app.
 - Playwright MCP or the built-in browser: take screenshots of your own output and fix what looks wrong.
 - Vet third-party skills and MCP servers (read the source) before installing.
 

@@ -12,6 +12,7 @@ import {
   type FanProfile,
   FeedItem,
   Health,
+  MatchEvent,
   PlayerStats,
   Recap,
   TeamStats,
@@ -21,11 +22,13 @@ import { profileQuery } from "@/features/profile/profile-store";
 import { useLive } from "./live-store";
 
 export const queryKeys = {
-  feed: (p: FanProfile) => ["feed", p.mode, p.language, p.clubId, p.playerId] as const,
-  catchup: (m: CatchupWindow, p: FanProfile) => ["catchup", m, p.mode, p.language, p.clubId, p.playerId] as const,
-  recap: (p: FanProfile) => ["recap", p.mode, p.language, p.clubId, p.playerId] as const,
+  feed: (p: FanProfile) => ["feed", p.mode, p.language, p.clubId, p.playerId, p.metric] as const,
+  catchup: (m: CatchupWindow, p: FanProfile) =>
+    ["catchup", m, p.mode, p.language, p.clubId, p.playerId, p.metric] as const,
+  recap: (p: FanProfile) => ["recap", p.mode, p.language, p.clubId, p.playerId, p.metric] as const,
   coach: (teamId: string, language: string) => ["coach", teamId, language] as const,
   player: (id: string) => ["player", id] as const,
+  playerEvents: (id: string) => ["player-events", id] as const,
   team: (id: string) => ["team", id] as const,
   decisions: ["decisions"] as const,
   health: ["health"] as const,
@@ -92,6 +95,18 @@ export function usePlayerStats(playerId: string | null) {
     queryFn: ({ signal }) => getJson(`players/${playerId}`, PlayerStats, undefined, signal),
     enabled: Boolean(playerId),
     refetchInterval: 5_000,
+  });
+}
+
+/** The player's key moments (goals, shots, cards...), oldest first. */
+export function usePlayerEvents(playerId: string | null) {
+  const count = useLive((s) => s.timeline.length);
+  return useQuery({
+    queryKey: [...queryKeys.playerEvents(playerId ?? ""), count],
+    queryFn: ({ signal }) => getJson("timeline", MatchEvent.array(), { player_id: playerId }, signal),
+    enabled: Boolean(playerId),
+    // Keep the list steady while it refreshes, but never show another player's moments.
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === playerId ? previous : undefined),
   });
 }
 

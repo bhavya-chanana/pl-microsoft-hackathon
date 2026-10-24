@@ -9,20 +9,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useLive } from "@/features/live/live-store";
 import { useCatchup, useRecap } from "@/features/live/queries";
-import { useProfile } from "@/features/profile/profile-store";
+import { useFanProfile } from "@/features/profile/profile-store";
 import { CATCHUP_WINDOWS, type CatchupWindow, type FactCheck, type MatchMeta } from "@/lib/contract";
 import { copy } from "@/lib/copy";
 import { playerName } from "@/lib/match";
 
 import { FactCheckBadge } from "./fact-check-badge";
-
-function useFanProfile() {
-  const mode = useProfile((s) => s.mode);
-  const language = useProfile((s) => s.language);
-  const clubId = useProfile((s) => s.clubId);
-  const playerId = useProfile((s) => s.playerId);
-  return { mode, language, clubId, playerId };
-}
 
 function Loading({ label }: { label: string }) {
   return (

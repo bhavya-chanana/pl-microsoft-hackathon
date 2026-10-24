@@ -7,12 +7,15 @@ import { z } from "zod";
 export const MODES = ["casual", "analyst", "player_focus"] as const;
 export const LANGUAGES = ["en", "hi", "es"] as const;
 export const CATCHUP_WINDOWS = [5, 15, 30] as const;
+/** Headline metrics a fan can pin (BRD FR-031); keys match the stat fields the agents see. */
+export const METRICS = ["pass_accuracy", "distance_km", "momentum", "shots", "top_speed_kmh"] as const;
 
 export const Mode = z.enum(MODES);
 export const Language = z.enum(LANGUAGES);
 export type Mode = z.infer<typeof Mode>;
 export type Language = z.infer<typeof Language>;
 export type CatchupWindow = (typeof CATCHUP_WINDOWS)[number];
+export type Metric = (typeof METRICS)[number];
 
 const Point = z.object({ x: z.number(), y: z.number() });
 
@@ -300,9 +303,10 @@ export const PlayerStats = z.object({
   tackles: z.number(),
   interceptions: z.number(),
   saves: z.number(),
-  distance_km: z.number(),
-  top_speed_kmh: z.number(),
-  sprints: z.number(),
+  // Tracking stats are null when the player has no tracking data (unavailable is not zero).
+  distance_km: z.number().nullable(),
+  top_speed_kmh: z.number().nullable(),
+  sprints: z.number().nullable(),
   max_shot_speed_kmh: z.number().nullable(),
   yellow_cards: z.number(),
   red_card: z.boolean(),
@@ -323,7 +327,7 @@ export type Shot = z.infer<typeof Shot>;
 export const TeamStats = z.object({
   team_id: z.string(),
   goals: z.number(),
-  possession_pct: z.number(),
+  possession_pct: z.number().nullable(),
   passes: z.number(),
   pass_accuracy: z.number().nullable(),
   shots: z.number(),
@@ -361,4 +365,5 @@ export type FanProfile = {
   language: Language;
   clubId: string | null;
   playerId: string | null;
+  metric: Metric | null;
 };
