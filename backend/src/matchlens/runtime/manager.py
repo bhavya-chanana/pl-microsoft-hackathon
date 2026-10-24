@@ -14,6 +14,9 @@ class SessionManager:
     def __init__(self) -> None:
         self.session: MatchSession | None = None
         self.control: ReplayControl | None = None
+        # What the current (or starting) match was generated from, for reset hooks.
+        self.seed: int | None = None
+        self.storyline: Storyline | None = None
         self._handlers: list[SignalHandler] = []
         self._reset_hooks: list[Callable[[], object]] = []
 
@@ -32,6 +35,7 @@ class SessionManager:
         storyline: Storyline | None = None,
     ) -> MatchSession:
         await self.stop()
+        self.seed, self.storyline = seed, storyline
         for hook in self._reset_hooks:
             hook()
         match = generate_match(seed=seed, storyline=storyline)

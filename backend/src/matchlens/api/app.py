@@ -53,6 +53,8 @@ async def lifespan(app: FastAPI):
     runtime = AgentRuntime()
     manager.add_signal_handler(runtime.on_signal)
     manager.add_reset_hook(lambda: (runtime.pipeline.reset(), runtime.fans.reset()))
+    manager.add_reset_hook(lambda: runtime.clients.use_cassette(
+        manager.seed, manager.storyline.title if manager.storyline else None))
     async with mcp.session_manager.run():
         if os.getenv("MATCHLENS_AUTOSTART", "1") == "1":
             await manager.start_synthetic(

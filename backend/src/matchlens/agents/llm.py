@@ -15,6 +15,8 @@ Configuration (environment or backend/.env):
     MATCHLENS_REASONING_FAST     reasoning effort for live agents (default low)
     MATCHLENS_REASONING_STRONG   reasoning effort for recaps (default high)
     MATCHLENS_LLM                "auto" (default: online when an endpoint is set), "online" or "offline"
+    MATCHLENS_CASSETTE           recorded demo match to replay agent answers from (see cassette.py)
+    MATCHLENS_CASSETTE_DELAY     share of the recorded latency to replay (default 0.5)
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ from agent_framework import BaseChatClient, ChatResponse, Message
 from dotenv import load_dotenv
 
 from matchlens.agents import templates
+from matchlens.agents.cassette import Cassette, CassetteChatClient, cassette_path, delay_factor
 
 log = logging.getLogger(__name__)
 
@@ -100,13 +103,25 @@ class ModelClients:
     fast: BaseChatClient
     strong: BaseChatClient
     settings: LlmSettings
+    cassette: Cassette | None = None
 
     @property
     def label(self) -> str:
         s = self.settings
         if not s.online:
-            return "offline-templates"
-        return f"azure:{s.fast_model}({s.fast_reasoning})/{s.strong_model}({s.strong_reasoning})"
+            return "recorded-demo" if self.cassette else "offline-templates"
+        live = f"azure:{s.fast_model}({s.fast_reasoning})/{s.strong_model}({s.strong_reasoning})"
+        return f"recorded-demo+{live}" if self.cassette else live
+
+    def use_cassette(self, seed: int | None, storyline: str | None) -> None:
+        """Replay recorded answers only for the match they were recorded on."""
+        if self.cassette is None:
+            return
+        on = self.cassette.matches(seed, storyline)
+        for client in {id(c): c for c in (self.fast, self.strong)}.values():
+            if isinstance(client, CassetteChatClient):
+                client.enabled = on
+        log.info("recorded demo %s for seed %s", "on" if on else "off", seed)
 
     def options(self, strong: bool = False) -> dict[str, Any]:
         """Default run options per tier (reasoning effort only applies online)."""
@@ -117,7 +132,27 @@ class ModelClients:
 
 
 def build_clients(settings: LlmSettings | None = None) -> ModelClients:
-    settings = settings or LlmSettings.from_env()
+    clients = _live_clients(settings or LlmSettings.from_env())
+    path = cassette_path()
+    if path is None:
+        return clients
+    if not path.exists():
+        log.warning("MATCHLENS_CASSETTE=%s not found; running without the recorded demo", path)
+        return clients
+    cassette = Cassette.load(path)
+    online = clients.settings.online
+
+    def wrap(client: BaseChatClient) -> BaseChatClient:
+        return CassetteChatClient(client, cassette, live_misses=online, delay_factor=delay_factor())
+
+    fast = wrap(clients.fast)
+    strong = fast if clients.strong is clients.fast else wrap(clients.strong)
+    log.info("recorded demo: %d answers from %s (misses go %s)", len(cassette.entries), path,
+             "to the live model" if online else "to data-only fallbacks")
+    return ModelClients(fast=fast, strong=strong, settings=clients.settings, cassette=cassette)
+
+
+def _live_clients(settings: LlmSettings) -> ModelClients:
     if not settings.online:
         log.info("LLM mode: offline (data-only templates)")
         offline = OfflineChatClient()
