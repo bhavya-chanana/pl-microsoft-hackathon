@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/bhavya-chanana/pl-microsoft-hackathon/main/docs/schema/overlay.schema.json",
+  "$defs": {
+    "InsightText": {
+      "properties": {
+        "headline": {
+          "title": "Headline",
+          "type": "string"
+        },
+        "body": {
+          "title": "Body",
+          "type": "string"
+        }
+      },
+      "required": [
+        "headline",
+        "body"
+      ],
+      "title": "InsightText",
+      "type": "object"
+    },
+    "KeyNumber": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Short label, max 24 characters",
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "description": "Value exactly as in the data, formatted for display",
+          "title": "Value",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "label",
+        "value",
+        "unit"
+      ],
+      "title": "KeyNumber",
+      "type": "object"
+    },
+    "OverlayKind": {
+      "enum": [
+        "lower_third",
+        "stat_card",
+        "player_card",
+        "momentum_bar",
+        "shot_card",
+        "correction_banner",
+        "milestone_banner"
+      ],
+      "title": "OverlayKind",
+      "type": "string"
+    }
+  },
+  "description": "Timed broadcast graphic, as published to a rendering partner.",
+  "properties": {
+    "overlay_id": {
+      "title": "Overlay Id",
+      "type": "string"
+    },
+    "insight_id": {
+      "title": "Insight Id",
+      "type": "string"
+    },
+    "revision": {
+      "title": "Revision",
+      "type": "integer"
+    },
+    "kind": {
+      "$ref": "#/$defs/OverlayKind"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "subtitle": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Subtitle"
+    },
+    "stats": {
+      "items": {
+        "$ref": "#/$defs/KeyNumber"
+      },
+      "title": "Stats",
+      "type": "array"
+    },
+    "team_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Team Id"
+    },
+    "focus_player_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Focus Player Id"
+    },
+    "accent_colour": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Accent Colour"
+    },
+    "start_elapsed": {
+      "title": "Start Elapsed",
+      "type": "number"
+    },
+    "duration_s": {
+      "title": "Duration S",
+      "type": "number"
+    },
+    "priority": {
+      "title": "Priority",
+      "type": "integer"
+    },
+    "slot": {
+      "enum": [
+        "lower",
+        "upper_right",
+        "banner"
+      ],
+      "title": "Slot",
+      "type": "string"
+    },
+    "localized": {
+      "additionalProperties": {
+        "$ref": "#/$defs/InsightText"
+      },
+      "title": "Localized",
+      "type": "object"
+    },
+    "stage": {
+      "default": "data",
+      "enum": [
+        "data",
+        "agent",
+        "retracted"
+      ],
+      "title": "Stage",
+      "type": "string"
+    }
+  },
+  "required": [
+    "overlay_id",
+    "insight_id",
+    "revision",
+    "kind",
+    "title",
+    "subtitle",
+    "stats",
+    "team_id",
+    "focus_player_id",
+    "accent_colour",
+    "start_elapsed",
+    "duration_s",
+    "priority",
+    "slot"
+  ],
+  "title": "Overlay",
+  "type": "object"
+}

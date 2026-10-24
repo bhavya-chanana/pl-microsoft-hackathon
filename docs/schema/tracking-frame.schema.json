@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/bhavya-chanana/pl-microsoft-hackathon/main/docs/schema/tracking-frame.schema.json",
+  "$defs": {
+    "EntityPosition": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_id": {
+          "title": "Entity Id",
+          "type": "string"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        },
+        "speed": {
+          "title": "Speed",
+          "type": "number"
+        }
+      },
+      "required": [
+        "entity_id",
+        "x",
+        "y",
+        "speed"
+      ],
+      "title": "EntityPosition",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "match_id": {
+      "title": "Match Id",
+      "type": "string"
+    },
+    "clock": {
+      "title": "Clock",
+      "type": "number"
+    },
+    "elapsed": {
+      "title": "Elapsed",
+      "type": "number"
+    },
+    "period": {
+      "title": "Period",
+      "type": "integer"
+    },
+    "entities": {
+      "items": {
+        "$ref": "#/$defs/EntityPosition"
+      },
+      "title": "Entities",
+      "type": "array"
+    }
+  },
+  "required": [
+    "match_id",
+    "clock",
+    "elapsed",
+    "period",
+    "entities"
+  ],
+  "title": "TrackingFrame",
+  "type": "object",
+  "description": "Positions and speeds of every player on the pitch and the ball at one instant."
+}

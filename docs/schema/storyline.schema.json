@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/bhavya-chanana/pl-microsoft-hackathon/main/docs/schema/storyline.schema.json",
+  "$defs": {
+    "Beat": {
+      "additionalProperties": false,
+      "properties": {
+        "minute": {
+          "description": "Match minute; 46-95 is the second half",
+          "maximum": 95,
+          "minimum": 1,
+          "title": "Minute",
+          "type": "integer"
+        },
+        "type": {
+          "$ref": "#/$defs/BeatType"
+        },
+        "team_id": {
+          "title": "Team Id",
+          "type": "string"
+        },
+        "player_id": {
+          "title": "Player Id",
+          "type": "string"
+        },
+        "related_player_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Related Player Id"
+        },
+        "initially_credited_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Initially Credited To"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "minute",
+        "type",
+        "team_id",
+        "player_id"
+      ],
+      "title": "Beat",
+      "type": "object"
+    },
+    "BeatType": {
+      "enum": [
+        "goal",
+        "big_chance",
+        "yellow_card",
+        "red_card",
+        "substitution"
+      ],
+      "title": "BeatType",
+      "type": "string"
+    },
+    "Phase": {
+      "additionalProperties": false,
+      "description": "Period where one team is on top. dominance: -1 (away) .. +1 (home).",
+      "properties": {
+        "start_minute": {
+          "maximum": 95,
+          "minimum": 0,
+          "title": "Start Minute",
+          "type": "integer"
+        },
+        "end_minute": {
+          "maximum": 96,
+          "minimum": 1,
+          "title": "End Minute",
+          "type": "integer"
+        },
+        "home_dominance": {
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Home Dominance",
+          "type": "number"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        }
+      },
+      "required": [
+        "start_minute",
+        "end_minute",
+        "home_dominance"
+      ],
+      "title": "Phase",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "summary": {
+      "title": "Summary",
+      "type": "string"
+    },
+    "phases": {
+      "items": {
+        "$ref": "#/$defs/Phase"
+      },
+      "title": "Phases",
+      "type": "array"
+    },
+    "beats": {
+      "items": {
+        "$ref": "#/$defs/Beat"
+      },
+      "title": "Beats",
+      "type": "array"
+    },
+    "scripted_goals_only": {
+      "default": true,
+      "title": "Scripted Goals Only",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "title",
+    "summary"
+  ],
+  "title": "Storyline",
+  "type": "object",
+  "description": "Scripted storyline the simulator plays out."
+}

@@ -1,0 +1,540 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/bhavya-chanana/pl-microsoft-hackathon/main/docs/schema/insight.schema.json",
+  "$defs": {
+    "ClaimResult": {
+      "properties": {
+        "claim": {
+          "discriminator": {
+            "mapping": {
+              "event": "#/$defs/EventClaim",
+              "momentum": "#/$defs/MomentumClaim",
+              "score": "#/$defs/ScoreClaim",
+              "stat": "#/$defs/StatClaim"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/StatClaim"
+            },
+            {
+              "$ref": "#/$defs/EventClaim"
+            },
+            {
+              "$ref": "#/$defs/ScoreClaim"
+            },
+            {
+              "$ref": "#/$defs/MomentumClaim"
+            }
+          ],
+          "title": "Claim"
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "actual": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actual"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "claim",
+        "verdict"
+      ],
+      "title": "ClaimResult",
+      "type": "object"
+    },
+    "EventClaim": {
+      "properties": {
+        "kind": {
+          "const": "event",
+          "default": "event",
+          "title": "Kind",
+          "type": "string"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        },
+        "player_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Player Id"
+        },
+        "team_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Team Id"
+        },
+        "minute_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minute Label"
+        }
+      },
+      "required": [
+        "event_id"
+      ],
+      "title": "EventClaim",
+      "type": "object"
+    },
+    "FactCheckReport": {
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/FactCheckStatus"
+        },
+        "results": {
+          "items": {
+            "$ref": "#/$defs/ClaimResult"
+          },
+          "title": "Results",
+          "type": "array"
+        },
+        "unaccounted_numbers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unaccounted Numbers",
+          "type": "array"
+        },
+        "actions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Actions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "FactCheckReport",
+      "type": "object"
+    },
+    "FactCheckStatus": {
+      "enum": [
+        "verified",
+        "rewritten",
+        "blocked",
+        "data_only"
+      ],
+      "title": "FactCheckStatus",
+      "type": "string"
+    },
+    "InsightText": {
+      "properties": {
+        "headline": {
+          "title": "Headline",
+          "type": "string"
+        },
+        "body": {
+          "title": "Body",
+          "type": "string"
+        }
+      },
+      "required": [
+        "headline",
+        "body"
+      ],
+      "title": "InsightText",
+      "type": "object"
+    },
+    "KeyNumber": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Short label, max 24 characters",
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "description": "Value exactly as in the data, formatted for display",
+          "title": "Value",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "label",
+        "value",
+        "unit"
+      ],
+      "title": "KeyNumber",
+      "type": "object"
+    },
+    "MomentumClaim": {
+      "properties": {
+        "kind": {
+          "const": "momentum",
+          "default": "momentum",
+          "title": "Kind",
+          "type": "string"
+        },
+        "team_on_top": {
+          "description": "team_id currently ahead on the momentum index",
+          "title": "Team On Top",
+          "type": "string"
+        }
+      },
+      "required": [
+        "team_on_top"
+      ],
+      "title": "MomentumClaim",
+      "type": "object"
+    },
+    "ScoreClaim": {
+      "properties": {
+        "kind": {
+          "const": "score",
+          "default": "score",
+          "title": "Kind",
+          "type": "string"
+        },
+        "home": {
+          "title": "Home",
+          "type": "integer"
+        },
+        "away": {
+          "title": "Away",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "home",
+        "away"
+      ],
+      "title": "ScoreClaim",
+      "type": "object"
+    },
+    "StatClaim": {
+      "properties": {
+        "kind": {
+          "const": "stat",
+          "default": "stat",
+          "title": "Kind",
+          "type": "string"
+        },
+        "subject_type": {
+          "enum": [
+            "player",
+            "team"
+          ],
+          "title": "Subject Type",
+          "type": "string"
+        },
+        "subject_id": {
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "stat": {
+          "description": "A key from get_player_stats / get_team_stats, e.g. 'pass_accuracy'",
+          "title": "Stat",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        },
+        "tolerance": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Allowed absolute difference",
+          "title": "Tolerance"
+        }
+      },
+      "required": [
+        "subject_type",
+        "subject_id",
+        "stat",
+        "value"
+      ],
+      "title": "StatClaim",
+      "type": "object"
+    },
+    "Verdict": {
+      "enum": [
+        "supported",
+        "contradicted",
+        "unverifiable"
+      ],
+      "title": "Verdict",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "insight_id": {
+      "title": "Insight Id",
+      "type": "string"
+    },
+    "signal_id": {
+      "title": "Signal Id",
+      "type": "string"
+    },
+    "signal_type": {
+      "title": "Signal Type",
+      "type": "string"
+    },
+    "revision": {
+      "title": "Revision",
+      "type": "integer"
+    },
+    "stage": {
+      "enum": [
+        "data",
+        "agent",
+        "retracted"
+      ],
+      "title": "Stage",
+      "type": "string"
+    },
+    "elapsed": {
+      "title": "Elapsed",
+      "type": "number"
+    },
+    "minute_label": {
+      "title": "Minute Label",
+      "type": "string"
+    },
+    "period": {
+      "title": "Period",
+      "type": "integer"
+    },
+    "team_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Team Id"
+    },
+    "player_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Player Ids",
+      "type": "array"
+    },
+    "priority": {
+      "title": "Priority",
+      "type": "integer"
+    },
+    "headline": {
+      "title": "Headline",
+      "type": "string"
+    },
+    "explanation": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Explanation"
+    },
+    "why_it_matters": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Why It Matters"
+    },
+    "narrative": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Narrative"
+    },
+    "storyline": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Storyline"
+    },
+    "key_numbers": {
+      "items": {
+        "$ref": "#/$defs/KeyNumber"
+      },
+      "title": "Key Numbers",
+      "type": "array"
+    },
+    "evidence_event_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence Event Ids",
+      "type": "array"
+    },
+    "variants": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "$ref": "#/$defs/InsightText"
+        },
+        "type": "object"
+      },
+      "title": "Variants",
+      "type": "object"
+    },
+    "club_angles": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "title": "Club Angles",
+      "type": "object"
+    },
+    "fact_check": {
+      "$ref": "#/$defs/FactCheckReport"
+    },
+    "agents": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Agents",
+      "type": "array"
+    },
+    "latency_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latency Ms"
+    },
+    "supersedes_revision": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Supersedes Revision"
+    }
+  },
+  "required": [
+    "insight_id",
+    "signal_id",
+    "signal_type",
+    "revision",
+    "stage",
+    "elapsed",
+    "minute_label",
+    "period",
+    "team_id",
+    "player_ids",
+    "priority",
+    "headline",
+    "fact_check"
+  ],
+  "title": "Insight",
+  "type": "object",
+  "description": "Fact-checked insight with every personalised variant and its provenance."
+}

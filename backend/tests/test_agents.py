@@ -6,6 +6,7 @@ from collections import Counter
 
 import pytest
 from agent_framework import BaseChatClient, ChatResponse, Message
+from jsonschema import Draft202012Validator
 
 from matchlens.agents import templates
 from matchlens.agents.contracts import FactCheckStatus, FanProfile, Language, Mode
@@ -14,6 +15,7 @@ from matchlens.agents.llm import LlmSettings, ModelClients, OfflineChatClient
 from matchlens.agents.pipeline import AgentTeam, InsightPipeline
 from matchlens.agents.producer import OverlayScheduler
 from matchlens.agents.services import FanServices, personalise_feed
+from matchlens.dataset.schemas import schema_for
 from matchlens.ingest.adapters import ReplayControl, SyntheticReplayAdapter
 from matchlens.interpret.signals import SignalType
 from matchlens.runtime.session import MatchSession
@@ -227,6 +229,12 @@ def test_full_replay_with_agents(demo_match):
     for spans in by_slot.values():
         spans.sort()
         assert all(a[1] <= b[0] + 1e-6 for a, b in zip(spans, spans[1:]))
+    # Everything published validates against the documented schemas (FR-027).
+    overlay_schema, insight_schema = Draft202012Validator(schema_for("overlay")), Draft202012Validator(schema_for("insight"))
+    for o in session.overlays.values():
+        overlay_schema.validate(o)
+    for i in insights.values():
+        insight_schema.validate(i)
 
 
 def test_scheduler_preempts_lower_priority():

@@ -9,7 +9,7 @@ import argparse
 import statistics
 from collections import defaultdict
 
-from matchlens.domain.models import EventType, Outcome
+from matchlens.domain.models import EventType, Outcome, SyntheticMatch
 from matchlens.simulator.engine import generate_match
 from matchlens.simulator.storyline import Storyline
 
@@ -31,7 +31,10 @@ REFERENCE: dict[str, tuple[float, float]] = {
 
 
 def measure(seed: int, storyline: Storyline | None) -> dict[str, float]:
-    m = generate_match(seed=seed, storyline=storyline)
+    return measure_match(generate_match(seed=seed, storyline=storyline))
+
+
+def measure_match(m: SyntheticMatch) -> dict[str, float]:
     ev = m.events
     passes = [e for e in ev if e.type == EventType.PASS]
     shots = [e for e in ev if e.type == EventType.SHOT]

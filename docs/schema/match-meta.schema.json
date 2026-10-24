@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/bhavya-chanana/pl-microsoft-hackathon/main/docs/schema/match-meta.schema.json",
+  "$defs": {
+    "Player": {
+      "additionalProperties": false,
+      "properties": {
+        "player_id": {
+          "title": "Player Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "short_name": {
+          "title": "Short Name",
+          "type": "string"
+        },
+        "shirt": {
+          "title": "Shirt",
+          "type": "integer"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "nationality": {
+          "title": "Nationality",
+          "type": "string"
+        },
+        "top_speed": {
+          "default": 8.8,
+          "title": "Top Speed",
+          "type": "number"
+        },
+        "career_appearances": {
+          "default": 0,
+          "title": "Career Appearances",
+          "type": "integer"
+        },
+        "career_goals": {
+          "default": 0,
+          "title": "Career Goals",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "player_id",
+        "name",
+        "short_name",
+        "shirt",
+        "position",
+        "role",
+        "nationality"
+      ],
+      "title": "Player",
+      "type": "object"
+    },
+    "Position": {
+      "enum": [
+        "GK",
+        "DEF",
+        "MID",
+        "FWD"
+      ],
+      "title": "Position",
+      "type": "string"
+    },
+    "Side": {
+      "enum": [
+        "home",
+        "away"
+      ],
+      "title": "Side",
+      "type": "string"
+    },
+    "Team": {
+      "additionalProperties": false,
+      "properties": {
+        "team_id": {
+          "title": "Team Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "short_name": {
+          "title": "Short Name",
+          "type": "string"
+        },
+        "side": {
+          "$ref": "#/$defs/Side"
+        },
+        "colour": {
+          "title": "Colour",
+          "type": "string"
+        },
+        "formation": {
+          "title": "Formation",
+          "type": "string"
+        },
+        "starting_xi": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Starting Xi",
+          "type": "array"
+        },
+        "bench": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Bench",
+          "type": "array"
+        }
+      },
+      "required": [
+        "team_id",
+        "name",
+        "short_name",
+        "side",
+        "colour",
+        "formation",
+        "starting_xi",
+        "bench"
+      ],
+      "title": "Team",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "match_id": {
+      "title": "Match Id",
+      "type": "string"
+    },
+    "competition": {
+      "title": "Competition",
+      "type": "string"
+    },
+    "venue": {
+      "title": "Venue",
+      "type": "string"
+    },
+    "kickoff_utc": {
+      "title": "Kickoff Utc",
+      "type": "string"
+    },
+    "home": {
+      "$ref": "#/$defs/Team"
+    },
+    "away": {
+      "$ref": "#/$defs/Team"
+    },
+    "players": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Player"
+      },
+      "title": "Players",
+      "type": "object"
+    },
+    "storyline_title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Storyline Title"
+    }
+  },
+  "required": [
+    "match_id",
+    "competition",
+    "venue",
+    "kickoff_utc",
+    "home",
+    "away",
+    "players"
+  ],
+  "title": "MatchMeta",
+  "type": "object",
+  "description": "Match metadata: teams, lineups, formations, players, venue and kick-off."
+}

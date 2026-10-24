@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/bhavya-chanana/pl-microsoft-hackathon/main/docs/schema/event.schema.json",
+  "$defs": {
+    "EventType": {
+      "enum": [
+        "kickoff",
+        "pass",
+        "carry",
+        "pressure",
+        "tackle",
+        "interception",
+        "possession_change",
+        "shot",
+        "save",
+        "goal",
+        "foul",
+        "card",
+        "free_kick",
+        "corner",
+        "throw_in",
+        "goal_kick",
+        "substitution",
+        "half_time",
+        "full_time",
+        "correction"
+      ],
+      "title": "EventType",
+      "type": "string"
+    },
+    "Outcome": {
+      "enum": [
+        "success",
+        "fail",
+        "goal",
+        "saved",
+        "off_target",
+        "blocked",
+        "yellow",
+        "second_yellow",
+        "red",
+        "none"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "Point": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "maximum": 105.0,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 68.0,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Point",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "match_id": {
+      "title": "Match Id",
+      "type": "string"
+    },
+    "sequence": {
+      "title": "Sequence",
+      "type": "integer"
+    },
+    "period": {
+      "title": "Period",
+      "type": "integer"
+    },
+    "clock": {
+      "title": "Clock",
+      "type": "number"
+    },
+    "elapsed": {
+      "title": "Elapsed",
+      "type": "number"
+    },
+    "type": {
+      "$ref": "#/$defs/EventType"
+    },
+    "team_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Team Id"
+    },
+    "player_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Player Id"
+    },
+    "related_player_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Related Player Id"
+    },
+    "start": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Point"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "end": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Point"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "outcome": {
+      "$ref": "#/$defs/Outcome",
+      "default": "none"
+    },
+    "attrs": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "title": "Attrs",
+      "type": "object"
+    },
+    "corrects_event_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Corrects Event Id"
+    }
+  },
+  "required": [
+    "event_id",
+    "match_id",
+    "sequence",
+    "period",
+    "clock",
+    "elapsed",
+    "type"
+  ],
+  "title": "Event",
+  "type": "object",
+  "description": "One match event in the provider-neutral feed schema."
+}

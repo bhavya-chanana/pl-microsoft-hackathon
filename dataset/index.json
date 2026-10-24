@@ -1,0 +1,114 @@
+{
+  "format": "matchlens-dataset/1",
+  "description": "Matchlens synthetic football matches: fictional clubs and players, 105 x 68 m pitch.",
+  "license": "CC-BY-4.0",
+  "calibration_reference": {
+    "passes": [
+      850,
+      1150
+    ],
+    "pass_accuracy_pct": [
+      80,
+      87
+    ],
+    "shots": [
+      20,
+      30
+    ],
+    "goals": [
+      2.2,
+      3.4
+    ],
+    "shots_on_target_pct": [
+      30,
+      45
+    ],
+    "corners": [
+      6,
+      12
+    ],
+    "fouls": [
+      16,
+      26
+    ],
+    "yellow_cards": [
+      2.5,
+      5.0
+    ],
+    "outfield_distance_km": [
+      9.5,
+      11.5
+    ],
+    "top_speed_kmh": [
+      31,
+      36
+    ]
+  },
+  "matches": [
+    {
+      "match_id": "ml-demo-001",
+      "seed": 7,
+      "storyline": "The Kestrel Park Comeback",
+      "scripted": true,
+      "final_score": {
+        "NBR": 3,
+        "HBC": 2
+      },
+      "events": 1575,
+      "tracking_frames": 5702,
+      "path": "ml-demo-001"
+    },
+    {
+      "match_id": "ml-open-s001",
+      "seed": 1,
+      "storyline": "Calibration",
+      "scripted": false,
+      "final_score": {
+        "NBR": 2,
+        "HBC": 0
+      },
+      "events": 1690,
+      "tracking_frames": 5716,
+      "path": "ml-open-s001"
+    },
+    {
+      "match_id": "ml-open-s002",
+      "seed": 2,
+      "storyline": "Calibration",
+      "scripted": false,
+      "final_score": {
+        "NBR": 2,
+        "HBC": 1
+      },
+      "events": 1706,
+      "tracking_frames": 5831,
+      "path": "ml-open-s002"
+    },
+    {
+      "match_id": "ml-open-s003",
+      "seed": 3,
+      "storyline": "Calibration",
+      "scripted": false,
+      "final_score": {
+        "NBR": 0,
+        "HBC": 1
+      },
+      "events": 1754,
+      "tracking_frames": 5718,
+      "path": "ml-open-s003"
+    },
+    {
+      "match_id": "ml-open-s004",
+      "seed": 4,
+      "storyline": "Calibration",
+      "scripted": false,
+      "final_score": {
+        "NBR": 0,
+        "HBC": 2
+      },
+      "events": 1661,
+      "tracking_frames": 5753,
+      "path": "ml-open-s004"
+    }
+  ]
+}
