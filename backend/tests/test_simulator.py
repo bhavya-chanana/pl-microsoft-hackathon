@@ -19,7 +19,7 @@ def test_events_are_ordered_and_unique(demo_match):
 
 def test_storyline_plays_out(demo_match):
     goals = [e for e in demo_match.events if e.type == EventType.GOAL]
-    assert [g.minute_label for g in goals] == ["23'", "38'", "64'", "79'", "90+2'"]
+    assert [g.minute_label for g in goals] == ["23'", "39'", "64'", "79'", "90+2'"]
     final = goals[-1].attrs
     assert (final["home_score"], final["away_score"]) == (3, 2)
     reds = [e for e in demo_match.events if e.type == EventType.CARD and e.outcome == Outcome.SECOND_YELLOW]
@@ -38,6 +38,7 @@ def test_sent_off_player_leaves_tracking(demo_match):
     assert after and all("HBC-04" not in {en.entity_id for en in f.entities} for f in after)
 
 
-def test_calibration_within_reference_ranges():
-    failures = [row for row in report(matches=8) if not row[4]]
+def test_calibration_matches_real_matches():
+    """Unscripted play within one real standard deviation of real top-flight matches on every metric."""
+    failures = [row for row in report(matches=12) if not row[4]]
     assert not failures, failures

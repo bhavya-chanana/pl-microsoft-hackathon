@@ -66,7 +66,7 @@ Mapping to the BRD §9.1 names: `match_clock` is `clock`, `start_xy` is `start`,
 | `type` | `outcome` | `attrs` |
 |---|---|---|
 | `kickoff` | `none` | |
-| `pass` | `success` / `fail` | `ball_speed_kmh`, `height` (`ground` / `high`), `pressured`, optional `set_piece` |
+| `pass` | `success` / `fail` | `ball_speed_kmh`, `height` (`ground` / `high`), `pressured`, optional `set_piece`, optional `cross` |
 | `carry` | `success` | `speed_kmh` |
 | `pressure` | `none` | `distance_m` (presser to carrier) |
 | `tackle` | `success` | |

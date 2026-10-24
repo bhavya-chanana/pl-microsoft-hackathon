@@ -6,11 +6,11 @@ fictional, so the data is free of rights restrictions.
 
 | Match | Seed | Storyline | Final score | Events | Tracking frames |
 |---|---|---|---|---|---|
-| `ml-demo-001` | 7 | The Kestrel Park Comeback (scripted) | Northbridge 3-2 Harbour City | 1,575 | 5,702 |
-| `ml-open-s001` | 1 | Unscripted | Northbridge 2-0 Harbour City | 1,690 | 5,716 |
-| `ml-open-s002` | 2 | Unscripted | Northbridge 2-1 Harbour City | 1,706 | 5,831 |
-| `ml-open-s003` | 3 | Unscripted | Northbridge 0-1 Harbour City | 1,754 | 5,718 |
-| `ml-open-s004` | 4 | Unscripted | Northbridge 0-2 Harbour City | 1,661 | 5,753 |
+| `ml-demo-001` | 7 | The Kestrel Park Comeback (scripted) | Northbridge 3-2 Harbour City | 1,591 | 5,743 |
+| `ml-open-s001` | 1 | Unscripted | Northbridge 1-2 Harbour City | 1,743 | 5,704 |
+| `ml-open-s002` | 2 | Unscripted | Northbridge 1-0 Harbour City | 1,818 | 5,769 |
+| `ml-open-s003` | 3 | Unscripted | Northbridge 0-3 Harbour City | 1,732 | 5,739 |
+| `ml-open-s004` | 4 | Unscripted | Northbridge 3-1 Harbour City | 1,752 | 5,845 |
 
 `ml-demo-001` is the hero match of the live Matchlens demo, event for event: Harbour City lead 2-0 at half-time, a
 red card and a high press turn the game, and the 64th-minute goal is first credited to the wrong player and then
@@ -75,25 +75,42 @@ match can be replayed through the live pipeline with `JsonLinesAdapter`.
 
 ## Calibration
 
-The simulator is tuned so that unscripted matches fall within published per-match averages for a top European
-league (FR-008). Mean over 20 unscripted matches (seeds 1 to 20), both teams combined:
+The simulator is calibrated on real football (FR-008). The same 23 metrics were measured on 100 real men's
+top-flight matches (English top flight, 2015/16, from StatsBomb Open Data) and on simulated matches, and the
+simulator is tuned until every simulated average lies within one real match-to-match standard deviation of the real
+average. Only aggregate statistics of the real matches are kept
+([`reference_profile.json`](../backend/src/matchlens/simulator/reference_profile.json)): no real club, player,
+competition or match names or data are in this dataset or the product.
 
-| Metric | Simulated | Reference range |
+Mean over 20 unscripted matches (seeds 1 to 20) against the real average, both teams combined:
+
+| Metric | Simulated | Real |
 |---|---|---|
-| Passes | 1,019.8 | 850-1,150 |
-| Pass accuracy | 84.7% | 80-87% |
-| Shots | 21.7 | 20-30 |
-| Goals | 2.4 | 2.2-3.4 |
-| Shots on target | 32.5% | 30-45% |
-| Corners | 7.7 | 6-12 |
-| Fouls | 17.6 | 16-26 |
-| Yellow cards | 2.6 | 2.5-5.0 |
-| Outfield distance per player | 10.0 km | 9.5-11.5 km |
-| Top sprint speed | 33.2 km/h | 31-36 km/h |
+| Passes (throw-ins excluded) | 891 | 919 |
+| Pass completion | 76.5% | 75.8% |
+| Median pass length | 15.1 m | 15.2 m |
+| Passes under 15 m / over 30 m | 49.4% / 18.6% | 49.1% / 16.9% |
+| Completion of passes over 30 m | 46.8% | 47.9% |
+| Passes under pressure / completed under pressure | 17.0% / 67.3% | 15.6% / 68.1% |
+| Shots | 26.2 | 25.2 |
+| Goals | 2.5 | 2.55 |
+| Shots on target / blocked | 30.2% / 28.8% | 31.6% / 29.9% |
+| xG per shot | 0.12 | 0.10 |
+| Shot distance / from inside the box | 16.9 m / 64.6% | 16.7 m / 61.4% |
+| Headed shots | 17.0% | 15.0% |
+| Corners / throw-ins / goal kicks | 11.0 / 43.7 / 17.5 | 10.7 / 46.0 / 16.4 |
+| Fouls / yellow cards | 28.1 / 3.3 | 25.3 / 3.5 |
+| Tackles won / interceptions | 25.7 / 15.4 | 23.9 / 13.8 |
+| Outfield distance per player | 10.2 km | 9.5-11.5 km (published range) |
+| Top sprint speed | 33.2 km/h | 31-36 km/h (published range) |
 
-Reproduce it with `cd backend && uv run python -m matchlens.simulator.calibration --matches 20`. Each match's own
-figures are in its `meta.json` under `summary`. The reference ranges are rounded from widely published season
-averages and are plausibility bounds, not exact targets.
+Reproduce it with `cd backend && uv run python -m matchlens.simulator.calibration --matches 20`, and the real
+profile with `uv run python -m matchlens.simulator.reference --matches 100`. Each match's own figures are in its
+`meta.json` under `summary`; `index.json` records the real averages, spreads and metric definitions. The real data
+has no tracking, so distance and speed are checked against rounded published ranges. xG comes from different models
+(StatsBomb's and the simulator's), so it is a looser comparison.
+
+Real-data calibration: [StatsBomb Open Data](https://github.com/statsbomb/open-data). Data provided by StatsBomb.
 
 Known simplifications: the home team attacks the same way in both halves, tracking is 1 Hz, and there are no
 offsides or injuries.

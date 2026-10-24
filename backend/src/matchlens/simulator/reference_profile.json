@@ -1,0 +1,171 @@
+{
+  "source": "StatsBomb Open Data (https://github.com/statsbomb/open-data). Data provided by StatsBomb.",
+  "scope": "English top-flight men's league, season 2015/16, aggregate statistics only",
+  "matches": 100,
+  "sample": "every 3th match by match id",
+  "metrics": {
+    "passes": {
+      "mean": 918.85,
+      "sd": 89.795,
+      "p10": 801.2,
+      "p90": 1038.0
+    },
+    "pass_completion_pct": {
+      "mean": 75.816,
+      "sd": 4.44,
+      "p10": 69.377,
+      "p90": 81.734
+    },
+    "pass_len_median_m": {
+      "mean": 15.247,
+      "sd": 0.795,
+      "p10": 14.075,
+      "p90": 16.34
+    },
+    "pass_short_pct": {
+      "mean": 49.074,
+      "sd": 3.254,
+      "p10": 44.86,
+      "p90": 53.672
+    },
+    "pass_long_pct": {
+      "mean": 16.911,
+      "sd": 2.903,
+      "p10": 13.237,
+      "p90": 21.143
+    },
+    "completion_long_pct": {
+      "mean": 47.935,
+      "sd": 6.493,
+      "p10": 40.0,
+      "p90": 56.75
+    },
+    "pressured_pass_pct": {
+      "mean": 15.609,
+      "sd": 4.768,
+      "p10": 10.272,
+      "p90": 22.522
+    },
+    "completion_pressured_pct": {
+      "mean": 68.101,
+      "sd": 6.652,
+      "p10": 60.061,
+      "p90": 75.143
+    },
+    "shots": {
+      "mean": 25.2,
+      "sd": 5.927,
+      "p10": 19.0,
+      "p90": 32.0
+    },
+    "goals": {
+      "mean": 2.55,
+      "sd": 1.507,
+      "p10": 1.0,
+      "p90": 5.0
+    },
+    "on_target_pct": {
+      "mean": 31.55,
+      "sd": 9.69,
+      "p10": 18.237,
+      "p90": 42.805
+    },
+    "blocked_pct": {
+      "mean": 29.86,
+      "sd": 9.794,
+      "p10": 17.703,
+      "p90": 42.037
+    },
+    "xg_per_shot": {
+      "mean": 0.101,
+      "sd": 0.033,
+      "p10": 0.065,
+      "p90": 0.142
+    },
+    "shot_distance_m": {
+      "mean": 16.676,
+      "sd": 1.503,
+      "p10": 14.928,
+      "p90": 18.948
+    },
+    "shots_in_box_pct": {
+      "mean": 61.35,
+      "sd": 10.1,
+      "p10": 47.83,
+      "p90": 73.91
+    },
+    "headers_pct": {
+      "mean": 14.957,
+      "sd": 7.733,
+      "p10": 5.26,
+      "p90": 26.32
+    },
+    "corners": {
+      "mean": 10.7,
+      "sd": 3.603,
+      "p10": 7.0,
+      "p90": 15.9
+    },
+    "throw_ins": {
+      "mean": 45.97,
+      "sd": 9.569,
+      "p10": 34.0,
+      "p90": 59.0
+    },
+    "goal_kicks": {
+      "mean": 16.44,
+      "sd": 3.477,
+      "p10": 12.0,
+      "p90": 21.0
+    },
+    "fouls": {
+      "mean": 25.28,
+      "sd": 5.943,
+      "p10": 18.1,
+      "p90": 33.0
+    },
+    "yellow_cards": {
+      "mean": 3.45,
+      "sd": 2.037,
+      "p10": 1.0,
+      "p90": 5.9
+    },
+    "tackles": {
+      "mean": 23.94,
+      "sd": 6.35,
+      "p10": 16.1,
+      "p90": 33.0
+    },
+    "interceptions": {
+      "mean": 13.78,
+      "sd": 9.129,
+      "p10": 4.0,
+      "p90": 27.0
+    }
+  },
+  "definitions": {
+    "passes": "Passes, both teams, throw-ins excluded",
+    "pass_completion_pct": "Completed passes, % (throw-ins excluded)",
+    "pass_len_median_m": "Median pass length, metres",
+    "pass_short_pct": "Passes under 15 m, %",
+    "pass_long_pct": "Passes over 30 m, %",
+    "completion_long_pct": "Completion of passes over 30 m, %",
+    "pressured_pass_pct": "Passes made under pressure, %",
+    "completion_pressured_pct": "Completion under pressure, %",
+    "shots": "Shots, both teams",
+    "goals": "Goals (own goals excluded)",
+    "on_target_pct": "Shots on target, %",
+    "blocked_pct": "Shots blocked, %",
+    "xg_per_shot": "Mean xG per shot",
+    "shot_distance_m": "Mean shot distance to goal, metres",
+    "shots_in_box_pct": "Shots from inside the penalty area, %",
+    "headers_pct": "Headed shots, %",
+    "corners": "Corners",
+    "throw_ins": "Throw-ins",
+    "goal_kicks": "Goal kicks",
+    "fouls": "Fouls",
+    "yellow_cards": "Yellow cards (first bookings)",
+    "tackles": "Tackles won",
+    "interceptions": "Interceptions"
+  }
+}

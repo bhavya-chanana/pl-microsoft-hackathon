@@ -23,7 +23,7 @@ from typing import Any
 
 from matchlens.dataset.schemas import write_schemas
 from matchlens.domain.models import Event, MatchMeta, SyntheticMatch, TrackingFrame
-from matchlens.simulator.calibration import NEUTRAL, REFERENCE, measure_match
+from matchlens.simulator.calibration import NEUTRAL, calibration_reference, measure_match
 from matchlens.simulator.engine import MatchSimulator
 from matchlens.simulator.roster import default_match_meta
 from matchlens.simulator.storyline import Storyline, comeback_storyline
@@ -98,7 +98,7 @@ def export_dataset(out: Path, unscripted: int = 4) -> dict[str, Any]:
         "format": FORMAT,
         "description": "Matchlens synthetic football matches: fictional clubs and players, 105 x 68 m pitch.",
         "license": "CC-BY-4.0",
-        "calibration_reference": {k: list(v) for k, v in REFERENCE.items()},
+        "calibration_reference": calibration_reference(),
         "matches": entries,
     }
     (out / "index.json").write_text(json.dumps(index, indent=2) + "\n")

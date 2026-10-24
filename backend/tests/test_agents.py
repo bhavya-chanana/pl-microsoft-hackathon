@@ -192,7 +192,7 @@ def test_agent_timeout_falls_back(played, monkeypatch):
     monkeypatch.setattr(pipeline, "AGENT_TIMEOUT_S", 0.05)
     client = ScriptedClient(delay=0.5)
     session = fresh_session(played)
-    goal = signal_of(played, SignalType.GOAL, "38'")
+    goal = signal_of(played, SignalType.GOAL, "39'")
     run(InsightPipeline(team_for(client)).handle(goal, session))
     assert session.insights[goal.signal_id]["fact_check"]["status"] == FactCheckStatus.DATA_ONLY
 

@@ -1,4 +1,8 @@
-"""Calibration report: compare simulator output with public match averages (FR-008).
+"""Calibration report: compare simulator output with real match statistics (FR-008).
+
+Event metrics are checked against the real-data profile built by reference.py (aggregate statistics of real
+top-flight matches). That data has no tracking, so running distance and top speed are checked against rounded
+published ranges instead.
 
 Run: uv run python -m matchlens.simulator.calibration --matches 20
 """
@@ -8,26 +12,20 @@ from __future__ import annotations
 import argparse
 import statistics
 from collections import defaultdict
+from typing import Any
 
-from matchlens.domain.models import EventType, Outcome, SyntheticMatch
+from matchlens.domain.models import SyntheticMatch
 from matchlens.simulator.engine import generate_match
+from matchlens.simulator.reference import METRICS, load_profile, measure_simulated
 from matchlens.simulator.storyline import Storyline
 
-# Approximate per-match figures (both teams combined unless noted) for a top
-# European league, rounded from widely published season averages. They are
-# ranges for plausibility checks, not exact targets.
+# Tracking metrics: rounded from widely published season averages (no tracking in the real-data profile).
 REFERENCE: dict[str, tuple[float, float]] = {
-    "passes": (850, 1150),
-    "pass_accuracy_pct": (80, 87),
-    "shots": (20, 30),
-    "goals": (2.2, 3.4),
-    "shots_on_target_pct": (30, 45),
-    "corners": (6, 12),
-    "fouls": (16, 26),
-    "yellow_cards": (2.5, 5.0),
     "outfield_distance_km": (9.5, 11.5),
     "top_speed_kmh": (31, 36),
 }
+# How far the simulated mean may sit from the real mean, in real match-to-match standard deviations.
+TOLERANCE_SD = 1.0
 
 
 def measure(seed: int, storyline: Storyline | None) -> dict[str, float]:
@@ -35,9 +33,7 @@ def measure(seed: int, storyline: Storyline | None) -> dict[str, float]:
 
 
 def measure_match(m: SyntheticMatch) -> dict[str, float]:
-    ev = m.events
-    passes = [e for e in ev if e.type == EventType.PASS]
-    shots = [e for e in ev if e.type == EventType.SHOT]
+    """Every real-data metric (reference.py) plus outfield distance and top speed from tracking."""
     dist: dict[str, float] = defaultdict(float)
     top: dict[str, float] = defaultdict(float)
     prev_period = None
@@ -53,16 +49,30 @@ def measure_match(m: SyntheticMatch) -> dict[str, float]:
         d for pid, d in dist.items() if m.meta.players[pid].role != "GK" and d > 7000
     ]
     return {
-        "passes": len(passes),
-        "pass_accuracy_pct": sum(e.outcome == Outcome.SUCCESS for e in passes) / len(passes) * 100,
-        "shots": len(shots),
-        "goals": sum(e.type == EventType.GOAL for e in ev),
-        "shots_on_target_pct": sum(e.outcome in (Outcome.SAVED, Outcome.GOAL) for e in shots) / max(len(shots), 1) * 100,
-        "corners": sum(e.type == EventType.CORNER for e in ev),
-        "fouls": sum(e.type == EventType.FOUL for e in ev),
-        "yellow_cards": sum(e.type == EventType.CARD and e.outcome == Outcome.YELLOW for e in ev),
+        **{k: v for k, v in measure_simulated(m).items() if v is not None},
         "outfield_distance_km": statistics.mean(outfield_full) / 1000,
         "top_speed_kmh": max(top.values()) * 3.6,
+    }
+
+
+def targets() -> dict[str, tuple[float, float]]:
+    """Accepted range for the mean of each metric: real mean +/- TOLERANCE_SD real sd, plus tracking ranges."""
+    real = load_profile()["metrics"]
+    out = {k: (round(v["mean"] - TOLERANCE_SD * v["sd"], 2), round(v["mean"] + TOLERANCE_SD * v["sd"], 2))
+           for k, v in real.items()}
+    return {**out, **REFERENCE}
+
+
+def calibration_reference() -> dict[str, Any]:
+    """What the published dataset records as its calibration target."""
+    profile = load_profile()
+    return {
+        "source": profile["source"],
+        "scope": profile["scope"],
+        "matches": profile["matches"],
+        "tolerance_sd": TOLERANCE_SD,
+        "metrics": {k: {**v, "definition": METRICS[k]} for k, v in profile["metrics"].items()},
+        "tracking_ranges": {k: list(v) for k, v in REFERENCE.items()},
     }
 
 
@@ -77,9 +87,9 @@ def report(matches: int = 20, storyline: Storyline | None = None) -> list[tuple[
     """Calibrate on unscripted play by default, so storyline beats do not skew averages."""
     rows = [measure(seed, storyline or NEUTRAL) for seed in range(1, matches + 1)]
     out = []
-    for key, (lo, hi) in REFERENCE.items():
+    for key, (lo, hi) in targets().items():
         mean = statistics.mean(r[key] for r in rows)
-        out.append((key, round(mean, 1), lo, hi, lo <= mean <= hi))
+        out.append((key, round(mean, 2), lo, hi, lo <= mean <= hi))
     return out
 
 
@@ -87,9 +97,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--matches", type=int, default=20)
     args = parser.parse_args()
-    print(f"{'metric':<24}{'simulated':>10}{'reference':>16}  ok")
+    real = load_profile()["metrics"]
+    print(f"{'metric':<26}{'simulated':>10}{'real':>9}{'accepted':>18}  ok")
     for key, mean, lo, hi, ok in report(args.matches):
-        print(f"{key:<24}{mean:>10}{f'{lo}-{hi}':>16}  {'yes' if ok else 'NO'}")
+        ref = f"{real[key]['mean']:.2f}" if key in real else "-"
+        print(f"{key:<26}{mean:>10}{ref:>9}{f'{lo}-{hi}':>18}  {'yes' if ok else 'NO'}")
 
 
 if __name__ == "__main__":

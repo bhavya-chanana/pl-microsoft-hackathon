@@ -16,7 +16,7 @@ fictional.
 
 | Stage | What happens | Where |
 |---|---|---|
-| **Ingest** | A calibrated simulator plays a 90-minute match from a scripted storyline. A pluggable feed adapter streams events and 1 Hz tracking in a provider-neutral schema, handling duplicates, late events and corrections. | `simulator/`, `ingest/` |
+| **Ingest** | A simulator calibrated on real match statistics plays a 90-minute match from a scripted storyline. A pluggable feed adapter streams events and 1 Hz tracking in a provider-neutral schema, handling duplicates, late events and corrections. | `simulator/`, `ingest/` |
 | **Interpret** | A deterministic stats engine (no language model) keeps score, clock, possession and player/team stats, rates every pass's difficulty, computes speeds, distance and rolling momentum, and detects key moments. | `interpret/` |
 | **Explain** | A coordinator picks the moments worth explaining. Tactical and Narrator agents say why they matter, with evidence. A Fact-Checker verifies every claim against the stats engine and rewrites or blocks anything unsupported. | `agents/`, `factcheck/` |
 | **Render** | A Producer agent turns each insight into timed overlay JSON with priority and screen slot; a scheduler caps what is on screen. The broadcast view plays them over a live 2D pitch. | `agents/producer.py`, `frontend/src/features/broadcast/` |
@@ -140,8 +140,12 @@ documented schema.
 - **[docs/SCHEMA.md](docs/SCHEMA.md):** the event, tracking, overlay and insight contracts, the REST API and the
   WebSocket stream. Machine-readable JSON Schemas are in [docs/schema/](docs/schema/).
 - **[dataset/](dataset/):** the open synthetic dataset: five full matches (the hero demo match and four unscripted
-  ones) with events, 1 Hz tracking, metadata and the simulator's calibration against public match averages.
+  ones) with events, 1 Hz tracking, metadata and the simulator's calibration against real match statistics.
   Regenerate it with `npm run export:dataset`.
+- **Calibration:** the simulator is tuned against aggregate statistics of 100 real top-flight matches (passing
+  lengths and completion, pressure, shot locations, xG, set pieces, fouls and cards). Only the averages are kept;
+  no real names or match data are used. Real-data calibration:
+  [StatsBomb Open Data](https://github.com/statsbomb/open-data), data provided by StatsBomb.
 
 ## Repository layout
 
