@@ -4,6 +4,7 @@ Matchlens runs as two Azure Container Apps in one environment:
 
 ```text
 browser ──▶ frontend (Next.js, public HTTPS) ──▶ backend (FastAPI + agents, internal only)
+                                                   ├──▶ Cosmos DB serverless (managed identity): every run, resumable
                                                    ├──▶ recorded demo match (baked into the image)
                                                    └──▶ Azure OpenAI in Foundry (managed identity, cache misses only)
 ```
@@ -12,11 +13,13 @@ browser ──▶ frontend (Next.js, public HTTPS) ──▶ backend (FastAPI + 
 |---|---|
 | Container Apps environment + Log Analytics | Hosting and logs |
 | `ca-frontend-*` | Public site; proxies an allow-list of read-only API paths and the live stream |
-| `ca-backend-*` | Stats engine, agent workflow, MCP server; internal ingress only, max 1 replica (one match in memory) |
+| `ca-backend-*` | Stats engine, agent workflow, MCP server; internal ingress only, max 1 replica (one live match per process) |
+| `cosmos-*` (serverless) | The store: database `matchlens`, nine containers partitioned by run (see [DATABASE.md](DATABASE.md)). Key auth disabled |
 | Container registry (Basic) | Images, built remotely by ACR (no local Docker needed) |
-| User-assigned managed identity | Pulls images; calls Azure OpenAI with the *Cognitive Services OpenAI User* role. No keys anywhere |
+| User-assigned managed identity | Pulls images; calls Azure OpenAI with the *Cognitive Services OpenAI User* role; reads and writes Cosmos DB with the *Cosmos DB Built-in Data Contributor* role. No keys anywhere |
 
-Both apps scale to zero when nobody is watching (BRD §10.5). A cold start replays the demo match from kick-off.
+Both apps and the database scale to zero when nobody is watching (BRD §10.5). A cold start resumes the stored live
+match where it stopped; once a match has finished, the next cold start begins a new one from kick-off.
 
 ## The recorded demo match
 
@@ -82,7 +85,7 @@ Optional settings (`azd env set …`):
 Leave `MATCHLENS_OPENAI_ACCOUNT` unset to deploy with no model access at all: the recorded demo and data-only
 templates only, which costs nothing per request.
 
-To keep the backend warm during judging (no cold-start restart), set `backendMinReplicas` to `1` in
+To keep the backend warm during judging (no cold-start pause while the run is restored), set `backendMinReplicas` to `1` in
 `infra/main.bicep` and run `azd provision`. Set it back to `0` afterwards to save credit.
 
 Redeploy code changes with `azd deploy`. Tear everything down with `azd down`.
@@ -93,7 +96,9 @@ Redeploy code changes with `azd deploy`. Tear everything down with `azd down`.
 curl -s "$(azd env get-value FRONTEND_URL)/api/backend/health"
 ```
 
-`llm` should read `recorded-demo+azure:…` (or `recorded-demo` without a model). Backend logs:
+`llm` should read `recorded-demo+azure:…` (or `recorded-demo` without a model), and `store.backend` should read
+`cosmos:matchlens`. If it reads `memory (cosmos unavailable: …)`, the data-contributor role was not active yet when
+the backend started (it can take a few minutes after the first `azd up`); restart the backend revision. Backend logs:
 
 ```bash
 az containerapp logs show -g "$(azd env get-value AZURE_RESOURCE_GROUP)" \
@@ -113,5 +118,7 @@ open http://localhost:3100
 ## Cost notes
 
 - Container Apps consumption plan with scale to zero: idle costs nothing; ACR Basic is about USD 5 a month.
+- Cosmos DB serverless: nothing while idle, about USD 0.02 of request units per full match replay plus about 11 MB
+  of storage (USD 0.285 per GB-month in Central India).
 - The recorded demo means a judge's visit costs no model calls unless they ask for something that was not recorded.
 - Recording the demo costs a few dollars of `gpt-5-mini` usage, once.

@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any
 
 from matchlens.interpret.signals import Signal, SignalType
 
@@ -58,6 +59,17 @@ class Coordinator:
     _seen: dict[str, int] = field(default_factory=dict)        # signal_id -> latest revision handled
     _last_type: dict[str, float] = field(default_factory=dict)  # type -> match elapsed of last LLM run
     retracted: set[str] = field(default_factory=set)
+
+    def snapshot(self) -> dict[str, Any]:
+        """Editorial state, stored so a resumed run keeps the same caps and choices."""
+        return {"runs": list(self._runs), "seen": dict(self._seen), "last_type": dict(self._last_type),
+                "retracted": sorted(self.retracted)}
+
+    def restore(self, state: dict[str, Any]) -> None:
+        self._runs = deque(state.get("runs", []))
+        self._seen = {k: int(v) for k, v in state.get("seen", {}).items()}
+        self._last_type = dict(state.get("last_type", {}))
+        self.retracted = set(state.get("retracted", []))
 
     def decide(self, signal: Signal, removed: bool = False, now: float | None = None) -> Decision:
         # Caps run on match time so replays at any speed get the same editorial choices.

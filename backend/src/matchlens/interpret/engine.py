@@ -209,6 +209,10 @@ class MatchEngine:
             out.append(e)
         return out
 
+    def has_event(self, event_id: str) -> bool:
+        """True once an event (corrections included) has been ingested."""
+        return event_id in self._events
+
     def event(self, event_id: str) -> Event | None:
         e = self._events.get(event_id)
         return self._effective(e) if e else None

@@ -50,6 +50,7 @@ flowchart TB
     AOAI[("Azure OpenAI<br/>in Microsoft Foundry")] -.-> Agents
     PUB --> WS["FastAPI<br/>REST + WebSocket"]
     ENG --> WS
+    WS <--> DB[("Cosmos DB serverless<br/>runs, feed, insights, agent runs")]
     WS --> NEXT["Next.js server<br/>allow-listed proxy + SSE bridge"]
     NEXT --> BC["Broadcast view"]
     NEXT --> MC["Match Centre<br/>fan companion"]
@@ -65,6 +66,10 @@ flowchart TB
   carries its evidence event ids, the agents involved and the fact-check report.
 - **Corrections flow everywhere.** When the feed corrects an event, the engine replays the match, updates every
   affected statistic and signal, re-explains changed moments and retracts insights that no longer hold.
+- **Nothing lives only in memory.** Every event, frame, signal, insight, overlay, coordinator decision, agent run and
+  fan catch-up is written to Cosmos DB (serverless) behind a write-behind queue, and read through an in-process cache.
+  A restarted backend resumes the live match from the database where it stopped. See
+  [docs/DATABASE.md](docs/DATABASE.md).
 - **Cost-aware.** The coordinator rate-caps agent runs; frequent tasks use the fast model and recaps the strong one.
   A recorded demo match replays every agent answer, so judges get instant, repeatable output with no model calls.
 
@@ -103,6 +108,10 @@ controls to speed it up (up to 60x), pause it, or restart it from any minute.
 | `npm run dev:demo` | The recorded demo match (`backend/demo/hero-match.json`), data-only templates for anything not recorded | No |
 | `npm run dev:offline` | Data-only templates (the full workflow still runs) | No |
 | `npm run dev` | Azure OpenAI, live | Yes |
+| `npm run dev:db` | Like `dev:demo`, but stores runs in the local Cosmos DB emulator (start it first with `npm run db:emulator`) | No (Docker) |
+
+Without `MATCHLENS_COSMOS_ENDPOINT` the backend uses an in-memory store and logs a warning; set it to persist runs
+(see [docs/DATABASE.md](docs/DATABASE.md)).
 
 For live models, copy `backend/.env.example` to `backend/.env`, set `AZURE_OPENAI_ENDPOINT` to your Azure OpenAI
 (Foundry) endpoint with a `gpt-5-mini` deployment, and run `az login`. Authentication uses Entra ID, so there are no
@@ -126,6 +135,8 @@ documented schema.
 
 ## Data and schemas
 
+- **[docs/DATABASE.md](docs/DATABASE.md):** the Cosmos DB containers, write and read paths, cache, resuming after a
+  restart, and cost.
 - **[docs/SCHEMA.md](docs/SCHEMA.md):** the event, tracking, overlay and insight contracts, the REST API and the
   WebSocket stream. Machine-readable JSON Schemas are in [docs/schema/](docs/schema/).
 - **[dataset/](dataset/):** the open synthetic dataset: five full matches (the hero demo match and four unscripted
@@ -144,7 +155,8 @@ backend/                 Python 3.12, FastAPI, Microsoft Agent Framework
     agents/              coordinator, agent workflow, prompts, fallbacks, recorded demo
     factcheck/           claim verification
     tools/, mcp_server/  match-state tools and the MCP server
-    runtime/             live match session and pub/sub
+    runtime/             live match session, pub/sub, run start and resume
+    store/               Cosmos DB store, write-behind queue, read-through cache
     dataset/             open dataset export and JSON Schema generation
     api/                 REST and WebSocket API
   tests/
@@ -152,7 +164,7 @@ backend/                 Python 3.12, FastAPI, Microsoft Agent Framework
 frontend/                Next.js, TypeScript, Tailwind, shadcn/ui, TanStack Query, Zustand, React Flow
 dataset/                 open synthetic dataset
 docs/                    BRD, schema reference, deployment guide
-infra/                   Bicep for Azure Container Apps (azd up)
+infra/                   Bicep for Azure Container Apps and Cosmos DB (azd up)
 ```
 
 ## Technology
@@ -163,6 +175,7 @@ infra/                   Bicep for Azure Container Apps (azd up)
 | Agents | Microsoft Agent Framework workflows |
 | Models | Azure OpenAI in Microsoft Foundry (`gpt-5-mini`), Entra ID authentication |
 | Tools | MCP server for match state |
+| Database | Azure Cosmos DB for NoSQL (serverless), managed identity |
 | Frontend | Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui, Motion, Recharts, React Flow |
-| Hosting | Azure Container Apps, Azure Container Registry, managed identity, Log Analytics |
+| Hosting | Azure Container Apps, Azure Container Registry, Cosmos DB, managed identity, Log Analytics |
 | Infrastructure as code | Bicep with the Azure Developer CLI |

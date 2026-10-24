@@ -4,13 +4,16 @@
 * recap at half-time, full-time or on demand
 * personalised insight feed for a fan profile
 
-Results are cached per (window, profile, match position) so many fans asking
-the same question cost one model call. Every result is fact-checked, and the
+Results are stored per run and keyed by (window, profile, match position), so
+many fans asking the same question cost one model call, also after a restart. Every result is fact-checked, and the
 data-only template is used if the agent fails or is blocked.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
+import time
 from typing import Any
 
 from matchlens.agents import templates
@@ -51,21 +54,27 @@ class FanServices:
     def __init__(self, team: AgentTeam) -> None:
         self.team = team
         self.generated_by = "data" if team.label == "offline-templates" else "agent"
-        self._cache: dict[tuple[Any, ...], Catchup | Recap] = {}
 
-    def reset(self) -> None:
-        self._cache.clear()
-
-    def _key(self, session: MatchSession, *parts: Any) -> tuple[Any, ...]:
+    def _key(self, session: MatchSession, *parts: Any) -> str:
         # Coarse match position: answers stay valid within the same minute and signal count.
-        return (session.meta.match_id, int(session.engine.c.elapsed // 60), len(session.engine.signals()), *parts)
+        raw = [int(session.engine.c.elapsed // 60), len(session.engine.signals()), *parts]
+        return hashlib.sha256(json.dumps(raw).encode()).hexdigest()[:32]
+
+    def _store(self, session: MatchSession, key: str, kind: str, result: Catchup | Recap, started: float) -> None:
+        session.recorder.fan_output(key, kind, result.model_dump(mode="json"))
+        session.recorder.agent_run({
+            "kind": kind, "outcome": result.source, "model": self.team.label,
+            "fact_check": result.fact_check.status.value, "profile": result.profile.model_dump(mode="json"),
+            "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+        })
 
     async def catchup(self, session: MatchSession, minutes: int, profile: FanProfile) -> Catchup:
         if minutes not in CATCHUP_WINDOWS:
             raise ValueError(f"window must be one of {CATCHUP_WINDOWS}")
         key = self._key(session, "catchup", minutes, profile.model_dump_json())
-        if key in self._cache:
-            return self._cache[key]  # type: ignore[return-value]
+        if (cached := await session.recorder.fan_cached(key)) is not None:
+            return Catchup.model_validate(cached)
+        started = time.perf_counter()
         engine = session.engine
         pack = window_pack(engine, minutes, list(session.insights.values()))
         payload = {"task": "catchup", "context": pack, "language": profile.language.value,
@@ -97,15 +106,16 @@ class FanServices:
                          if i["elapsed"] >= engine.c.elapsed - minutes * 60 and i["stage"] != "retracted"],
             profile=profile, fact_check=report, source=source,
         )
-        self._cache[key] = result
+        self._store(session, key, "catchup", result, started)
         return result
 
     async def recap(self, session: MatchSession, profile: FanProfile) -> Recap:
         status = str(session.engine.state()["status"])
         phase = status if status in ("half_time", "full_time") else "live"
         key = self._key(session, "recap", profile.model_dump_json())
-        if key in self._cache:
-            return self._cache[key]  # type: ignore[return-value]
+        if (cached := await session.recorder.fan_cached(key)) is not None:
+            return Recap.model_validate(cached)
+        started = time.perf_counter()
         engine = session.engine
         pack = window_pack(engine, 130, list(session.insights.values()))
         payload = {"task": "recap", "phase": phase, "context": pack, "language": profile.language.value,
@@ -126,7 +136,7 @@ class FanServices:
         result = Recap(phase=phase, title=draft.title, summary=draft.summary, key_moments=draft.key_moments,
                        turning_point=draft.turning_point, player_of_the_match_id=draft.player_of_the_match_id,
                        profile=profile, fact_check=report, source=source)
-        self._cache[key] = result
+        self._store(session, key, "recap", result, started)
         return result
 
 

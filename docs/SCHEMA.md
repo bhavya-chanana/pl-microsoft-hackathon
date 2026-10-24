@@ -217,7 +217,7 @@ WebSocket as Server-Sent Events under `/api/stream`.
 
 | Method and path | Returns |
 |---|---|
-| `GET /api/health` | Status, LLM mode, p95 stats-engine and agent latency |
+| `GET /api/health` | Status, LLM mode, p95 stats-engine and agent latency, current `run_id`, store and cache counters |
 | `GET /api/match` | Snapshot for a late joiner (same as the WebSocket `hello`) |
 | `GET /api/state` | Score, clock, period, possession, momentum index, rhythm |
 | `GET /api/timeline?team_id=&player_id=&type=` | Key events, filterable |
@@ -229,7 +229,8 @@ WebSocket as Server-Sent Events under `/api/stream`.
 | `GET /api/recap?mode=&language=&club_id=&player_id=` | Half-time, full-time or live recap |
 | `GET /api/players/{player_id}`, `GET /api/teams/{team_id}` | Live statistics |
 | `GET /api/agents/decisions` | Coordinator routing decisions |
-| `POST /api/replay` `{seed, speed, start_minute}` | Start a new replay |
+| `POST /api/replay` `{seed, speed, start_minute}` | Start a new replay (a new run in the database) |
+| `GET /api/runs?limit=` | Stored runs, newest first: status, position, score, resumes |
 | `POST /api/replay/control` `{speed?, paused?}` | Change speed or pause |
 | `/mcp` | MCP server (streamable HTTP) with the match-state tools, internal only |
 
@@ -239,7 +240,7 @@ Every message is a JSON object with a `type`:
 
 | `type` | Payload |
 |---|---|
-| `hello` | Sent on connect and when a new replay starts: `meta`, `state`, `timeline`, `signals`, `insights`, `overlays`, `momentum`, `frame`, `finished` |
+| `hello` | Sent on connect and when a new replay starts: `run_id`, `meta`, `state`, `timeline`, `signals`, `insights`, `overlays`, `momentum`, `frame`, `finished` |
 | `event` | `event`: an `Event` (with corrections applied) plus `minute_label` and, for passes, `pass_quality` |
 | `correction` | `event`: the `correction` event |
 | `state` | `state`: match state after each event |

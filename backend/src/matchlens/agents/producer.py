@@ -7,7 +7,8 @@ screen never stacks graphics on top of play.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 from matchlens.agents.contracts import Overlay, OverlayKind
 
@@ -32,6 +33,14 @@ class _Booking:
 class OverlayScheduler:
     bookings: dict[str, list[_Booking]] = field(default_factory=dict)
     trimmed: dict[str, float] = field(default_factory=dict)  # overlay_id -> new duration after pre-emption
+
+    def snapshot(self) -> dict[str, Any]:
+        return {"bookings": {slot: [asdict(b) for b in books] for slot, books in self.bookings.items()},
+                "trimmed": dict(self.trimmed)}
+
+    def restore(self, state: dict[str, Any]) -> None:
+        self.bookings = {slot: [_Booking(**b) for b in books] for slot, books in state.get("bookings", {}).items()}
+        self.trimmed = dict(state.get("trimmed", {}))
 
     def take_trimmed(self) -> dict[str, float]:
         out, self.trimmed = self.trimmed, {}

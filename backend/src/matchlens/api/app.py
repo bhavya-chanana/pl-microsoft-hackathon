@@ -20,13 +20,16 @@ from matchlens.agents.services import CATCHUP_WINDOWS, FanServices, personalise_
 from matchlens.domain.models import EventType
 from matchlens.mcp_server.server import mcp
 from matchlens.runtime.manager import manager
-from matchlens.runtime.session import event_payload
+from matchlens.runtime.session import MatchSession, event_payload
+from matchlens.store.base import open_store
+from matchlens.store.repository import Repository
+from matchlens.store.writer import WriteBehind
 
 log = logging.getLogger(__name__)
 
 # Keep the console readable: Azure SDK request dumps, per-superstep workflow
 # chatter and the "publish is a dead end" validation note (it is the sink by design).
-for noisy in ("azure.core.pipeline.policies.http_logging_policy", "azure.identity",
+for noisy in ("azure.core.pipeline.policies.http_logging_policy", "azure.identity", "azure.cosmos",
               "agent_framework._workflows._runner", "agent_framework._workflows._validation"):
     logging.getLogger(noisy).setLevel(logging.ERROR)
 
@@ -43,6 +46,12 @@ class AgentRuntime:
     async def on_signal(self, signal, session) -> None:
         await self.pipeline.handle(signal, session)
 
+    async def on_resume(self, session: MatchSession, run: dict[str, Any]) -> None:
+        state = await session.recorder.get("runs", "pipeline")
+        decisions = await session.recorder.load("decisions", order_by="seq")
+        requeued = await self.pipeline.restore(session, state, decisions)
+        log.info("pipeline restored: %d decisions, %d agent jobs re-queued", len(decisions), requeued)
+
 
 runtime: AgentRuntime | None = None
 
@@ -51,18 +60,25 @@ runtime: AgentRuntime | None = None
 async def lifespan(app: FastAPI):
     global runtime
     runtime = AgentRuntime()
+    store = await open_store()
+    writer = WriteBehind(store)
+    writer.start()
+    manager.attach(Repository(store, writer))
     manager.add_signal_handler(runtime.on_signal)
-    manager.add_reset_hook(lambda: (runtime.pipeline.reset(), runtime.fans.reset()))
+    manager.add_resume_hook(runtime.on_resume)
+    manager.add_reset_hook(runtime.pipeline.reset)
     manager.add_reset_hook(lambda: runtime.clients.use_cassette(
         manager.seed, manager.storyline.title if manager.storyline else None))
     async with mcp.session_manager.run():
         if os.getenv("MATCHLENS_AUTOSTART", "1") == "1":
-            await manager.start_synthetic(
+            await manager.resume_or_start(
                 seed=int(os.getenv("MATCHLENS_SEED", "7")),
                 speed=float(os.getenv("MATCHLENS_SPEED", "1")),
             )
         yield
         await manager.stop()
+        await writer.close()  # flush what the match wrote last
+        await store.close()
 
 
 app = FastAPI(title="Matchlens", version="0.1.0", lifespan=lifespan)
@@ -114,6 +130,8 @@ async def health() -> dict[str, Any]:
         "llm": runtime.clients.label if runtime else None,
         "processing_ms_p95": _p95(s.latency_ms[-500:]) if s else None,
         "agent_insight_ms_p95": _p95(agent_lat),
+        "run_id": s.run_id if s else None,
+        "store": manager.repo.stats(),
     }
 
 
@@ -134,7 +152,8 @@ async def insights(
 @app.get("/api/insights/{insight_id}")
 async def insight(insight_id: str) -> dict[str, Any]:
     """Full insight with every variant, evidence ids and the fact-check report."""
-    found = _session().insights.get(insight_id)
+    s = _session()
+    found = s.insights.get(insight_id) or await s.recorder.get("insights", insight_id)
     if not found:
         raise HTTPException(404, "unknown insight")
     return found
@@ -180,20 +199,21 @@ async def decisions(limit: int = Query(default=100, le=1000)) -> list[dict[str, 
 @app.post("/api/replay")
 async def start_replay(req: ReplayRequest) -> dict[str, Any]:
     s = await manager.start_synthetic(seed=req.seed, speed=req.speed, start_minute=req.start_minute)
-    return {"match_id": s.meta.match_id, "speed": req.speed}
+    return {"match_id": s.meta.match_id, "run_id": s.run_id, "speed": req.speed}
+
+
+@app.get("/api/runs")
+async def runs(limit: int = Query(default=20, le=100)) -> list[dict[str, Any]]:
+    """Recent replays stored in the database, newest first."""
+    return [{k: v for k, v in r.items() if k != "state"} for r in await manager.repo.list_runs(limit)]
 
 
 @app.post("/api/replay/control")
 async def control_replay(req: ControlRequest) -> dict[str, Any]:
     _session()
+    manager.set_control(speed=req.speed, paused=req.paused)
     ctl = manager.control
     assert ctl is not None
-    if req.speed is not None:
-        ctl.speed = req.speed
-    if req.paused is True:
-        ctl.pause()
-    elif req.paused is False:
-        ctl.resume()
     return {"speed": ctl.speed, "paused": ctl.paused}
 
 

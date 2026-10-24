@@ -398,18 +398,50 @@ class InsightPipeline:
         self.scheduler = OverlayScheduler()
         self.decisions.clear()
 
+    def _save_state(self, session: MatchSession) -> None:
+        session.recorder.pipeline_state(self.coordinator.snapshot(), self.scheduler.snapshot())
+
+    async def restore(self, session: MatchSession, state: dict[str, Any] | None,
+                      decisions: list[dict[str, Any]]) -> int:
+        """Continue a stored run: editorial state back in place, and agent work that was
+        in flight when the backend stopped queued again. Returns the number of re-queued jobs."""
+        if state:
+            self.coordinator.restore(state.get("coordinator", {}))
+            self.scheduler.restore(state.get("scheduler", {}))
+        self.decisions = [{k: d[k] for k in ("signal_id", "revision", "plan", "reason")} for d in decisions]
+        latest = {d["signal_id"]: d for d in self.decisions}
+        signals = {sig.signal_id: sig for sig in session.engine.signals()}
+        now = session.engine.c.elapsed
+        requeued = 0
+        for sid, d in latest.items():
+            sig, insight = signals.get(sid), session.insights.get(sid)
+            if (d["plan"] in (Plan.FULL.value, Plan.LIGHT.value) and sig is not None and insight is not None
+                    and insight["stage"] == "data" and insight["revision"] == sig.revision == d["revision"]
+                    and now - sig.elapsed <= MAX_LAG_MATCH_S):
+                job = SignalJob(sig, Plan(d["plan"]), signal_pack(session.engine, sig))
+                task = asyncio.create_task(self._run_agents(job, session))
+                self._pending.add(task)
+                task.add_done_callback(self._pending.discard)
+                requeued += 1
+        return requeued
+
     async def handle(self, signal: Signal, session: MatchSession) -> None:
         if signal.type == SignalType.CORRECTION:
             for sid in filter(None, str(signal.facts.get("removed_signals") or "").split(",")):
                 if not sid.startswith("correction:"):
                     self._retract(sid, session)
         decision = self.coordinator.decide(signal)
-        self.decisions.append({"signal_id": signal.signal_id, "revision": signal.revision,
-                               "plan": decision.plan.value, "reason": decision.reason})
+        record = {"signal_id": signal.signal_id, "revision": signal.revision,
+                  "plan": decision.plan.value, "reason": decision.reason}
+        self.decisions.append(record)
+        session.recorder.decision(len(self.decisions), {**record, "signal_type": signal.type.value,
+                                                        "minute_label": signal.minute_label})
         if decision.plan == Plan.SKIP:
+            self._save_state(session)
             return
         pack = signal_pack(session.engine, signal)
         self._publish_data(signal, pack, session)
+        self._save_state(session)
         if decision.plan in (Plan.FULL, Plan.LIGHT):
             await self._run_agents(SignalJob(signal, decision.plan, pack), session)
 
@@ -445,12 +477,27 @@ class InsightPipeline:
         if placed is not None:
             session.publish_overlay(placed.model_dump(mode="json"))
 
+    def _record_run(self, job: SignalJob, session: MatchSession, outcome: str,
+                    insight: Insight | None = None) -> None:
+        sig = job.signal
+        record: dict[str, Any] = {
+            "kind": "insight_workflow", "signal_id": sig.signal_id, "signal_type": sig.type.value,
+            "revision": sig.revision, "minute_label": sig.minute_label, "plan": job.plan.value,
+            "outcome": outcome, "model": self.team.label,
+            "latency_ms": round((time.perf_counter() - job.started) * 1000, 1),
+        }
+        if insight is not None:
+            record |= {"agents": insight.agents, "fact_check": insight.fact_check.status.value,
+                       "errors": [a for a in insight.fact_check.actions if a.startswith("fallback:")]}
+        session.recorder.agent_run(record)
+
     async def _run_agents(self, job: SignalJob, session: MatchSession) -> None:
         queued_at = session.engine.c.elapsed
         async with self._sem:
             lag = session.engine.c.elapsed - queued_at  # match time spent waiting for a free slot
             if lag > MAX_LAG_MATCH_S:
                 log.info("skipping agents for %s: waited %.0fs of match time", job.signal.signal_id, lag)
+                self._record_run(job, session, "skipped_lag")
                 return  # old news by now; the data-only insight stays published
             limit = WORKFLOW_TIMEOUT_S or 3 * AGENT_TIMEOUT_S + 5
             try:
@@ -458,17 +505,23 @@ class InsightPipeline:
                 outputs = result.get_outputs()
             except TimeoutError:
                 log.warning("workflow timed out after %.0fs for %s", limit, job.signal.signal_id)
+                self._record_run(job, session, "timeout")
                 return
             except Exception as exc:  # noqa: BLE001
                 log.warning("workflow failed for %s: %r", job.signal.signal_id, exc)
+                self._record_run(job, session, f"failed: {type(exc).__name__}")
                 return  # the data-only insight stays published
         if not outputs:
+            self._record_run(job, session, "no_output")
             return
         insight, overlay = outputs[-1]
         current = session.engine.signals()
         latest = next((s for s in current if s.signal_id == insight.signal_id), None)
         if insight.signal_id in self.coordinator.retracted or (latest and latest.revision > insight.revision):
+            self._record_run(job, session, "superseded", insight)
             return  # superseded while the agents were working
         session.publish_insight(insight.model_dump(mode="json"))
         if overlay is not None:
             self._publish_overlay(overlay, session)
+        self._save_state(session)
+        self._record_run(job, session, "published", insight)

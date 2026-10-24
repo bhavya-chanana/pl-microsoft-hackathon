@@ -1,6 +1,10 @@
 """Live match session: runs a feed through the stats engine and fans results
 out to subscribers (UI sockets, the agent pipeline). One active match at a
-time (FR-003)."""
+time (FR-003).
+
+Everything the session ingests or publishes is recorded to the store through
+its ``RunRecorder``; ``insights`` and ``overlays`` are the in-process cache of
+the stored collections, so a restarted backend can ``hydrate`` and resume."""
 
 from __future__ import annotations
 
@@ -12,9 +16,10 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from matchlens.domain.models import Event, EventType, TrackingFrame
-from matchlens.ingest.adapters import FeedAdapter
+from matchlens.ingest.adapters import FeedAdapter, FeedItem, feed_order
 from matchlens.interpret.engine import MatchEngine
 from matchlens.interpret.signals import Signal
+from matchlens.store.repository import Repository, RunRecorder
 
 log = logging.getLogger(__name__)
 
@@ -37,10 +42,11 @@ def event_payload(engine: MatchEngine, e: Event) -> dict[str, Any]:
 
 
 class MatchSession:
-    def __init__(self, adapter: FeedAdapter) -> None:
+    def __init__(self, adapter: FeedAdapter, recorder: RunRecorder | None = None) -> None:
         self.adapter = adapter
         self.meta = adapter.meta()
         self.engine = MatchEngine(self.meta)
+        self.recorder = recorder or Repository.detached().recorder(f"local-{self.meta.match_id}")
         self._subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
         self._signal_handlers: list[SignalHandler] = []
         self._task: asyncio.Task[None] | None = None
@@ -50,6 +56,12 @@ class MatchSession:
         self.insights: dict[str, dict[str, Any]] = {}
         self.overlays: dict[str, dict[str, Any]] = {}
         self.latency_ms: list[float] = []
+        # Feed items already ingested (by hydrate) are skipped when the feed delivers them again.
+        self._resume_frame_elapsed: float | None = None
+
+    @property
+    def run_id(self) -> str:
+        return self.recorder.run_id
 
     # ---------------------------------------------------------- lifecycle
 
@@ -65,35 +77,71 @@ class MatchSession:
     def on_signal(self, handler: SignalHandler) -> None:
         self._signal_handlers.append(handler)
 
+    def _already_ingested(self, item: FeedItem) -> bool:
+        if isinstance(item, TrackingFrame):
+            return self._resume_frame_elapsed is not None and item.elapsed <= self._resume_frame_elapsed
+        return self.engine.has_event(item.event_id)
+
     async def _run(self) -> None:
+        rec = self.recorder
         try:
             async for item in self.adapter.stream():
+                if self._already_ingested(item):
+                    continue
                 started = time.perf_counter()
                 if isinstance(item, TrackingFrame):
                     signals = self.engine.ingest_frame(item)
                     self.last_frame = item.model_dump(mode="json")
                     self.publish({"type": "frame", "frame": self.last_frame})
+                    rec.frame(self.last_frame)
                 else:
                     signals = self.engine.ingest_event(item)
+                    q = self.engine.pass_quality(item.event_id)
+                    rec.event(item.model_dump(mode="json"), item.minute_label, q.model_dump() if q else None)
                     if item.type == EventType.CORRECTION:
                         self.publish({"type": "correction", "event": item.model_dump(mode="json")})
                     else:
                         effective = self.engine.event(item.event_id) or item
                         self.publish({"type": "event", "event": event_payload(self.engine, effective)})
-                    self.publish({"type": "state", "state": self.engine.state()})
+                    state = self.engine.state()
+                    self.publish({"type": "state", "state": state})
+                    rec.progress(state)
+                    if item.type in (EventType.HALF_TIME, EventType.FULL_TIME):
+                        self._record_stats(item.type.value)
                 self.latency_ms.append((time.perf_counter() - started) * 1000)
                 for sig in signals:
-                    self.publish({"type": "signal", "signal": sig.model_dump(mode="json")})
+                    payload = sig.model_dump(mode="json")
+                    self.publish({"type": "signal", "signal": payload})
+                    rec.signal(payload)
                     for handler in self._signal_handlers:
                         asyncio.create_task(self._safe(handler, sig))
         except asyncio.CancelledError:
             raise
         except Exception:  # pragma: no cover - logged and surfaced to clients
             log.exception("feed failed")
+            rec.update(status="error")
             self.publish({"type": "feed_status", "status": "error"})
         else:
             self.finished = True
+            rec.update(status="finished", finished_at=rec.run.get("updated_at"))
             self.publish({"type": "feed_status", "status": "finished"})
+
+    def _record_stats(self, phase: str) -> None:
+        teams = {t.team_id: self.engine.team_stats(t.team_id) for t in (self.meta.home, self.meta.away)}
+        players = {pid: self.engine.player_stats(pid) for pid in self.meta.players}
+        self.recorder.stats(phase, teams, players)
+
+    def hydrate(self, events: list[Event], frames: list[TrackingFrame]) -> None:
+        """Rebuild the engine from a stored run (events and frames in feed order), without
+        publishing or re-recording anything. The feed then skips what is already here."""
+        for item in feed_order(events, frames):
+            if isinstance(item, TrackingFrame):
+                self.engine.ingest_frame(item)
+            else:
+                self.engine.ingest_event(item)
+        if frames:
+            self.last_frame = frames[-1].model_dump(mode="json")
+            self._resume_frame_elapsed = frames[-1].elapsed
 
     async def _safe(self, handler: SignalHandler, sig: Signal) -> None:
         try:
@@ -124,10 +172,12 @@ class MatchSession:
 
     def publish_insight(self, insight: dict[str, Any]) -> None:
         self.insights[insight["insight_id"]] = insight
+        self.recorder.insight(insight)
         self.publish({"type": "insight", "insight": insight})
 
     def publish_overlay(self, overlay: dict[str, Any]) -> None:
         self.overlays[overlay["overlay_id"]] = overlay
+        self.recorder.overlay(overlay)
         self.publish({"type": "overlay", "overlay": overlay})
 
     # ---------------------------------------------------------- snapshots
@@ -139,6 +189,7 @@ class MatchSession:
         """Everything a client joining mid-match needs (FR-007)."""
         return {
             "type": "hello",
+            "run_id": self.run_id,
             "meta": self.meta.model_dump(mode="json"),
             "state": self.engine.state(),
             "timeline": self.timeline(),

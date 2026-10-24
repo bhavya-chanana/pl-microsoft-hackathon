@@ -50,6 +50,17 @@ resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
+// The store: every run, insight, overlay and agent decision (Cosmos DB serverless).
+module cosmos 'cosmos.bicep' = {
+  name: 'matchlens-cosmos'
+  params: {
+    location: location
+    tags: tags
+    token: token
+    principalId: identity.properties.principalId
+  }
+}
+
 resource env 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: 'cae-${token}'
   location: location
@@ -101,6 +112,8 @@ resource backend 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'MATCHLENS_REASONING_FAST', value: reasoningFast }
             { name: 'MATCHLENS_REASONING_STRONG', value: reasoningStrong }
             { name: 'MATCHLENS_SPEED', value: matchSpeed }
+            { name: 'MATCHLENS_COSMOS_ENDPOINT', value: cosmos.outputs.endpoint }
+            { name: 'MATCHLENS_COSMOS_DATABASE', value: cosmos.outputs.databaseName }
           ]
           probes: [
             {
@@ -112,7 +125,7 @@ resource backend 'Microsoft.App/containerApps@2024-03-01' = {
           ]
         }
       ]
-      // One match lives in memory, so never more than one replica.
+      // One live match per process (its state is stored in Cosmos DB), so never more than one replica.
       scale: {
         minReplicas: backendMinReplicas
         maxReplicas: 1
@@ -167,3 +180,4 @@ output registryLoginServer string = registry.properties.loginServer
 output registryName string = registry.name
 output frontendUrl string = 'https://${frontend.properties.configuration.ingress.fqdn}'
 output backendUrl string = backendUrl
+output cosmosEndpoint string = cosmos.outputs.endpoint
