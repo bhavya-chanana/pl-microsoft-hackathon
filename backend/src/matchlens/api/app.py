@@ -190,6 +190,16 @@ async def recap(
     return result.model_dump(mode="json")
 
 
+@app.get("/api/coach")
+async def coach_brief(team_id: str, language: Language = Language.EN) -> dict[str, Any]:
+    """Coach persona: ranked tactical brief for one side, with evidence, trade-off and confidence."""
+    s = _session()
+    if team_id not in (s.meta.home.team_id, s.meta.away.team_id):
+        raise HTTPException(404, "unknown team")
+    result = await _runtime().fans.coach_brief(s, team_id, language.value)
+    return result.model_dump(mode="json")
+
+
 @app.get("/api/agents/decisions")
 async def decisions(limit: int = Query(default=100, le=1000)) -> list[dict[str, Any]]:
     """Coordinator routing decisions, for transparency in the demo."""

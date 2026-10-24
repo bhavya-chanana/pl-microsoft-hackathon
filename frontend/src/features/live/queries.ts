@@ -7,6 +7,7 @@ import { getJson } from "@/lib/api";
 import {
   Catchup,
   type CatchupWindow,
+  CoachBrief,
   Decision,
   type FanProfile,
   FeedItem,
@@ -23,6 +24,7 @@ export const queryKeys = {
   feed: (p: FanProfile) => ["feed", p.mode, p.language, p.clubId, p.playerId] as const,
   catchup: (m: CatchupWindow, p: FanProfile) => ["catchup", m, p.mode, p.language, p.clubId, p.playerId] as const,
   recap: (p: FanProfile) => ["recap", p.mode, p.language, p.clubId, p.playerId] as const,
+  coach: (teamId: string, language: string) => ["coach", teamId, language] as const,
   player: (id: string) => ["player", id] as const,
   team: (id: string) => ["team", id] as const,
   decisions: ["decisions"] as const,
@@ -69,6 +71,17 @@ export function useRecap(profile: FanProfile, enabled: boolean) {
     queryFn: ({ signal }) => getJson("recap", Recap, profileQuery(profile), signal),
     enabled,
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Coach brief for one side; refreshed as new moments land (the backend answers once per match minute). */
+export function useCoachBrief(teamId: string | null, language: string) {
+  useInsightRefresh("coach");
+  return useQuery({
+    queryKey: queryKeys.coach(teamId ?? "", language),
+    queryFn: ({ signal }) => getJson("coach", CoachBrief, { team_id: teamId, language }, signal),
+    enabled: Boolean(teamId),
     placeholderData: keepPreviousData,
   });
 }

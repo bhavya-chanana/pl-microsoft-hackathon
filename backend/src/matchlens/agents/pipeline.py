@@ -74,6 +74,7 @@ class AgentTeam:
     personaliser: Agent
     catchup: Agent
     recap: Agent
+    coach: Agent
     label: str
 
     @classmethod
@@ -93,6 +94,7 @@ class AgentTeam:
                                "Adapts insights to fan modes, clubs and languages", fo),
             catchup=agent(fast, prompts.CATCHUP, "catchup", "What did I miss?", fo),
             recap=agent(strong, prompts.RECAP, "recap", "Half-time and full-time recaps", so),
+            coach=agent(fast, prompts.COACH, "coach", "Ranked tactical briefs for the bench", fo),
             label=clients.label,
         )
 

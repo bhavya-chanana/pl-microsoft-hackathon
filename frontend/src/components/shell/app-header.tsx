@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, MonitorPlay, Radio } from "lucide-react";
+import { Bot, ClipboardList, MonitorPlay, Radio } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -14,6 +14,7 @@ import { ThemeToggle } from "./theme-toggle";
 const NAV = [
   { href: routes.matchCentre, label: copy.nav.matchCentre, short: "Match", icon: Radio },
   { href: routes.broadcast, label: copy.nav.broadcast, short: "Broadcast", icon: MonitorPlay },
+  { href: routes.coach, label: copy.nav.coach, short: "Coach", icon: ClipboardList },
   { href: routes.agents, label: copy.nav.agents, short: "Agents", icon: Bot },
 ] as const;
 

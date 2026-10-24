@@ -255,6 +255,34 @@ export const Recap = z.object({
 });
 export type Recap = z.infer<typeof Recap>;
 
+export const Confidence = z.enum(["high", "medium", "low"]);
+export type Confidence = z.infer<typeof Confidence>;
+
+export const CoachItem = z.object({
+  rank: z.number(),
+  issue_id: z.string(),
+  title: z.string(),
+  evidence: z.string(),
+  recommendation: z.string(),
+  trade_off: z.string(),
+  confidence: Confidence,
+  key_numbers: z.array(KeyNumber),
+  evidence_event_ids: z.array(z.string()),
+  player_ids: z.array(z.string()),
+});
+export type CoachItem = z.infer<typeof CoachItem>;
+
+export const CoachBrief = z.object({
+  team_id: z.string(),
+  minute: z.string(),
+  language: z.string(),
+  items: z.array(CoachItem),
+  fact_check: FactCheck,
+  source: z.string(),
+  agents: z.array(z.string()),
+});
+export type CoachBrief = z.infer<typeof CoachBrief>;
+
 export const PlayerStats = z.object({
   player_id: z.string(),
   team_id: z.string(),

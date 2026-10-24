@@ -3,6 +3,7 @@ export const routes = {
   matchCentre: "/",
   broadcast: "/broadcast",
   agents: "/agents",
+  coach: "/coach",
 } as const;
 
 export const serverRoutes = {

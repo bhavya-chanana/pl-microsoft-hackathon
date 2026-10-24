@@ -3,6 +3,7 @@
 * catch-up ("What did I miss?") for the last 5, 15 or 30 minutes
 * recap at half-time, full-time or on demand
 * personalised insight feed for a fan profile
+* coach briefs: ranked tactical recommendations for one side (coach persona)
 
 Results are stored per run and keyed by (window, profile, match position), so
 many fans asking the same question cost one model call, also after a restart. Every result is fact-checked, and the
@@ -16,7 +17,7 @@ import json
 import time
 from typing import Any
 
-from matchlens.agents import templates
+from matchlens.agents import coach, templates
 from matchlens.agents.context import window_pack
 from matchlens.agents.contracts import (
     Catchup,
@@ -60,13 +61,46 @@ class FanServices:
         raw = [int(session.engine.c.elapsed // 60), len(session.engine.signals()), *parts]
         return hashlib.sha256(json.dumps(raw).encode()).hexdigest()[:32]
 
-    def _store(self, session: MatchSession, key: str, kind: str, result: Catchup | Recap, started: float) -> None:
+    def _store(self, session: MatchSession, key: str, kind: str, result: Catchup | Recap | coach.CoachBrief,
+               started: float) -> None:
         session.recorder.fan_output(key, kind, result.model_dump(mode="json"))
+        profile = result.profile.model_dump(mode="json") if hasattr(result, "profile") else None
         session.recorder.agent_run({
             "kind": kind, "outcome": result.source, "model": self.team.label,
-            "fact_check": result.fact_check.status.value, "profile": result.profile.model_dump(mode="json"),
+            "fact_check": result.fact_check.status.value, "profile": profile,
             "latency_ms": round((time.perf_counter() - started) * 1000, 1),
         })
+
+    async def coach_brief(self, session: MatchSession, team_id: str, language: str) -> coach.CoachBrief:
+        """Top three ranked recommendations for one side, with evidence, trade-off and confidence."""
+        engine = session.engine
+        if team_id not in (session.meta.home.team_id, session.meta.away.team_id):
+            raise ValueError("unknown team")
+        key = self._key(session, "coach", team_id, language)
+        if (cached := await session.recorder.fan_cached(key)) is not None:
+            return coach.CoachBrief.model_validate(cached)
+        started = time.perf_counter()
+        issues = coach.find_issues(engine, team_id)
+        pack = coach.coach_pack(engine, team_id, issues, language)
+        payload = {"task": "coach", "context": pack, "language": language}
+        draft, err = await call_agent(self.team.coach, payload, coach.CoachDraft)
+        source = self.generated_by
+        if draft is not None:
+            texts = [t for d in draft.items for t in (d.title, d.evidence, d.recommendation, d.trade_off)]
+            outcome = check_text(engine, pack, texts, draft.claims)
+            report = outcome.report
+            if outcome.problems:
+                report.actions += ["; ".join(outcome.problems), "agent text blocked; data-only brief published"]
+                draft = None
+        else:
+            report = FactCheckReport(status=FactCheckStatus.DATA_ONLY, actions=[f"fallback: {err}"])
+        agents = ["coach_coordinator", *(["coach", "fact_checker"] if draft is not None else [])]
+        if draft is None:
+            draft, source = coach.template_draft(pack), "data"
+        result = coach.assemble(issues, draft, team_id, str(engine.state()["minute_label"]), language, report,
+                                source, agents)
+        self._store(session, key, "coach", result, started)
+        return result
 
     async def catchup(self, session: MatchSession, minutes: int, profile: FanProfile) -> Catchup:
         if minutes not in CATCHUP_WINDOWS:
