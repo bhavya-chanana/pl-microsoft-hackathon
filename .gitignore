@@ -27,3 +27,6 @@ backend/data/generated/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Partial writes of the recorded demo
+backend/demo/*.tmp

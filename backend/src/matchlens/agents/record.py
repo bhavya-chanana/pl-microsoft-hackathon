@@ -182,7 +182,7 @@ def main() -> None:
                         choices=[lang.value for lang in Language])
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    for noisy in ("azure", "httpx", "agent_framework"):
+    for noisy in ("azure", "httpx", "httpx2", "agent_framework"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
     asyncio.run(record(args.out, args.seed, args.concurrency,
                        [Mode(m) for m in args.modes], [Language(lang) for lang in args.languages]))
