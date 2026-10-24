@@ -24,6 +24,8 @@ type LiveStore = {
   meta: MatchMeta | null;
   state: MatchState | null;
   timeline: MatchEvent[];
+  /** The last few hundred passes, so on-air pass graphics can draw their lane. */
+  recentPasses: MatchEvent[];
   insights: Record<string, Insight>;
   overlays: Record<string, Overlay>;
   signals: Signal[];
@@ -42,12 +44,14 @@ type LiveStore = {
 };
 
 const MOMENTUM_KEEP = 400;
+const PASSES_KEEP = 300;
 
 export const useLive = create<LiveStore>()((set) => ({
   status: "connecting",
   meta: null,
   state: null,
   timeline: [],
+  recentPasses: [],
   insights: {},
   overlays: {},
   signals: [],
@@ -68,6 +72,7 @@ export const useLive = create<LiveStore>()((set) => ({
             meta: message.meta,
             state: message.state,
             timeline: message.timeline.filter((e) => KEY_EVENTS.has(e.type)),
+            recentPasses: [],
             insights: Object.fromEntries(message.insights.map((i) => [i.insight_id, i])),
             overlays: Object.fromEntries(message.overlays.map((o) => [o.overlay_id, o])),
             signals: message.signals,
@@ -92,6 +97,7 @@ export const useLive = create<LiveStore>()((set) => ({
           return { state: message.state, momentum, status: s.status === "finished" ? "finished" : "live" };
         }
         case "event":
+          if (message.event.type === "pass") return { recentPasses: [...s.recentPasses, message.event].slice(-PASSES_KEEP) };
           return KEY_EVENTS.has(message.event.type) ? { timeline: [...s.timeline, message.event] } : {};
         case "correction":
           return { correctionsVersion: s.correctionsVersion + 1 };

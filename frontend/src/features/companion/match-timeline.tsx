@@ -8,7 +8,7 @@ import { copy, eventLabels } from "@/lib/copy";
 import { playerName, sideOf, sideTone } from "@/lib/match";
 import { cn } from "@/lib/utils";
 
-const ICON: Record<string, typeof Circle> = {
+export const EVENT_ICON: Record<string, typeof Circle> = {
   goal: CircleDot,
   shot: Target,
   save: Hand,
@@ -19,7 +19,8 @@ const ICON: Record<string, typeof Circle> = {
   full_time: Flag,
 };
 
-function describe(e: MatchEvent, meta: MatchMeta | null): string {
+/** One line about an event, in plain words. */
+export function describeEvent(e: MatchEvent, meta: MatchMeta | null): string {
   const who = playerName(meta, e.player_id);
   const other = playerName(meta, e.related_player_id);
   const xg = typeof e.attrs.xg === "number" ? ` (xG ${e.attrs.xg.toFixed(2)})` : "";
@@ -49,7 +50,7 @@ export function MatchTimeline() {
   return (
     <ol aria-label={copy.timeline.heading} className="flex flex-col">
       {events.map((e) => {
-        const Icon = ICON[e.type] ?? Circle;
+        const Icon = EVENT_ICON[e.type] ?? Circle;
         const side = sideOf(meta, e.team_id);
         const isGoal = e.type === "goal";
         return (
@@ -66,7 +67,7 @@ export function MatchTimeline() {
             />
             <p className={cn("text-sm leading-6", isGoal && "font-semibold")}>
               <span className={cn(!isGoal && "text-muted-foreground")}>{eventLabels[e.type] ?? e.type}</span>
-              {!["kickoff", "half_time", "full_time"].includes(e.type) && <> {describe(e, meta)}</>}
+              {!["kickoff", "half_time", "full_time"].includes(e.type) && <> {describeEvent(e, meta)}</>}
               {isGoal && typeof e.attrs.home_score === "number" && meta && (
                 <span className="ml-2 font-display text-base tabular-nums">
                   {String(e.attrs.home_score)}-{String(e.attrs.away_score)}

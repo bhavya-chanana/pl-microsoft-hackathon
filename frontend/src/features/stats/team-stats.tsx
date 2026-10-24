@@ -74,7 +74,7 @@ export function TeamComparison() {
         </h3>
         <span className={cn("font-display text-lg font-semibold", sideTone.away.text)}>{meta.away.short_name}</span>
       </div>
-      <StatRow label={L.possession} home={h.possession_pct} away={a.possession_pct} unit="%" />
+      <StatRow label={L.possession} home={h.possession_pct ?? 50} away={a.possession_pct ?? 50} unit="%" />
       <StatRow label={L.shots} home={h.shots} away={a.shots} />
       <StatRow label={L.onTarget} home={h.shots_on_target} away={a.shots_on_target} />
       <StatRow label={L.xg} home={h.xg} away={a.xg} digits={2} />
@@ -160,7 +160,7 @@ export function PlayerCard() {
     [L.passAccuracy, p.pass_accuracy === null ? "–" : `${formatNumber(p.pass_accuracy)}%`],
     [L.keyPasses, String(p.key_passes)],
     [L.distance, `${p.distance_km.toFixed(1)} km`],
-    [L.topSpeed, `${formatNumber(p.top_speed_kmh, 1)} km/h`],
+    [L.topSpeed, p.top_speed_kmh === null ? "–" : `${formatNumber(p.top_speed_kmh, 1)} km/h`],
     [L.sprints, String(p.sprints)],
   ];
   if (info?.career_goals !== undefined) rows.push([L.careerGoals, String(info.career_goals + p.goals)]);

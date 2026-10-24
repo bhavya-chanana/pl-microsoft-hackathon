@@ -1,5 +1,5 @@
 /** Interface copy, in one place. Match content itself comes localised from the agents. */
-import type { CatchupWindow, FactCheckStatus, Language, Mode } from "@/lib/contract";
+import type { CatchupWindow, FactCheckStatus, Language, Metric, Mode } from "@/lib/contract";
 
 export const copy = {
   product: "Matchlens",
@@ -34,6 +34,62 @@ export const copy = {
     player: "Favourite player",
     noClub: "Neutral",
     noPlayer: "None",
+    metric: "Headline metric",
+    noMetric: "None",
+  },
+  metrics: {
+    pass_accuracy: "Pass accuracy",
+    distance_km: "Distance covered",
+    momentum: "Momentum",
+    shots: "Shots",
+    top_speed_kmh: "Top speed",
+  } satisfies Record<Metric, string>,
+  metricTile: {
+    heading: "Your headline metric",
+    pickPlayer: (metric: string) => `${metric} is tracked per player. Follow a player to see it here.`,
+    player: "Your player",
+    level: "Even",
+    onTop: (team: string) => `${team} on top`,
+  },
+  positions: {
+    GK: "Goalkeeper",
+    DEF: "Defender",
+    MID: "Midfielder",
+    FWD: "Forward",
+  } as Record<string, string>,
+  playerCard: {
+    hint: "Select a player on the pitch to see their card",
+    open: "Show player card",
+    onPitch: "On the pitch",
+    offPitch: "Off the pitch",
+    passes: "Passes",
+    accurate: (pct: string) => `${pct} accurate`,
+    distance: "Distance",
+    topSpeed: "Top speed",
+    shots: "Shots",
+    onTarget: (n: number) => `${n} on target`,
+    recent: "Recent moments",
+    noRecent: "No key moments yet. Shots, goals and cards show up here.",
+    recentError: "Recent moments could not be loaded.",
+    follow: "Follow this player",
+    following: "Following",
+    followed: (name: string) => `Following ${name}. Your feed now centres on them.`,
+    close: "Close player card",
+    error: "This player's stats could not be loaded.",
+  },
+  shotMap: {
+    heading: "Shot map",
+    help: "Every shot so far, both teams attacking the same goal. Bigger marks are better chances (xG).",
+    empty: "No shots yet. They appear here as they happen.",
+    outcomes: {
+      goal: "Goal",
+      saved: "Saved",
+      off_target: "Off target",
+      blocked: "Blocked",
+    } as Record<string, string>,
+    latest: "Latest shots",
+    key: "Shot outcomes",
+    xg: (v: number) => `xG ${v.toFixed(2)}`,
   },
   modes: {
     casual: "Casual",

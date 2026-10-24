@@ -6,7 +6,7 @@ import { AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFeed } from "@/features/live/queries";
-import { useProfile } from "@/features/profile/profile-store";
+import { useFanProfile } from "@/features/profile/profile-store";
 import { copy } from "@/lib/copy";
 
 import { InsightCard } from "./insight-card";
@@ -27,11 +27,9 @@ export function FeedSkeleton() {
 
 /** Personalised, fact-checked insight feed. Newest first. */
 export function InsightFeed() {
-  const mode = useProfile((s) => s.mode);
-  const language = useProfile((s) => s.language);
-  const clubId = useProfile((s) => s.clubId);
-  const playerId = useProfile((s) => s.playerId);
-  const feed = useFeed({ mode, language, clubId, playerId });
+  const profile = useFanProfile();
+  const { language } = profile;
+  const feed = useFeed(profile);
 
   if (feed.isPending) return <FeedSkeleton />;
   if (feed.isError && !feed.data) {
