@@ -212,8 +212,8 @@ The fact-checked explanation behind every overlay and feed card, with full prove
 
 ## Live API
 
-The backend runs on port 8765. The frontend proxies a read-only allow-list of these under `/api/backend/*` and the
-WebSocket as Server-Sent Events under `/api/stream`.
+The backend runs on port 8765. The frontend proxies an allow-list of these under `/api/backend/*` (every `GET` it
+uses, plus the replay, archive, vote and rating `POST`s) and the WebSocket as Server-Sent Events under `/api/stream`.
 
 | Method and path | Returns |
 |---|---|
@@ -227,10 +227,20 @@ WebSocket as Server-Sent Events under `/api/stream`.
 | `GET /api/overlays?active_at=` | Overlay JSON, optionally only those on screen at an `elapsed` time |
 | `GET /api/catchup?minutes=5\|15\|30&mode=&language=&club_id=&player_id=` | "What did I miss?" |
 | `GET /api/recap?mode=&language=&club_id=&player_id=` | Half-time, full-time or live recap |
-| `GET /api/players/{player_id}`, `GET /api/teams/{team_id}` | Live statistics |
+| `GET /api/players/{player_id}` | Live statistics plus the player's match `card` (see below) |
+| `GET /api/teams/{team_id}` | Live statistics |
+| `GET /api/coach?team_id=&language=` | Coach brief for one side: ranked points, each with evidence, trade-off and confidence |
+| `GET /api/speech?insight_id=&mode=&language=&club_id=&player_id=` | The insight read aloud (MP3). `503` when Azure AI Speech is not configured: the browser then uses its own voices |
+| `GET /api/polls` | Fan polls opened so far, with tallies (see below) |
+| `POST /api/polls/{poll_id}/vote` `{voter_id, option_id}` | Vote, or change a vote, while the poll is open. `409` once closed |
+| `GET /api/ratings` | Data rating, fan rating and card overall for every player who has played |
+| `POST /api/ratings` `{voter_id, player_id, score}` | Rate a player 1 to 10; a fan's later rating replaces their earlier one |
 | `GET /api/agents/decisions` | Coordinator routing decisions |
 | `POST /api/replay` `{seed, speed, start_minute}` | Start a new replay (a new run in the database) |
-| `GET /api/runs?limit=` | Stored runs, newest first: status, position, score, resumes |
+| `GET /api/feeds` | Recorded matches on this machine (names), e.g. from video auto-eventing; usually empty |
+| `POST /api/replay/feed` `{name, speed, start_minute}` | Play a recorded match as a new run |
+| `GET /api/runs?limit=` | Stored runs, newest first: status, position, score, team names, resumes |
+| `POST /api/runs/{run_id}/open` | Reopen a stored run: a live one resumes, a finished one opens read-only. Returns `{match_id, run_id, archived}`; `404` if unknown |
 | `POST /api/replay/control` `{speed?, paused?}` | Change speed or pause |
 | `/mcp` | MCP server (streamable HTTP) with the match-state tools, internal only |
 
@@ -240,7 +250,7 @@ Every message is a JSON object with a `type`:
 
 | `type` | Payload |
 |---|---|
-| `hello` | Sent on connect and when a new replay starts: `run_id`, `meta`, `state`, `timeline`, `signals`, `insights`, `overlays`, `momentum`, `frame`, `finished` |
+| `hello` | Sent on connect and when a new replay starts or a run is opened: `run_id`, `meta`, `state`, `timeline`, `signals`, `insights`, `overlays`, `momentum`, `frame`, `finished`, `archived` (a stored, finished run opened from the archive: nothing more will arrive), `polls` |
 | `event` | `event`: an `Event` (with corrections applied) plus `minute_label` and, for passes, `pass_quality` |
 | `correction` | `event`: the `correction` event |
 | `state` | `state`: match state after each event |
@@ -248,8 +258,46 @@ Every message is a JSON object with a `type`:
 | `signal` | `signal`: a detected key moment |
 | `insight` | `insight`: an `Insight` (new, upgraded or retracted) |
 | `overlay` | `overlay`: an `Overlay` (new, upgraded, trimmed or retracted) |
+| `poll` | `poll`: a poll opened, closed or resolved by the match |
+| `fan_tally` | `polls` and `ratings`: vote counts and fan rating averages, at most once a second |
 | `feed_status` | `status`: `finished`, `error` or `no_match` |
 | `ping` | Keep-alive, every second without other traffic |
+
+### Fan polls and ratings
+
+A poll is opened by the match itself (for example "Who wins from here?" after a goal, player of the match at full
+time) and closed and resolved by later events:
+
+```json
+{"poll_id": "result-1", "kind": "result", "minute_label": "23'", "closed": true, "answer": "NBR", "total_votes": 41,
+ "question": {"en": "Who wins from here?", "hi": "...", "es": "¿Quién gana desde aquí?"},
+ "context": {"en": "After the goal", "hi": "...", "es": "..."},
+ "options": [{"option_id": "NBR", "label": {"en": "Northbridge FC", "hi": "...", "es": "..."}, "votes": 18},
+             {"option_id": "draw", "label": {"en": "Draw", "hi": "...", "es": "Empate"}, "votes": 9},
+             {"option_id": "HBC", "label": {"en": "Harbour City", "hi": "...", "es": "..."}, "votes": 14}]}
+```
+
+`kind` is `result` (who wins from here) or `motm` (best player of a half or the match, options are players). Text
+comes in every language. `answer` is the option that turned out right, once the match has decided it.
+
+`voter_id` is a random id the browser keeps; the backend stores only a salted hash of it, never anything that
+identifies a person. A rating row is `player_id`, `team_id`, `name`, `short_name`, `position`, `on_pitch`,
+`data_rating` (out of 10) with the `parts` that make it up, `overall` (the card's), `fan_rating`, `fan_votes` and
+`gap` (fans minus data).
+
+### Match card
+
+Computed from this match's events and tracking only, on a 1 to 99 scale:
+
+```json
+{"kind": "outfield", "overall": 89,
+ "attributes": [{"key": "PAC", "value": 80}, {"key": "SHO", "value": 99}, {"key": "PAS", "value": 66},
+                {"key": "DRI", "value": 68}, {"key": "DEF", "value": 69}, {"key": "PHY", "value": 76}]}
+```
+
+Goalkeepers get `DIV`, `HAN`, `KIC`, `REF`, `SPD`, `POS`. An attribute without data (for example `PHY` with no
+tracking) is `null`, never zero. The overall is half the weighted attributes for the player's position and half the
+data rating, so the two never disagree badly.
 
 ### Pass quality
 
