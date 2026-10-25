@@ -1,7 +1,7 @@
 # Matchlens — Business Requirements Document
 
 **Document status:** Draft for review
-**Version:** 1.0
+**Version:** 1.1 (scope update, 25 October 2026)
 **Date:** 18 October 2026
 **Delivery type:** Hackathon prototype (Microsoft Premier League Hackathon, submission 27 October 2026)
 
@@ -63,18 +63,23 @@ A viewer using Matchlens should be able to answer:
 - Filterable match timeline, "What did I miss?" catch-ups, and automatic full-time recaps.
 - Deployment on Azure with a public demo link available to judges until 10 November 2026.
 
-### 6.2 Future scope
+Added in version 1.1, after the first build was complete:
 
 - **Coach persona:** short ranked tactical briefs with evidence, trade-off and confidence, following the coordinator-and-specialist pattern already used in Matchlens.
-- Fan polls and player ratings.
-- Voice narration through Azure AI Speech.
-- Video auto-eventing: a vision model over a video feed generating pass and speed metrics.
+- Fan polls and player ratings, with match cards rated from the match's own data.
+- Voice narration through Azure AI Speech, with the browser's own voices as a fallback.
+- Video auto-eventing: player and ball tracking from match footage turned into events, positions and speeds, scored against hand labels (see 6.3 for the footage used).
+- A match archive: every stored match can be reopened afterwards.
+
+### 6.2 Future scope
+
+- Video auto-eventing end to end from the detector: joining broken player tracks into whole players and finding the ball without labels.
 - Licensed live data provider plugged into the feed adapter.
 - Multiple simultaneous matches.
 
 ### 6.3 Out of scope
 
-- Real Premier League or other real match data, footage, club names, crests or player names.
+- Real Premier League or other real match data, footage, club names, crests or player names. One exception, for development only: video auto-eventing is built and measured on SoccerTrack v2 research footage and labels (CC BY 4.0, university matches). That footage, its labels and anything derived from it stay on the developer's machine; none of it enters the repository, the deployed demo or the demo video, and a match built from it is shown under fictional club names.
 - Real video clipping and video-rights management.
 - User accounts, sign-in and identity merging.
 - Predictive tracking simulation (5–10-second futures).
@@ -198,6 +203,20 @@ A viewer using Matchlens should be able to answer:
 
 **FR-045:** An unavailable statistic must be shown as unavailable, never as zero.
 
+### 7.10 Added in version 1.1
+
+**FR-046:** A coach view must give short ranked tactical briefs, each with its evidence, trade-off and confidence, checked by the fact-checking agent like every other insight.
+
+**FR-047:** The match must open fan polls at key moments (for example "Who wins from here?" after a goal and player of the match at full time). Votes are anonymous, can be changed until the poll closes, and each poll resolves against what happened.
+
+**FR-048:** Each player must have a rating from the match data, shown next to the fans' rating, and a match card with an overall score and six attributes computed from this match's events and tracking only.
+
+**FR-049:** Insights must be available read aloud in the viewer's language through Azure AI Speech, falling back to the browser's voices when the service is not configured.
+
+**FR-050:** A vision pipeline must turn match footage into the common event schema and tracking samples: pitch calibration, player tracking, team assignment by kit colour, and events from ball possession. Its accuracy must be measured against hand-labelled events and boxes and reported as measured.
+
+**FR-051:** Any stored match must be reopenable. A match stopped part-way resumes where it stopped; a finished match opens read-only with its score, timeline, insights and polls as they were.
+
 ## 8. Agent design
 
 Matchlens uses Microsoft Agent Framework for orchestration, with agents hosted on Microsoft Foundry. Match state is exposed to all agents through an MCP server.
@@ -302,7 +321,8 @@ All clubs, players, venues and competition names must be fictional. No real trad
 | Layer | Technology |
 |---|---|
 | Backend | Python, FastAPI, WebSockets |
-| Frontend | React (Vite) |
+| Frontend | React (Next.js) |
+| Vision | PyTorch, RT-DETR, OpenCV (local development only) |
 | Agents | Microsoft Agent Framework, Microsoft Foundry Agent Service |
 | Models | Azure OpenAI via Foundry |
 | Tools | MCP server for match state |
@@ -358,4 +378,4 @@ The prototype is ready for submission when:
 2. Storyline for the hero demo match.
 3. Visual identity and branding.
 4. Exact Azure OpenAI models per agent, within budget.
-5. Whether fan polls return from future scope if time allows.
+5. ~~Whether fan polls return from future scope if time allows.~~ Resolved in version 1.1: they did.
