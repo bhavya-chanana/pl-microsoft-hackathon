@@ -30,3 +30,9 @@ backend/data/generated/
 
 # Partial writes of the recorded demo
 backend/demo/*.tmp
+
+# Local-only test data: real footage (SoccerTrack v2) and provider caches. Never commit.
+backend/data/local/
+
+# Working notes, local only.
+HANDOFF.md
