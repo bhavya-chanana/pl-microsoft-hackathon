@@ -40,9 +40,10 @@ A miss (an on-demand recap mid-match, a favourite-club catch-up that was not rec
 an endpoint is configured. Offline, a catch-up falls back to an unfocused recording if there is one, otherwise the
 data-only output, labelled as data. A different seed or storyline turns the recording off.
 
-The committed recording holds 1,516 answers: 149 for the 38 agent-explained signals, 1,349 catch-ups and all 18
+The committed recording holds 1,744 answers: 175 for the 43 agent-explained signals, 1,551 catch-ups and all 18
 recaps, each in casual, analyst and player-focus modes and English, Hindi and Spanish. Recording it took about
-25 minutes and 1,225 `gpt-5-mini` calls.
+31 minutes and 1,857 `gpt-5-mini` calls, in two passes: the second, at `--concurrency 2`, filled the answers the
+first lost to rate limits. Re-record whenever the simulator changes, since answers are keyed by event id.
 
 Record or refresh it (needs `az login` and `backend/.env`):
 
