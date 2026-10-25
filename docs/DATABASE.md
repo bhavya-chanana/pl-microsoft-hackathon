@@ -17,7 +17,7 @@ plus `id` and `run_id`.
 
 | Container | `id` | One item per | Contents |
 |---|---|---|---|
-| `runs` | run id, `meta`, `pipeline`, `stats:half_time`, `stats:full_time` | run and its companions (`doc_type`) | Run status, speed, position, score and latest state; match metadata; coordinator and overlay-scheduler state; team and player statistics at half-time and full-time. Partition `_active` holds the pointer to the run the backend is playing. |
+| `runs` | run id, `meta`, `pipeline`, `stats:half_time`, `stats:full_time` | run and its companions (`doc_type`) | Run status, speed, position, score, team names and latest state; match metadata; coordinator and overlay-scheduler state; team and player statistics at half-time and full-time. Partition `_active` holds the pointer to the run the backend is playing. |
 | `events` | `event_id` | feed event | Every event as received, corrections included, plus `minute_label` and `pass_quality` |
 | `frames` | `elapsed` | tracking frame | Positions and speeds of every player and the ball, 1 Hz |
 | `signals` | `signal_id@r<revision>` | key-moment revision | What the stats engine detected, with evidence events and facts; corrections add revisions |
@@ -26,6 +26,7 @@ plus `id` and `run_id`.
 | `decisions` | sequence number | coordinator decision | Signal, revision, plan (`full`, `light`, `data_only`, `retract`, `skip`) and reason |
 | `agent_runs` | random | agent workflow or fan request | Plan, outcome (`published`, `superseded`, `timeout`, ...), agents used, fact-check status, fallbacks, **model**, latency |
 | `fan_outputs` | hash of window, profile and match position | catch-up or recap | The full result, so the same question is answered once per run |
+| `fan_votes` | `poll:<poll_id>:<voter>` or `rating:<player_id>:<voter>` | fan's vote or player rating | The choice or score. `<voter>` is a salted hash of the browser's random id, so a changed vote overwrites the old one and nothing identifies the fan |
 
 Fields that are never filtered on (large text maps, coordinates, entity arrays) are excluded from the index, which
 lowers the write cost; everything else is indexed for ad hoc queries in Data Explorer, for example:
@@ -71,6 +72,17 @@ storyline), it:
 
 A finished run, or none, starts a new run from kick-off. `POST /api/replay` always starts a new run;
 `GET /api/runs` lists stored runs.
+
+## Reopening a past run
+
+`POST /api/runs/{run_id}/open` (the Match Centre's Past matches card) brings back any stored run:
+
+- **A run that was still live** (stopped by a restart, or by starting another replay) resumes exactly as above.
+- **A finished run** opens read-only: the engine is rebuilt from its events and frames, and its insights, overlays,
+  polls and fan votes are reloaded, but no feed runs and nothing new is written. The snapshot carries
+  `"archived": true` so clients show it as a past match rather than waiting for more.
+
+Runs stored before team names were kept on the run document still open; the list shows their team ids instead.
 
 ## Running it
 
