@@ -57,12 +57,28 @@ class ReplayControl:
         await self._resume.wait()
 
 
-class SyntheticReplayAdapter:
-    """Replays a generated match in (scaled) real time.
+async def paced(items: Iterable[FeedItem], control: ReplayControl) -> AsyncIterator[FeedItem]:
+    """Deliver feed items in (scaled) match time. Items before ``control.start_elapsed``
+    are delivered immediately, which lets a viewer join a match already in progress."""
+    loop = asyncio.get_running_loop()
+    anchor_wall = loop.time()
+    anchor_elapsed = control.start_elapsed
+    speed = control.speed
+    for item in items:
+        if item.elapsed > control.start_elapsed:
+            await control.wait_if_paused()
+            if control.speed != speed or control.paused:
+                # Re-anchor after a speed change or a pause.
+                anchor_wall, anchor_elapsed, speed = loop.time(), item.elapsed, control.speed
+            due = anchor_wall + (item.elapsed - anchor_elapsed) / max(speed, 0.01)
+            delay = due - loop.time()
+            if delay > 0:
+                await asyncio.sleep(delay)
+        yield item
 
-    Items before ``control.start_elapsed`` are delivered immediately, which
-    lets a viewer join a match already in progress.
-    """
+
+class SyntheticReplayAdapter:
+    """Replays a generated match in (scaled) real time."""
 
     def __init__(self, match: SyntheticMatch, control: ReplayControl | None = None) -> None:
         self._match = match
@@ -73,20 +89,7 @@ class SyntheticReplayAdapter:
         return self._match.meta
 
     async def stream(self) -> AsyncIterator[FeedItem]:
-        loop = asyncio.get_running_loop()
-        anchor_wall = loop.time()
-        anchor_elapsed = self.control.start_elapsed
-        speed = self.control.speed
-        for item in self._items:
-            if item.elapsed > self.control.start_elapsed:
-                await self.control.wait_if_paused()
-                if self.control.speed != speed or self.control.paused:
-                    # Re-anchor after a speed change or a pause.
-                    anchor_wall, anchor_elapsed, speed = loop.time(), item.elapsed, self.control.speed
-                due = anchor_wall + (item.elapsed - anchor_elapsed) / max(speed, 0.01)
-                delay = due - loop.time()
-                if delay > 0:
-                    await asyncio.sleep(delay)
+        async for item in paced(self._items, self.control):
             yield item
 
 

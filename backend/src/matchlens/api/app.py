@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import importlib.util
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -89,6 +90,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/mcp", mcp.streamable_http_app())
+
+# Local-only extensions (a package that exists only on never-pushed local branches).
+if importlib.util.find_spec("matchlens.local"):
+    from matchlens.local import routers as _local_routers
+
+    for _router in _local_routers:
+        app.include_router(_router)
 
 
 def _session():

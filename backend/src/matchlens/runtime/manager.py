@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from matchlens.domain.models import Event, TrackingFrame
-from matchlens.ingest.adapters import ReplayControl, SyntheticReplayAdapter
+from matchlens.ingest.adapters import FeedAdapter, ReplayControl, SyntheticReplayAdapter
 from matchlens.runtime.session import MatchSession, SignalHandler
 from matchlens.simulator.engine import generate_match
 from matchlens.simulator.storyline import Storyline
@@ -59,12 +59,12 @@ class SessionManager:
     def add_signal_handler(self, handler: SignalHandler) -> None:
         self._handlers.append(handler)
 
-    def _prepare(self, seed: int, storyline: Storyline | None) -> None:
+    def _prepare(self, seed: int | None, storyline: Storyline | None) -> None:
         self.seed, self.storyline = seed, storyline
         for hook in self._reset_hooks:
             hook()
 
-    def _session(self, adapter: SyntheticReplayAdapter, run_id: str) -> MatchSession:
+    def _session(self, adapter: FeedAdapter, run_id: str) -> MatchSession:
         session = MatchSession(adapter, self.repo.recorder(run_id))
         for h in self._handlers:
             session.on_signal(h)
@@ -84,6 +84,21 @@ class SessionManager:
         session = self._session(SyntheticReplayAdapter(match, self.control), new_run_id(match.meta.match_id))
         session.recorder.begin(match_id=match.meta.match_id, seed=seed, storyline=match.meta.storyline_title,
                                speed=speed, meta=match.meta.model_dump(mode="json"))
+        self.session = session
+        session.start()
+        return session
+
+    async def start_feed(self, adapter: FeedAdapter, control: ReplayControl, source: str) -> MatchSession:
+        """Start a run from any feed adapter (e.g. a provider adapter used for local testing).
+        Such runs are not resumed after a restart: only synthetic runs can be regenerated."""
+        await self.stop()
+        self._prepare(None, None)  # no seed: the recorded demo stays off
+        self.control = control
+        meta = adapter.meta()
+        session = self._session(adapter, new_run_id(meta.match_id))
+        session.recorder.begin(match_id=meta.match_id, seed=None, storyline=None, speed=control.speed,
+                               meta=meta.model_dump(mode="json"))
+        session.recorder.update(source=source)
         self.session = session
         session.start()
         return session

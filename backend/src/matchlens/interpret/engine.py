@@ -538,8 +538,10 @@ class MatchEngine:
                                  facts={"xg_faced": xg}, priority=2)
             case EventType.GOAL:
                 assert team and player
+                own_goal = bool(e.attrs.get("own_goal"))
                 team.goals += 1
-                player.goals += 1
+                if not own_goal:  # the scorer is on the other side: no goal to their name
+                    player.goals += 1
                 self._weigh(e, e.team_id, w.goal, "goal")
                 assist = c.players.get(e.related_player_id or "")
                 if assist:
@@ -551,12 +553,12 @@ class MatchEngine:
                              facts={"scorer": e.player_id, "assist": e.related_player_id,
                                     "xg": e.attrs.get("xg"), "shot_speed_kmh": e.attrs.get("shot_speed_kmh"),
                                     "home_score": c.teams[home].goals, "away_score": c.teams[away].goals,
-                                    "momentum_index": round(self.momentum_now(), 1)},
+                                    "momentum_index": round(self.momentum_now(), 1), "own_goal": own_goal},
                              priority=1)
                 meta_p = self.meta.players[e.player_id]  # type: ignore[index]
                 career = meta_p.career_goals + player.goals
                 every = th.milestone_goal_every
-                if career % every == 0:
+                if not own_goal and career % every == 0:
                     self._signal(SignalType.MILESTONE, f"goals:{e.player_id}:{career}", e.elapsed, e.period,
                                  e.clock, team_id=e.team_id, player_ids=[e.player_id],
                                  evidence_event_ids=[e.event_id],
