@@ -119,7 +119,7 @@ app.mount("/mcp", mcp.streamable_http_app())
 app.include_router(tactics_router)  # /api/tactics/*: the Tactics Board
 app.include_router(kb_router)  # /api/kb/*: live only when MATCHLENS_KB_DIR is set
 
-# Local-only extensions (a package that exists only on never-pushed local branches).
+# Opt-in extensions for real-match feeds (FotMob), enabled by their own env flags.
 if importlib.util.find_spec("matchlens.local"):
     from matchlens.local import routers as _local_routers
 
