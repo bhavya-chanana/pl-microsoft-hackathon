@@ -55,12 +55,17 @@ class SoccerTrackMatch:
         return self._path("mot", "clips", f"{self.match}.mp4")
 
     def projector(self) -> PitchProjector:
+        """The shipped maps and homography, recalibrated on the surveyed keypoints."""
         raw = ("raw", self.match)
-        return PitchProjector.from_fixed_maps(
-            np.load(self._path(*raw, f"{self.match}_mapx.npy")),
-            np.load(self._path(*raw, f"{self.match}_mapy.npy")),
-            np.load(self._path(*raw, f"{self.match}_homography.npy")),
+        projector = PitchProjector.from_fixed_maps(
+            np.load(self._path(*raw, f"{self.match}_mapx.npy"), allow_pickle=False),
+            np.load(self._path(*raw, f"{self.match}_mapy.npy"), allow_pickle=False),
+            np.load(self._path(*raw, f"{self.match}_homography.npy"), allow_pickle=False),
         )
+        # {"(x,y)": [px, py]}: pitch metres -> raw clip pixel
+        keypoints = json.loads(self._path(*raw, f"{self.match}_keypoints.json").read_text())
+        pitch = [[float(v) for v in key.strip("()").split(",")] for key in keypoints]
+        return projector.calibrate(np.array(list(keypoints.values()), dtype=np.float64), np.array(pitch))
 
     def tracks(self) -> Tracks:
         """Ground-truth player boxes for the clip."""
