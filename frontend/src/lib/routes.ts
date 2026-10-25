@@ -4,6 +4,8 @@ export const routes = {
   broadcast: "/broadcast",
   agents: "/agents",
   coach: "/coach",
+  multiverse: "/multiverse",
+  lab: "/lab",
 } as const;
 
 export const serverRoutes = {

@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, ClipboardList, MonitorPlay, Radio } from "lucide-react";
+import { Bot, ClipboardList, FlaskConical, LayoutGrid, MonitorPlay, Radio } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -13,8 +13,10 @@ import { ThemeToggle } from "./theme-toggle";
 
 const NAV = [
   { href: routes.matchCentre, label: copy.nav.matchCentre, short: "Match", icon: Radio },
+  { href: routes.multiverse, label: copy.nav.multiverse, short: "Multiverse", icon: LayoutGrid },
   { href: routes.broadcast, label: copy.nav.broadcast, short: "Broadcast", icon: MonitorPlay },
   { href: routes.coach, label: copy.nav.coach, short: "Coach", icon: ClipboardList },
+  { href: routes.lab, label: copy.nav.lab, short: "Lab", icon: FlaskConical },
   { href: routes.agents, label: copy.nav.agents, short: "Agents", icon: Bot },
 ] as const;
 
@@ -23,14 +25,14 @@ export function AppHeader() {
   if (pathname === routes.broadcast) return null;
   return (
     <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/75">
-      <div className="mx-auto flex h-14 max-w-screen-2xl items-center gap-2 px-4 sm:gap-4 sm:px-6">
+      <div className="mx-auto flex min-h-14 max-w-screen-2xl flex-wrap items-center gap-x-2 px-4 sm:h-14 sm:flex-nowrap sm:gap-4 sm:px-6">
         <Link
           href={routes.matchCentre}
           className="flex min-h-11 items-center font-display text-xl font-semibold tracking-tight uppercase"
         >
           {copy.product}
         </Link>
-        <nav aria-label="Main" className="flex flex-1 items-center gap-1">
+        <nav aria-label="Main" className="order-last flex basis-full items-center justify-between gap-1 sm:order-none sm:flex-1 sm:basis-auto sm:justify-start">
           {NAV.map(({ href, label, short, icon: Icon }) => {
             const active = pathname === href;
             return (
@@ -45,17 +47,19 @@ export function AppHeader() {
                 )}
               >
                 <Icon aria-hidden className="size-4" />
-                <span className="hidden md:inline">{label}</span>
-                <span className="sr-only md:hidden">{label}</span>
-                <span aria-hidden className="hidden sm:inline md:hidden">
+                <span className="hidden xl:inline">{label}</span>
+                <span className="sr-only xl:hidden">{label}</span>
+                <span aria-hidden className="hidden lg:inline xl:hidden">
                   {short}
                 </span>
               </Link>
             );
           })}
         </nav>
-        <ConnectionPill />
-        <ThemeToggle />
+        <span className="ml-auto flex items-center gap-2 sm:ml-0 sm:gap-4">
+          <ConnectionPill />
+          <ThemeToggle />
+        </span>
       </div>
     </header>
   );

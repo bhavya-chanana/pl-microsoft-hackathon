@@ -247,6 +247,17 @@ class MatchEngine:
     def score(self) -> dict[str, int]:
         return {tid: t.goals for tid, t in self.c.teams.items()}
 
+    def frames_between(self, start: float, end: float) -> list[TrackingFrame]:
+        """Tracking frames from start to end (match seconds), oldest first."""
+        return [self._frames[s] for s in range(int(start), int(end) + 1) if s in self._frames]
+
+    def frame_near(self, elapsed: float) -> TrackingFrame | None:
+        return self._frame_near(elapsed)
+
+    def feed_events(self) -> list[Event]:
+        """Every ingested event as delivered, corrections included, in feed order."""
+        return [self._events[eid] for _, eid in self._order]
+
     def momentum_series(self) -> list[MomentumPoint]:
         return list(self.c.momentum)
 

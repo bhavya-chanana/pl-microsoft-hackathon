@@ -142,6 +142,12 @@ function useNarration(enabled: boolean) {
   return azure;
 }
 
+/** Narrates the feed of whichever profile scope it sits in; renders nothing. */
+export function Narrator({ enabled }: { enabled: boolean }) {
+  useNarration(enabled);
+  return null;
+}
+
 const noSubscribe = () => () => {};
 
 /** The Listen switch for the Match Centre. */

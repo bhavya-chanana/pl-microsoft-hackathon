@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from matchlens.agents.coach import template_draft as coach_template
+from matchlens.agents.pundit import template as pundit_template
 from matchlens.agents.contracts import (
     AgentClaim,
     CatchupDraft,
@@ -354,4 +355,5 @@ TASKS = {
     "recap": lambda p: recap(p["context"], p.get("language", "en")),
     "rewrite": rewrite,
     "coach": lambda p: coach_template(p["context"]),
+    "pundit": lambda p: pundit_template(p["context"], p.get("language", "en")),
 }

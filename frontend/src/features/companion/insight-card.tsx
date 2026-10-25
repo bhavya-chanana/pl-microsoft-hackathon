@@ -1,9 +1,10 @@
 "use client";
 
-import { ChevronDown, Star } from "lucide-react";
+import { ChevronDown, Star, Video } from "lucide-react";
 import { motion } from "motion/react";
 import { useId, useState } from "react";
 
+import { useReplay } from "@/features/broadcast/replay-store";
 import { useLive } from "@/features/live/live-store";
 import type { ClaimResult, FeedItem, Language, MatchMeta } from "@/lib/contract";
 import { copy, signalLabels } from "@/lib/copy";
@@ -77,8 +78,15 @@ function Evidence({ insightId }: { insightId: string }) {
   );
 }
 
+/** Moments the telestrator can draw; period markers and corrections have nothing to show. */
+const REPLAYABLE = new Set([
+  "goal", "big_chance", "big_save", "shot_speed_badge", "hard_pass", "pressure_spell", "control_spell",
+  "chaos_spell", "momentum_swing", "speed_badge", "distance_badge", "card",
+]);
+
 export function InsightCard({ item, language }: { item: FeedItem; language: Language }) {
   const meta = useLive((s) => s.meta);
+  const play = useReplay((s) => s.play);
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const side = sideOf(meta, item.team_id);
@@ -124,16 +132,28 @@ export function InsightCard({ item, language }: { item: FeedItem; language: Lang
           ))}
         </dl>
       )}
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => setOpen((v) => !v)}
-        className="-mx-2 -mb-2 flex min-h-11 items-center gap-1 self-start rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-      >
-        <ChevronDown aria-hidden className={cn("size-4 transition-transform", open && "rotate-180")} />
-        {open ? copy.feed.hideEvidence : copy.feed.showEvidence}
-      </button>
+      <div className="-mx-2 -mb-2 flex flex-wrap items-center gap-1">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => setOpen((v) => !v)}
+          className="flex min-h-11 items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <ChevronDown aria-hidden className={cn("size-4 transition-transform", open && "rotate-180")} />
+          {open ? copy.feed.hideEvidence : copy.feed.showEvidence}
+        </button>
+        {REPLAYABLE.has(item.signal_type) && (
+          <button
+            type="button"
+            onClick={() => play(item.insight_id, { reveal: true })}
+            className="flex min-h-11 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Video aria-hidden className="size-4" />
+            {copy.instantReplay.watch}
+          </button>
+        )}
+      </div>
       <div id={panelId} hidden={!open}>
         {open && <Evidence insightId={item.insight_id} />}
       </div>

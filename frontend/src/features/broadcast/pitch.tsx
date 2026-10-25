@@ -2,9 +2,9 @@
 
 import { memo, useRef, useState } from "react";
 
-import { useLive } from "@/features/live/live-store";
+import { type Point, useLive } from "@/features/live/live-store";
 import { useProfile } from "@/features/profile/profile-store";
-import type { Entity, MatchMeta } from "@/lib/contract";
+import type { Entity, Frame, MatchMeta } from "@/lib/contract";
 import { copy } from "@/lib/copy";
 import { sideOf, sideTone, teamName } from "@/lib/match";
 import { cn } from "@/lib/utils";
@@ -141,8 +141,47 @@ function NameTag({ entity, meta, tweenMs }: { entity: Entity; meta: MatchMeta; t
   );
 }
 
+/** Fading dots where the ball has just been; the newest point is where it is heading, so it is left out. */
+function BallTrail({ trail }: { trail: Point[] }) {
+  const past = trail.slice(0, -1);
+  if (past.length < 2) return null;
+  return (
+    <g aria-hidden className="pointer-events-none">
+      <polyline
+        points={past.map((p) => `${p.x},${p.y}`).join(" ")}
+        className="fill-none stroke-graphic-foreground"
+        strokeWidth={0.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeOpacity={0.35}
+        strokeDasharray="0.6 0.6"
+      />
+      {past.map((p, i) => (
+        <circle
+          key={i}
+          cx={p.x}
+          cy={p.y}
+          r={0.35 + (0.3 * i) / past.length}
+          className="fill-graphic-foreground"
+          fillOpacity={0.15 + (0.45 * i) / past.length}
+        />
+      ))}
+    </g>
+  );
+}
+
 type PitchProps = {
   className?: string;
+  /** Draw this frame instead of the live one (a replay). */
+  frame?: Frame | null;
+  /** The ball trail to draw with an overridden frame; the live trail otherwise. */
+  ballTrail?: Point[];
+  /** Tween time between overridden frames. */
+  tweenMs?: number;
+  /** Broadcast camera: the pitch tilted away from the viewer, like the gantry shot. */
+  tilt?: boolean;
+  /** Layers in pitch metres drawn over the players (the telestrator). */
+  overlay?: React.ReactNode;
   /** Makes players selectable (click, Enter or Space). */
   onSelectPlayer?: (playerId: string, el: SVGGElement) => void;
   selectedPlayerId?: string | null;
@@ -161,10 +200,25 @@ function entityOrder(meta: MatchMeta) {
 }
 
 /** Live 2D pitch from 1 Hz tracking frames, tweened between frames. */
-export function Pitch({ className, onSelectPlayer, selectedPlayerId = null, children }: PitchProps) {
+export function Pitch({
+  className,
+  frame: frameOverride,
+  ballTrail,
+  tweenMs: tweenOverride,
+  tilt = false,
+  overlay,
+  onSelectPlayer,
+  selectedPlayerId = null,
+  children,
+}: PitchProps) {
   const meta = useLive((s) => s.meta);
-  const frame = useLive((s) => s.frame);
-  const tweenMs = useLive((s) => s.frameIntervalMs);
+  const liveFrame = useLive((s) => s.frame);
+  const liveTrail = useLive((s) => s.ballTrail);
+  const liveTween = useLive((s) => s.frameIntervalMs);
+  const replaying = frameOverride !== undefined;
+  const frame = replaying ? frameOverride : liveFrame;
+  const trail = replaying ? (ballTrail ?? []) : liveTrail;
+  const tweenMs = tweenOverride ?? liveTween;
   const possession = useLive((s) => s.state?.possession_team ?? null);
   const favourite = useProfile((s) => s.playerId);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -181,7 +235,8 @@ export function Pitch({ className, onSelectPlayer, selectedPlayerId = null, chil
   const pickNearest = (e: React.MouseEvent<SVGSVGElement>) => {
     const svg = svgRef.current;
     const ctm = svg?.getScreenCTM();
-    if (!svg || !ctm || !onSelectPlayer || (e.target as Element).closest("[role=button]")) return;
+    // Under the tilted camera the screen matrix ignores the 3D transform, so only direct hits count.
+    if (!svg || !ctm || !onSelectPlayer || tilt || (e.target as Element).closest("[role=button]")) return;
     const at = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
     let best: Entity | null = null;
     let bestDistance = Infinity;
@@ -202,7 +257,11 @@ export function Pitch({ className, onSelectPlayer, selectedPlayerId = null, chil
       viewBox={`-3 -3 ${W + 6} ${H + 6}`}
       role={interactive ? "group" : "img"}
       aria-label={label}
-      className={cn("block h-full w-full", className)}
+      className={cn(
+        "block h-full w-full transition-transform duration-700 ease-broadcast",
+        tilt && "[transform:perspective(900px)_rotateX(32deg)_scale(1.02)] origin-[50%_70%]",
+        className,
+      )}
       preserveAspectRatio="xMidYMid meet"
     >
       <defs>
@@ -215,6 +274,7 @@ export function Pitch({ className, onSelectPlayer, selectedPlayerId = null, chil
         <rect x={-3} y={-3} width={W + 6} height={H + 6} rx={1} fill="url(#turf-stripes)" />
         <Markings />
         {children}
+        <BallTrail trail={trail} />
       </g>
       {meta &&
         entities.map((e) => (
@@ -229,6 +289,7 @@ export function Pitch({ className, onSelectPlayer, selectedPlayerId = null, chil
             onHover={interactive ? setHovered : undefined}
           />
         ))}
+      {overlay}
       {meta && tagged && <NameTag entity={tagged} meta={meta} tweenMs={tweenMs} />}
     </svg>
   );

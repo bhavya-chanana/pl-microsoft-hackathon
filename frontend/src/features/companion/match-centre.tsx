@@ -8,6 +8,7 @@ import { MomentumBar } from "@/features/broadcast/momentum-bar";
 import { useLive } from "@/features/live/live-store";
 import { ProfilePanel } from "@/features/profile/profile-panel";
 import { useProfile } from "@/features/profile/profile-store";
+import { PunditPanel } from "@/features/pundit/pundit-panel";
 import { PastMatches } from "@/features/replay/past-matches";
 import { ReplayControls } from "@/features/replay/replay-controls";
 import { MetricTile } from "@/features/stats/metric-tile";
@@ -19,6 +20,7 @@ import { copy } from "@/lib/copy";
 import { CatchupDialog, RecapDialog } from "./catchup-dialog";
 import { InsightFeed } from "./insight-feed";
 import { MatchTimeline } from "./match-timeline";
+import { MatchPulse } from "./match-pulse";
 import { ListenToggle } from "./narration";
 
 function MatchHeading() {
@@ -57,6 +59,7 @@ export function MatchCentre() {
         <MatchHeading />
         <BroadcastMonitor interactive />
         <MomentumBar />
+        <MatchPulse />
         <MetricTile />
         <FanPolls />
         {analyst && <ShotMapPanel />}
@@ -95,6 +98,7 @@ export function MatchCentre() {
       >
         <div className="flex flex-col gap-4 rounded-lg border bg-card p-4 shadow-raised">
           <CatchupDialog />
+          <PunditPanel />
           <RecapDialog />
           <ListenToggle />
         </div>

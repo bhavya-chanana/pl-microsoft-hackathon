@@ -75,6 +75,8 @@ class AgentTeam:
     catchup: Agent
     recap: Agent
     coach: Agent
+    pundit: Agent
+    scenario: Agent
     label: str
 
     @classmethod
@@ -95,6 +97,8 @@ class AgentTeam:
             catchup=agent(fast, prompts.CATCHUP, "catchup", "What did I miss?", fo),
             recap=agent(strong, prompts.RECAP, "recap", "Half-time and full-time recaps", so),
             coach=agent(fast, prompts.COACH, "coach", "Ranked tactical briefs for the bench", fo),
+            pundit=agent(fast, prompts.PUNDIT, "pundit", "Answers fans' questions about the match", fo),
+            scenario=agent(strong, prompts.SCENARIO, "scenario", "Writes match storylines for the simulator", so),
             label=clients.label,
         )
 

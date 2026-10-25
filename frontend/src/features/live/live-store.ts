@@ -33,6 +33,8 @@ type LiveStore = {
   signals: Signal[];
   momentum: MomentumPoint[];
   frame: Frame | null;
+  /** The ball's last few positions (oldest first), for the trail behind it on the pitch. */
+  ballTrail: Point[];
   /** Wall-clock milliseconds between the last two frames, used to tween player dots. */
   frameIntervalMs: number;
   lastFrameAt: number;
@@ -52,6 +54,23 @@ type LiveStore = {
 
 const MOMENTUM_KEEP = 400;
 const PASSES_KEEP = 300;
+const TRAIL_KEEP = 7;
+
+export type Point = { x: number; y: number };
+
+export function ballOf(frame: Frame | null): Point | null {
+  const ball = frame?.entities.find((e) => e.entity_id === "ball");
+  return ball ? { x: ball.x, y: ball.y } : null;
+}
+
+function nextTrail(trail: Point[], previous: Frame | null, frame: Frame): Point[] {
+  const ball = ballOf(frame);
+  // A new period or a jump back (replay restarted) starts a fresh trail.
+  if (!ball || !previous || previous.period !== frame.period || frame.elapsed < previous.elapsed) {
+    return ball ? [ball] : [];
+  }
+  return [...trail, ball].slice(-TRAIL_KEEP);
+}
 
 export const useLive = create<LiveStore>()((set) => ({
   status: "connecting",
@@ -64,6 +83,7 @@ export const useLive = create<LiveStore>()((set) => ({
   signals: [],
   momentum: [],
   frame: null,
+  ballTrail: [],
   frameIntervalMs: 1000,
   lastFrameAt: 0,
   insightsVersion: 0,
@@ -88,6 +108,7 @@ export const useLive = create<LiveStore>()((set) => ({
             signals: message.signals,
             momentum: message.momentum.slice(-MOMENTUM_KEEP),
             frame: message.frame,
+            ballTrail: message.frame ? nextTrail([], null, message.frame) : [],
             insightsVersion: s.insightsVersion + 1,
             runId: message.run_id ?? null,
             polls: Object.fromEntries(message.polls.map((p) => [p.poll_id, p])),
@@ -98,6 +119,7 @@ export const useLive = create<LiveStore>()((set) => ({
           const gap = s.lastFrameAt ? now - s.lastFrameAt : 1000;
           return {
             frame: message.frame,
+            ballTrail: nextTrail(s.ballTrail, s.frame, message.frame),
             lastFrameAt: now,
             frameIntervalMs: Math.min(1000, Math.max(16, s.frameIntervalMs * 0.7 + gap * 0.3)),
           };

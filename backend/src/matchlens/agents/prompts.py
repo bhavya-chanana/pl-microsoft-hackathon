@@ -87,3 +87,30 @@ players. List 3-6 key moments, each starting with the minute. Name the turning p
 Pick a player of the match from context.players (by player_id) only if the stats clearly support it.
 Write in the language given by "language". If "profile" sets a favourite club or player, give them a sentence.
 """
+
+PUNDIT = GROUNDING + """
+You are the studio Pundit answering a fan's question about the live match ("question").
+"intent" is what the router thinks the question is about; "context.moments" are the key moments with their
+signal_id. Answer the question directly in 2-4 sentences, then give 0-3 short supporting points with numbers.
+Explain why, not only what: name the cause (a red card, a pressing spell, a run of shots, a change of shape).
+Put the signal_id of every moment you rely on in cited_moments. Do not predict results or give betting advice;
+if asked, say you explain what the data shows. If the question is not about this match, say so in one sentence.
+"mode" casual: plain words, no jargon. analyst: precise, more numbers. player_focus: centre the answer on
+context.player when it is set. Write in the language given by "language".
+"""
+
+SCENARIO = """\
+You write storylines for a football match simulator. The user message is JSON: "prompt" is the match a fan wants
+to watch, "roster" lists both teams' players (player_id, name, position, role, starting or bench).
+Return a storyline the simulator can play:
+- title (max 48 characters) and a one-sentence summary, in the language given by "language".
+- phases: who is on top over time. Cover minutes 0 to 96 with no gaps; home_dominance runs from -1 (away on top)
+  to +1 (home on top); label each phase in a few words.
+- beats: the key moments, sorted by minute (1-45 first half, 46-95 second half): goal, big_chance, yellow_card,
+  red_card, substitution. Use only player_id values from the roster, with the player's own team_id.
+  Goals: related_player_id is the assisting team-mate (or null). Substitutions: player_id goes off and must be
+  on the pitch; related_player_id comes on from that team's bench. A player sent off takes no part afterwards.
+- Keep it football-realistic: at most 7 goals, at most 5 substitutions per team, at most 2 red cards.
+- "problems", when present, lists what was wrong with your previous storyline: fix every one.
+The clubs and players are fictional; do not mention real teams or players.
+"""

@@ -14,7 +14,11 @@ import {
   FeedItem,
   Health,
   MatchEvent,
+  Moment,
   PlayerRating,
+  Pulse,
+  Scenarios,
+  ScriptCheck,
   PlayerStats,
   Recap,
   RunSummary,
@@ -38,6 +42,10 @@ export const queryKeys = {
   ratings: ["ratings"] as const,
   runs: ["runs"] as const,
   feeds: ["feeds"] as const,
+  moment: (id: string) => ["moment", id] as const,
+  pulse: ["pulse"] as const,
+  scenarios: ["scenarios"] as const,
+  scriptCheck: ["script-check"] as const,
 };
 
 /** Refresh live queries when new insights land, at most once a second. */
@@ -174,5 +182,54 @@ export function useFeeds() {
     queryKey: queryKeys.feeds,
     queryFn: ({ signal }) => getJson("feeds", z.string().array(), undefined, signal),
     staleTime: 60_000,
+  });
+}
+
+/** Frames and telestrator drawings for one moment; a moment never changes once it has happened. */
+export function useMoment(insightId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.moment(insightId ?? ""),
+    queryFn: ({ signal }) => getJson(`moments/${encodeURIComponent(insightId ?? "")}`, Moment, undefined, signal),
+    enabled: Boolean(insightId),
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/** The minute-by-minute Match Pulse; refreshed as new moments land. */
+export function usePulse() {
+  useInsightRefresh("pulse");
+  return useQuery({
+    queryKey: queryKeys.pulse,
+    queryFn: ({ signal }) => getJson("pulse", Pulse, undefined, signal),
+    refetchInterval: 10_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useScenarios() {
+  return useQuery({
+    queryKey: queryKeys.scenarios,
+    queryFn: ({ signal }) => getJson("scenarios", Scenarios, undefined, signal),
+    staleTime: Infinity,
+  });
+}
+
+/** How the running scripted match is keeping to its script; null when the default demo is running. */
+export function useScriptCheck() {
+  const runId = useLive((s) => s.runId);
+  useInsightRefresh("script-check");
+  return useQuery({
+    queryKey: [...queryKeys.scriptCheck, runId],
+    queryFn: async ({ signal }) => {
+      try {
+        return await getJson("scenarios/check", ScriptCheck, undefined, signal);
+      } catch (error) {
+        if (error instanceof Error && "status" in error && error.status === 404) return null;
+        throw error;
+      }
+    },
+    refetchInterval: 5_000,
+    placeholderData: keepPreviousData,
   });
 }

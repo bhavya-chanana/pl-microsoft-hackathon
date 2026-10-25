@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 
-import { backendUrl, PROXY_GET, PROXY_POST } from "@/lib/server-config";
+import { backendUrl, PROXY_GET, PROXY_POST, PROXY_SLOW } from "@/lib/server-config";
 
 /**
  * Same-origin proxy to the Matchlens backend. Only allow-listed paths pass, so
@@ -19,12 +19,12 @@ async function forward(request: NextRequest, path: string[], allowed: RegExp[]):
       headers: { "content-type": "application/json" },
       body: request.method === "POST" ? await request.text() : undefined,
       cache: "no-store",
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(PROXY_SLOW[joined] ?? 30_000),
     });
-    return new Response(upstream.body, {
-      status: upstream.status,
-      headers: { "content-type": upstream.headers.get("content-type") ?? "application/json" },
-    });
+    const headers = new Headers({ "content-type": upstream.headers.get("content-type") ?? "application/json" });
+    const disposition = upstream.headers.get("content-disposition");
+    if (disposition) headers.set("content-disposition", disposition);
+    return new Response(upstream.body, { status: upstream.status, headers });
   } catch {
     return Response.json({ detail: "The match engine is not reachable." }, { status: 502 });
   }

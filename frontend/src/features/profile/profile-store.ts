@@ -1,12 +1,13 @@
 "use client";
 
-import { create } from "zustand";
+import { createContext, useContext } from "react";
+import { createStore, type StoreApi, useStore } from "zustand";
 import { persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 
 import type { FanProfile, Language, Metric, Mode } from "@/lib/contract";
 
-type ProfileStore = FanProfile & {
+export type ProfileStore = FanProfile & {
   setMode: (mode: Mode) => void;
   setLanguage: (language: Language) => void;
   setClub: (clubId: string | null) => void;
@@ -16,25 +17,45 @@ type ProfileStore = FanProfile & {
   follow: (playerId: string) => void;
 };
 
-/** The fan's personalisation choices; persisted so a returning fan keeps their view. */
-export const useProfile = create<ProfileStore>()(
-  persist(
-    (set) => ({
-      mode: "casual",
-      language: "en",
-      clubId: null,
-      playerId: null,
-      metric: null,
-      setMode: (mode) => set({ mode }),
-      setLanguage: (language) => set({ language }),
-      setClub: (clubId) => set({ clubId }),
-      setPlayer: (playerId) => set({ playerId }),
-      setMetric: (metric) => set({ metric }),
-      follow: (playerId) => set({ playerId, mode: "player_focus" }),
-    }),
-    { name: "matchlens.profile.v1", version: 1, skipHydration: true },
-  ),
+const DEFAULT_PROFILE: FanProfile = { mode: "casual", language: "en", clubId: null, playerId: null, metric: null };
+
+function actions(set: StoreApi<ProfileStore>["setState"]) {
+  return {
+    setMode: (mode: Mode) => set({ mode }),
+    setLanguage: (language: Language) => set({ language }),
+    setClub: (clubId: string | null) => set({ clubId }),
+    setPlayer: (playerId: string | null) => set({ playerId }),
+    setMetric: (metric: Metric | null) => set({ metric }),
+    follow: (playerId: string) => set({ playerId, mode: "player_focus" }),
+  };
+}
+
+/** The fan's own choices; persisted so a returning fan keeps their view. */
+export const profileStore = createStore<ProfileStore>()(
+  persist((set) => ({ ...DEFAULT_PROFILE, ...actions(set) }), {
+    name: "matchlens.profile.v1",
+    version: 1,
+    skipHydration: true,
+  }),
 );
+
+/** A throwaway profile for one view (a Multiverse pane), never persisted. */
+export function createProfileStore(initial: Partial<FanProfile>): StoreApi<ProfileStore> {
+  return createStore<ProfileStore>()((set) => ({ ...DEFAULT_PROFILE, ...initial, ...actions(set) }));
+}
+
+/** Components below a provider read and change that view's profile instead of the fan's own. */
+export const ProfileScopeContext = createContext<StoreApi<ProfileStore> | null>(null);
+
+export function useProfileStore(): StoreApi<ProfileStore> {
+  return useContext(ProfileScopeContext) ?? profileStore;
+}
+
+export function useProfile(): ProfileStore;
+export function useProfile<T>(selector: (s: ProfileStore) => T): T;
+export function useProfile<T>(selector?: (s: ProfileStore) => T) {
+  return useStore(useProfileStore(), selector ?? ((s: ProfileStore) => s as unknown as T));
+}
 
 /** Just the profile fields, for query keys and request parameters. */
 export function useFanProfile(): FanProfile {
