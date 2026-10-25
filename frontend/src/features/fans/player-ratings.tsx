@@ -14,6 +14,7 @@ import { formatNumber, sideTone } from "@/lib/match";
 import { cn } from "@/lib/utils";
 
 import { useFans } from "./fan-store";
+import { OverallBadge } from "./match-card";
 
 const T = copy.fans;
 const SCORES = Array.from({ length: 10 }, (_, i) => String(10 - i));
@@ -42,9 +43,12 @@ function RatingRow({ row, runId }: { row: PlayerRating; runId: string }) {
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_3rem_4.5rem_4.5rem] items-center gap-2 py-2">
       <div className="flex min-w-0 flex-col">
-        <span className={cn("truncate text-sm font-medium", !row.on_pitch && "text-muted-foreground")}>
-          {row.short_name}
-          <span className="ml-1.5 text-xs font-normal text-muted-foreground">{row.position}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          {row.overall !== null && <OverallBadge overall={row.overall} />}
+          <span className={cn("truncate text-sm font-medium", !row.on_pitch && "text-muted-foreground")}>
+            {row.short_name}
+            <span className="ml-1.5 text-xs font-normal text-muted-foreground">{row.position}</span>
+          </span>
         </span>
         {reasons && <span className="truncate text-xs text-muted-foreground">{reasons}</span>}
       </div>

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { describeEvent, EVENT_ICON } from "@/features/companion/match-timeline";
+import { MatchCard } from "@/features/fans/match-card";
 import { useLive } from "@/features/live/live-store";
 import { usePlayerEvents, usePlayerStats } from "@/features/live/queries";
 import { useProfile } from "@/features/profile/profile-store";
@@ -179,7 +180,10 @@ function PlayerBody({ playerId, meta }: { playerId: string; meta: MatchMeta }) {
       {stats.isPending ? (
         <StatsSkeleton />
       ) : stats.data ? (
-        <StatsGrid stats={stats.data} />
+        <>
+          {stats.data.card && <MatchCard card={stats.data.card} position={info?.position ?? ""} />}
+          <StatsGrid stats={stats.data} />
+        </>
       ) : (
         <Retry label={C.error} retry={() => void stats.refetch()} />
       )}

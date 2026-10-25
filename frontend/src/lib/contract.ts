@@ -212,6 +212,7 @@ export const PlayerRating = z.object({
   position: z.string(),
   on_pitch: z.boolean(),
   data_rating: z.number(),
+  overall: z.number().nullable(),
   parts: z.array(z.object({ key: z.string(), delta: z.number() })),
   fan_rating: z.number().nullable(),
   fan_votes: z.number(),
@@ -325,6 +326,14 @@ export const CoachBrief = z.object({
 });
 export type CoachBrief = z.infer<typeof CoachBrief>;
 
+/** FIFA-style card from this match's own data (never a game's ratings). */
+export const MatchCard = z.object({
+  kind: z.enum(["outfield", "goalkeeper"]),
+  overall: z.number(),
+  attributes: z.array(z.object({ key: z.string(), value: z.number().nullable() })),
+});
+export type MatchCard = z.infer<typeof MatchCard>;
+
 export const PlayerStats = z.object({
   player_id: z.string(),
   team_id: z.string(),
@@ -349,6 +358,7 @@ export const PlayerStats = z.object({
   max_shot_speed_kmh: z.number().nullable(),
   yellow_cards: z.number(),
   red_card: z.boolean(),
+  card: MatchCard.optional(),
 });
 export type PlayerStats = z.infer<typeof PlayerStats>;
 

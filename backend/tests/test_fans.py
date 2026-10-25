@@ -7,7 +7,7 @@ import asyncio
 import pytest
 
 from matchlens.interpret.engine import MatchEngine
-from matchlens.interpret.ratings import data_rating
+from matchlens.interpret.ratings import data_rating, match_card
 from matchlens.runtime.fans import FanZone
 from matchlens.store.base import MemoryStore
 
@@ -90,6 +90,31 @@ def test_data_rating_weights():
     assert data_rating({**base, "red_card": True}, conceded=4).value == 3.5
     striker = {"player_id": "X-9", "position": "FWD", "goals": 3, "assists": 2, "xg": 2.5, "key_passes": 4}
     assert data_rating(striker).value == 10.0  # capped
+
+
+def test_match_cards(played):
+    engine, fans, _, _ = played
+    cards = {r["player_id"]: (r, fans.card(r["player_id"], engine)) for r in fans.ratings(engine)}
+    for row, card in cards.values():
+        assert row["overall"] == card["overall"] and 30 <= card["overall"] <= 99
+        assert len(card["attributes"]) == 6 and all(30 <= a["value"] <= 99 for a in card["attributes"])
+    keeper = next(c for r, c in cards.values() if r["position"] == "GK")
+    assert keeper["kind"] == "goalkeeper" and keeper["attributes"][0]["key"] == "DIV"
+    attr = lambda card, key: next(a["value"] for a in card["attributes"] if a["key"] == key)  # noqa: E731
+    by_rating = sorted(cards.values(), key=lambda rc: -rc[0]["data_rating"])
+    assert by_rating[0][1]["overall"] > by_rating[-1][1]["overall"]
+    defender = next(c for r, c in cards.values() if r["position"] == "DEF")
+    scorers = [(r, c) for r, c in cards.values() if any(p["key"] == "goals" for p in r["parts"])]
+    striker = next(c for r, c in scorers if r["position"] == "FWD")
+    assert attr(defender, "DEF") > attr(striker, "DEF") - 20 and attr(striker, "SHO") > attr(defender, "SHO")
+
+
+def test_cards_without_tracking():
+    rating = data_rating({"player_id": "X-4", "position": "DEF"})
+    card = match_card({"player_id": "X-4", "position": "DEF", "top_speed_kmh": None, "distance_km": None}, rating)
+    values = {a["key"]: a["value"] for a in card["attributes"]}
+    assert values["PAC"] is None and values["PHY"] is None and values["DEF"] == 64
+    assert card["overall"] is not None
 
 
 def test_votes_survive_a_restart(demo_match):

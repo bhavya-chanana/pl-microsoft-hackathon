@@ -340,7 +340,7 @@ async def player(player_id: str) -> dict[str, Any]:
     s = _session()
     if player_id not in s.meta.players:
         raise HTTPException(404, "unknown player")
-    return s.engine.player_stats(player_id)
+    return {**s.engine.player_stats(player_id), "card": s.fans.card(player_id, s.engine)}
 
 
 @app.get("/api/teams/{team_id}")

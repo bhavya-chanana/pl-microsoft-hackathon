@@ -26,7 +26,7 @@ from typing import Any
 
 from matchlens.domain.models import Event, EventType, MatchMeta
 from matchlens.interpret.engine import MatchEngine
-from matchlens.interpret.ratings import data_rating, has_played
+from matchlens.interpret.ratings import Rating, data_rating, has_played, match_card
 
 VOTER_PATTERN = r"^[A-Za-z0-9-]{16,64}$"
 _VOTER = re.compile(VOTER_PATTERN)
@@ -229,16 +229,26 @@ class FanZone:
             out[pid] = {"fan_rating": avg, "fan_votes": n}
         return out
 
-    def rating_row(self, player_id: str, engine: MatchEngine) -> dict[str, Any]:
+    def _rate(self, player_id: str, engine: MatchEngine) -> tuple[dict[str, Any], Rating, int]:
         stats = engine.player_stats(player_id)
         team = str(stats["team_id"])
         other = self.meta.away.team_id if team == self.meta.home.team_id else self.meta.home.team_id
+        conceded = engine.score().get(other, 0)
         finished = engine.state()["status"] == "full_time"
-        rating = data_rating(stats, conceded=engine.score().get(other, 0), finished=finished)
+        return stats, data_rating(stats, conceded=conceded, finished=finished), conceded
+
+    def card(self, player_id: str, engine: MatchEngine) -> dict[str, Any]:
+        """The player's FIFA-style match card (interpret/ratings.py)."""
+        stats, rating, conceded = self._rate(player_id, engine)
+        return match_card(stats, rating, conceded=conceded)
+
+    def rating_row(self, player_id: str, engine: MatchEngine) -> dict[str, Any]:
+        stats, rating, conceded = self._rate(player_id, engine)
         avg, n = self.fan_tally(player_id)
-        return {**rating.as_dict(), "team_id": team, "name": stats["name"], "short_name": stats["short_name"],
-                "position": stats["position"], "on_pitch": stats["on_pitch"], "fan_rating": avg, "fan_votes": n,
-                "gap": round(avg - rating.value, 1) if avg is not None else None}
+        return {**rating.as_dict(), "team_id": stats["team_id"], "name": stats["name"],
+                "short_name": stats["short_name"], "position": stats["position"], "on_pitch": stats["on_pitch"],
+                "overall": match_card(stats, rating, conceded=conceded)["overall"], "fan_rating": avg,
+                "fan_votes": n, "gap": round(avg - rating.value, 1) if avg is not None else None}
 
     def ratings(self, engine: MatchEngine) -> list[dict[str, Any]]:
         """Every player who has played, by team and then by data rating."""

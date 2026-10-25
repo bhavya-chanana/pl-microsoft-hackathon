@@ -47,6 +47,10 @@
   --color-graphic-warn: var(--graphic-warn);
   --color-home: var(--team-home);
   --color-away: var(--team-away);
+  --color-tier-elite: var(--tier-elite);
+  --color-tier-gold: var(--tier-gold);
+  --color-tier-silver: var(--tier-silver);
+  --color-tier-bronze: var(--tier-bronze);
 
   --font-sans: var(--font-text), var(--font-devanagari), ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-display), var(--font-devanagari), ui-sans-serif, sans-serif;
@@ -110,6 +114,11 @@
 
   --team-home: oklch(0.55 0.18 258);
   --team-away: oklch(0.74 0.14 70);
+  /* Match card tiers (FIFA-style colour convention). */
+  --tier-elite: oklch(0.58 0.17 300);
+  --tier-gold: oklch(0.74 0.14 85);
+  --tier-silver: oklch(0.72 0.012 250);
+  --tier-bronze: oklch(0.6 0.1 50);
 
   --elevation-1: 0 1px 2px oklch(0.3 0.03 255 / 0.06), 0 2px 8px oklch(0.3 0.03 255 / 0.05);
   --elevation-2: 0 4px 12px oklch(0.3 0.03 255 / 0.1), 0 12px 32px oklch(0.3 0.03 255 / 0.08);
@@ -153,6 +162,10 @@
 
   --team-home: oklch(0.66 0.16 258);
   --team-away: oklch(0.78 0.13 70);
+  --tier-elite: oklch(0.68 0.15 300);
+  --tier-gold: oklch(0.8 0.13 85);
+  --tier-silver: oklch(0.78 0.012 250);
+  --tier-bronze: oklch(0.68 0.1 50);
 
   --elevation-1: 0 1px 0 oklch(1 0 0 / 0.04) inset;
   --elevation-2: 0 8px 24px oklch(0.05 0.02 255 / 0.5), 0 1px 0 oklch(1 0 0 / 0.05) inset;

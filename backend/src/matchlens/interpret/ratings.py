@@ -61,3 +61,81 @@ def data_rating(stats: Mapping[str, Any], *, conceded: int = 0, finished: bool =
     value = min(CEILING, max(FLOOR, BASE + sum(parts.values())))
     shown = sorted(((k, round(v, 2)) for k, v in parts.items() if abs(v) >= 0.01), key=lambda kv: -abs(kv[1]))
     return Rating(str(stats["player_id"]), round(value, 1), shown)
+
+
+# ---------------------------------------------------------------- match cards
+#
+# FIFA-style card attributes (30-99) from this match's own data, never from any
+# game's ratings: the players are fictional. They grow as the match goes on, like
+# an in-form card. Shooting and defending start from a role baseline (a defender
+# is a defender before the first tackle); pace and physical need tracking and are
+# None without it.
+
+OUTFIELD = ("PAC", "SHO", "PAS", "DRI", "DEF", "PHY")
+GOALKEEPER = ("DIV", "HAN", "KIC", "REF", "SPD", "POS")
+WEIGHTS = {
+    "FWD": {"PAC": 0.2, "SHO": 0.35, "PAS": 0.1, "DRI": 0.2, "PHY": 0.15},
+    "MID": {"PAC": 0.1, "SHO": 0.15, "PAS": 0.35, "DRI": 0.2, "DEF": 0.1, "PHY": 0.1},
+    "DEF": {"PAC": 0.15, "PAS": 0.2, "DRI": 0.05, "DEF": 0.45, "PHY": 0.15},
+    "GK": {"DIV": 0.2, "HAN": 0.2, "KIC": 0.1, "REF": 0.25, "SPD": 0.05, "POS": 0.2},
+}
+
+# Role baselines for shooting and defending.
+SHO_BASE = {"FWD": 48.0, "MID": 40.0, "DEF": 34.0}
+DEF_BASE = {"FWD": 30.0, "MID": 40.0, "DEF": 64.0}
+
+
+def _attr(value: float | None) -> int | None:
+    return None if value is None else int(round(min(99.0, max(30.0, value))))
+
+
+def _num(stats: Mapping[str, Any], key: str) -> float:
+    return float(stats.get(key) or 0)
+
+
+def _passing(stats: Mapping[str, Any]) -> float:
+    if _num(stats, "passes") < 5:
+        return 45.0
+    return (20 + 0.55 * _num(stats, "pass_accuracy") + 0.15 * _num(stats, "avg_pass_difficulty")
+            + 3 * _num(stats, "key_passes") + 0.6 * _num(stats, "progressive_passes"))
+
+
+def _pace(stats: Mapping[str, Any]) -> float | None:
+    speed = stats.get("top_speed_kmh")
+    return None if speed is None else 45 + (float(speed) - 24) * 50 / 12 + min(4.0, 0.4 * _num(stats, "sprints"))
+
+
+def match_card(stats: Mapping[str, Any], rating: Rating, *, conceded: int = 0) -> dict[str, Any]:
+    """Overall and six attributes for one player, outfield or goalkeeper."""
+    position = str(stats.get("position", ""))
+    saves = _num(stats, "saves")
+    if position == "GK":
+        kind, values = "goalkeeper", {
+            "DIV": 48 + 7 * saves,
+            "HAN": 55 + 5 * saves - 3 * conceded,
+            "KIC": _passing(stats),
+            "REF": 50 + 9 * saves,
+            "SPD": _pace(stats),
+            "POS": 60 + 3 * saves - 5 * conceded,
+        }
+    else:
+        distance = stats.get("distance_km")
+        kind, values = "outfield", {
+            "PAC": _pace(stats),
+            "SHO": SHO_BASE.get(position, 40.0) + 22 * _num(stats, "xg") + 6 * _num(stats, "shots_on_target")
+            + 8 * _num(stats, "goals") + 1.5 * _num(stats, "shots"),
+            "PAS": _passing(stats),
+            "DRI": 40 + 1.2 * _num(stats, "carries") + 0.12 * _num(stats, "touches"),
+            "DEF": DEF_BASE.get(position, 40.0) + 6 * _num(stats, "tackles") + 5 * _num(stats, "interceptions")
+            + 0.4 * _num(stats, "pressures"),
+            "PHY": None if distance is None else 30 + 3.5 * float(distance) + 0.1 * _num(stats, "sprints"),
+        }
+    attrs = {k: _attr(v) for k, v in values.items()}
+    weights = {k: w for k, w in WEIGHTS.get(position, WEIGHTS["MID"]).items() if attrs.get(k) is not None}
+    total = sum(weights.values())
+    weighted = sum(attrs[k] * w for k, w in weights.items()) / total if total else 60.0  # type: ignore[operator]
+    # Half the attributes, half the match rating (6.0 -> 65, 10.0 -> 99), so the two never disagree badly.
+    from_rating = 40 + (rating.value - FLOOR) * 59 / (CEILING - FLOOR)
+    keys = GOALKEEPER if kind == "goalkeeper" else OUTFIELD
+    return {"kind": kind, "overall": _attr(0.5 * weighted + 0.5 * from_rating),
+            "attributes": [{"key": k, "value": attrs[k]} for k in keys]}
