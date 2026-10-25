@@ -6,15 +6,17 @@ Matchlens runs as two Azure Container Apps in one environment:
 browser ──▶ frontend (Next.js, public HTTPS) ──▶ backend (FastAPI + agents, internal only)
                                                    ├──▶ Cosmos DB serverless (managed identity): every run, resumable
                                                    ├──▶ recorded demo match (baked into the image)
-                                                   └──▶ Azure OpenAI in Foundry (managed identity, cache misses only)
+                                                   ├──▶ Azure OpenAI in Foundry (managed identity, cache misses only)
+                                                   └──▶ Azure AI Speech (managed identity, voice narration)
 ```
 
 | Resource | Purpose |
 |---|---|
 | Container Apps environment + Log Analytics | Hosting and logs |
-| `ca-frontend-*` | Public site; proxies an allow-list of read-only API paths and the live stream |
+| `ca-frontend-*` | Public site; proxies an allow-list of API paths (reads, plus replay, archive, vote and rating posts) and the live stream |
 | `ca-backend-*` | Stats engine, agent workflow, MCP server; internal ingress only, max 1 replica (one live match per process) |
-| `cosmos-*` (serverless) | The store: database `matchlens`, nine containers partitioned by run (see [DATABASE.md](DATABASE.md)). Key auth disabled |
+| `cosmos-*` (serverless) | The store: database `matchlens`, ten containers partitioned by run (see [DATABASE.md](DATABASE.md)). Key auth disabled |
+| `speech-*` (F0 by default) | Azure AI Speech for voice narration; key auth disabled, the managed identity has *Cognitive Services Speech User*. Without it the browser's own voices read insights |
 | Container registry (Basic) | Images, built remotely by ACR (no local Docker needed) |
 | User-assigned managed identity | Pulls images; calls Azure OpenAI with the *Cognitive Services OpenAI User* role; reads and writes Cosmos DB with the *Cosmos DB Built-in Data Contributor* role. No keys anywhere |
 
@@ -81,6 +83,13 @@ Optional settings (`azd env set …`):
 |---|---|---|
 | `MATCHLENS_OPENAI_ENDPOINT` | `https://<account>.openai.azure.com/openai/v1/` | Override the model endpoint |
 | `MATCHLENS_MODEL_FAST` / `MATCHLENS_MODEL_STRONG` | `gpt-5-mini` | Deployment names for live agents / recaps |
+
+Only one free (F0) Speech resource is allowed per subscription. If yours already has one, set `speechSku` to `S0` in
+`infra/main.bicep` before `azd up`.
+
+The image contains no video pipeline and no local data: `uv sync --no-dev` leaves out the `vision` dependency group
+(PyTorch and friends), and `.dockerignore` excludes `backend/data/`. So `GET /api/feeds` is empty in Azure and the
+Past matches card lists stored runs only. Video auto-eventing runs on a developer machine (see the README).
 
 Leave `MATCHLENS_OPENAI_ACCOUNT` unset to deploy with no model access at all: the recorded demo and data-only
 templates only, which costs nothing per request.
