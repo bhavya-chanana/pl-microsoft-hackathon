@@ -134,6 +134,7 @@ class SessionManager:
             session.insights[row["insight_id"]] = row
         for row in await recorder.load("overlays"):
             session.overlays[row["overlay_id"]] = row
+        session.fans.load(await recorder.load("fan_votes"))
         session.recorder.begin(match_id=match.meta.match_id, seed=run["seed"], storyline=run.get("storyline"),
                                speed=self.control.speed, meta=match.meta.model_dump(mode="json"),
                                resumed_from=position, existing={k: v for k, v in run.items() if k != "run_id"})

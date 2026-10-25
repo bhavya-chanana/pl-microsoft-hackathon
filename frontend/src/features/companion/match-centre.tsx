@@ -2,6 +2,8 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BroadcastMonitor } from "@/features/broadcast/broadcast-monitor";
+import { FanPolls } from "@/features/fans/fan-polls";
+import { PlayerRatings } from "@/features/fans/player-ratings";
 import { MomentumBar } from "@/features/broadcast/momentum-bar";
 import { useLive } from "@/features/live/live-store";
 import { ProfilePanel } from "@/features/profile/profile-panel";
@@ -55,6 +57,7 @@ export function MatchCentre() {
         <BroadcastMonitor interactive />
         <MomentumBar />
         <MetricTile />
+        <FanPolls />
         {analyst && <ShotMapPanel />}
         {wide && (
           <Tabs defaultValue="timeline" className="gap-4">
@@ -65,6 +68,9 @@ export function MatchCentre() {
               <TabsTrigger value="stats" className={trigger}>
                 {copy.tabs.stats}
               </TabsTrigger>
+              <TabsTrigger value="ratings" className={trigger}>
+                {copy.tabs.ratings}
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="timeline">
               <div tabIndex={0} aria-label={copy.timeline.heading} className="max-h-96 overflow-y-auto rounded-lg border bg-card px-4">
@@ -73,6 +79,9 @@ export function MatchCentre() {
             </TabsContent>
             <TabsContent value="stats">
               <StatsPanel />
+            </TabsContent>
+            <TabsContent value="ratings">
+              <PlayerRatings />
             </TabsContent>
           </Tabs>
         )}
@@ -109,6 +118,9 @@ export function MatchCentre() {
               <TabsTrigger value="stats" className={trigger}>
                 {copy.tabs.stats}
               </TabsTrigger>
+              <TabsTrigger value="ratings" className={trigger}>
+                {copy.tabs.ratings}
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="feed">
               <InsightFeed />
@@ -118,6 +130,9 @@ export function MatchCentre() {
             </TabsContent>
             <TabsContent value="stats">
               <StatsPanel />
+            </TabsContent>
+            <TabsContent value="ratings">
+              <PlayerRatings />
             </TabsContent>
           </Tabs>
         )}

@@ -10,6 +10,7 @@ import type {
   MatchState,
   MomentumPoint,
   Overlay,
+  Poll,
   Signal,
   StreamMessage,
 } from "@/lib/contract";
@@ -38,6 +39,11 @@ type LiveStore = {
   insightsVersion: number;
   /** Bumped when a correction arrives, so the timeline can be reloaded. */
   correctionsVersion: number;
+  runId: string | null;
+  /** Fan polls by id, with live tallies. */
+  polls: Record<string, Poll>;
+  /** Bumped when fan ratings change, so the ratings table can refresh. */
+  fanVersion: number;
   apply: (message: StreamMessage) => void;
   setStatus: (status: ConnectionStatus) => void;
   setTimeline: (timeline: MatchEvent[]) => void;
@@ -61,6 +67,9 @@ export const useLive = create<LiveStore>()((set) => ({
   lastFrameAt: 0,
   insightsVersion: 0,
   correctionsVersion: 0,
+  runId: null,
+  polls: {},
+  fanVersion: 0,
   setStatus: (status) => set({ status }),
   setTimeline: (timeline) => set({ timeline: timeline.filter((e) => KEY_EVENTS.has(e.type)) }),
   apply: (message) =>
@@ -79,6 +88,9 @@ export const useLive = create<LiveStore>()((set) => ({
             momentum: message.momentum.slice(-MOMENTUM_KEEP),
             frame: message.frame,
             insightsVersion: s.insightsVersion + 1,
+            runId: message.run_id ?? null,
+            polls: Object.fromEntries(message.polls.map((p) => [p.poll_id, p])),
+            fanVersion: s.fanVersion + 1,
           };
         case "frame": {
           const now = performance.now();
@@ -110,6 +122,13 @@ export const useLive = create<LiveStore>()((set) => ({
           };
         case "overlay":
           return { overlays: { ...s.overlays, [message.overlay.overlay_id]: message.overlay } };
+        case "poll":
+          return { polls: { ...s.polls, [message.poll.poll_id]: message.poll } };
+        case "fan_tally":
+          return {
+            polls: { ...s.polls, ...Object.fromEntries(message.polls.map((p) => [p.poll_id, p])) },
+            fanVersion: s.fanVersion + 1,
+          };
         case "feed_status":
           if (message.status === "finished") return { status: "finished" };
           if (message.status === "no_match") return { status: "no_match" };

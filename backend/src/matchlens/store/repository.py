@@ -199,6 +199,9 @@ class RunRecorder:
     def fan_output(self, key: str, kind: str, result: dict[str, Any]) -> None:
         self._put("fan_outputs", key, {"kind": kind, "result": result, "at": now_iso()})
 
+    def fan_vote(self, doc_id: str, payload: dict[str, Any]) -> None:
+        self._put("fan_votes", doc_id, {**payload, "at": now_iso()}, cache=False)
+
     async def fan_cached(self, key: str) -> dict[str, Any] | None:
         doc = await self.repo.get("fan_outputs", self.run_id, key)
         return doc["result"] if doc else None

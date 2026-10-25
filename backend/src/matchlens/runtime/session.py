@@ -19,6 +19,7 @@ from matchlens.domain.models import Event, EventType, TrackingFrame
 from matchlens.ingest.adapters import FeedAdapter, FeedItem, feed_order
 from matchlens.interpret.engine import MatchEngine
 from matchlens.interpret.signals import Signal
+from matchlens.runtime.fans import FanZone
 from matchlens.store.repository import Repository, RunRecorder
 
 log = logging.getLogger(__name__)
@@ -28,6 +29,8 @@ TIMELINE_TYPES = {
     EventType.KICKOFF, EventType.GOAL, EventType.SHOT, EventType.SAVE, EventType.CARD,
     EventType.SUBSTITUTION, EventType.CORNER, EventType.HALF_TIME, EventType.FULL_TIME,
 }
+
+TALLY_INTERVAL_S = 0.5
 
 SignalHandler = Callable[[Signal, "MatchSession"], Awaitable[None]]
 
@@ -58,6 +61,9 @@ class MatchSession:
         self.latency_ms: list[float] = []
         # Feed items already ingested (by hydrate) are skipped when the feed delivers them again.
         self._resume_frame_elapsed: float | None = None
+        # Fan polls and ratings; votes are stored with the run.
+        self.fans = FanZone(self.meta, salt=self.run_id, sink=self.recorder.fan_vote)
+        self._tally_pending = False
 
     @property
     def run_id(self) -> str:
@@ -103,6 +109,8 @@ class MatchSession:
                     else:
                         effective = self.engine.event(item.event_id) or item
                         self.publish({"type": "event", "event": event_payload(self.engine, effective)})
+                        for poll in self.fans.observe(effective, self.engine):
+                            self.publish({"type": "poll", "poll": poll.public()})
                     state = self.engine.state()
                     self.publish({"type": "state", "state": state})
                     rec.progress(state)
@@ -139,6 +147,8 @@ class MatchSession:
                 self.engine.ingest_frame(item)
             else:
                 self.engine.ingest_event(item)
+                if item.type != EventType.CORRECTION:
+                    self.fans.observe(self.engine.event(item.event_id) or item, self.engine)
         if frames:
             self.last_frame = frames[-1].model_dump(mode="json")
             self._resume_frame_elapsed = frames[-1].elapsed
@@ -170,6 +180,18 @@ class MatchSession:
                     q.get_nowait()
                 q.put_nowait(message)
 
+    def fans_changed(self) -> None:
+        """Publish fan tallies after a vote, at most twice a second."""
+        if self._tally_pending:
+            return
+        self._tally_pending = True
+        asyncio.get_running_loop().call_later(TALLY_INTERVAL_S, self._publish_tally)
+
+    def _publish_tally(self) -> None:
+        self._tally_pending = False
+        self.publish({"type": "fan_tally", "polls": self.fans.public_polls(),
+                      "ratings": self.fans.rating_tallies()})
+
     def publish_insight(self, insight: dict[str, Any]) -> None:
         self.insights[insight["insight_id"]] = insight
         self.recorder.insight(insight)
@@ -199,4 +221,5 @@ class MatchSession:
             "momentum": [vars(p) for p in self.engine.momentum_series()],
             "frame": self.last_frame,
             "finished": self.finished,
+            "polls": self.fans.public_polls(),
         }

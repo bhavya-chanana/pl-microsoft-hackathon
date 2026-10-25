@@ -8,6 +8,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useLiveStream } from "@/features/live/use-live-stream";
+import { useFans } from "@/features/fans/fan-store";
 import { useProfile } from "@/features/profile/profile-store";
 import { LiveStreamContext } from "@/features/live/live-stream-context";
 
@@ -15,6 +16,7 @@ function LiveStream({ children }: { children: ReactNode }) {
   const stream = useLiveStream();
   useEffect(() => {
     void useProfile.persist.rehydrate();
+    void useFans.persist.rehydrate();
   }, []);
   return <LiveStreamContext value={stream}>{children}</LiveStreamContext>;
 }

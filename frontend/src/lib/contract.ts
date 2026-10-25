@@ -184,6 +184,41 @@ export const Frame = z.object({ elapsed: z.number(), period: z.number(), entitie
 export type Frame = z.infer<typeof Frame>;
 export type Entity = z.infer<typeof Entity>;
 
+/** Text by fan language; the backend localises match content. */
+export const Localized = z.record(z.string(), z.string());
+
+export const PollOption = z.object({ option_id: z.string(), label: Localized, votes: z.number() });
+export const Poll = z.object({
+  poll_id: z.string(),
+  kind: z.enum(["result", "motm"]),
+  question: Localized,
+  context: Localized,
+  minute_label: z.string(),
+  closed: z.boolean(),
+  /** Resolved at full-time: the final result, or the data's pick for player polls. */
+  answer: z.string().nullable(),
+  total_votes: z.number(),
+  options: z.array(PollOption),
+});
+export type Poll = z.infer<typeof Poll>;
+
+export const RatingTally = z.object({ fan_rating: z.number().nullable(), fan_votes: z.number() });
+
+export const PlayerRating = z.object({
+  player_id: z.string(),
+  team_id: z.string(),
+  name: z.string(),
+  short_name: z.string(),
+  position: z.string(),
+  on_pitch: z.boolean(),
+  data_rating: z.number(),
+  parts: z.array(z.object({ key: z.string(), delta: z.number() })),
+  fan_rating: z.number().nullable(),
+  fan_votes: z.number(),
+  gap: z.number().nullable(),
+});
+export type PlayerRating = z.infer<typeof PlayerRating>;
+
 export const Snapshot = z.object({
   type: z.literal("hello"),
   meta: MatchMeta,
@@ -195,6 +230,8 @@ export const Snapshot = z.object({
   momentum: z.array(MomentumPoint),
   frame: Frame.nullable(),
   finished: z.boolean(),
+  run_id: z.string().optional(),
+  polls: z.array(Poll).default([]),
 });
 export type Snapshot = z.infer<typeof Snapshot>;
 
@@ -208,6 +245,8 @@ export const StreamMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("signal"), signal: Signal }),
   z.object({ type: z.literal("insight"), insight: Insight }),
   z.object({ type: z.literal("overlay"), overlay: Overlay }),
+  z.object({ type: z.literal("poll"), poll: Poll }),
+  z.object({ type: z.literal("fan_tally"), polls: z.array(Poll), ratings: z.record(z.string(), RatingTally) }),
   z.object({ type: z.literal("feed_status"), status: z.string() }),
   z.object({ type: z.literal("ping") }),
 ]);

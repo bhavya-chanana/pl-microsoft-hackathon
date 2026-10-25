@@ -13,6 +13,7 @@ import {
   FeedItem,
   Health,
   MatchEvent,
+  PlayerRating,
   PlayerStats,
   Recap,
   TeamStats,
@@ -32,6 +33,7 @@ export const queryKeys = {
   team: (id: string) => ["team", id] as const,
   decisions: ["decisions"] as const,
   health: ["health"] as const,
+  ratings: ["ratings"] as const,
 };
 
 /** Refresh live queries when new insights land, at most once a second. */
@@ -133,5 +135,20 @@ export function useHealth() {
     queryKey: queryKeys.health,
     queryFn: ({ signal }) => getJson("health", Health, undefined, signal),
     refetchInterval: 5_000,
+  });
+}
+
+/** Data and fan ratings; refreshed when fans vote and as the match moves on. */
+export function useRatings() {
+  const version = useLive((s) => s.fanVersion);
+  const client = useQueryClient();
+  useEffect(() => {
+    void client.invalidateQueries({ queryKey: queryKeys.ratings });
+  }, [client, version]);
+  return useQuery({
+    queryKey: queryKeys.ratings,
+    queryFn: ({ signal }) => getJson("ratings", PlayerRating.array(), undefined, signal),
+    refetchInterval: 10_000,
+    placeholderData: keepPreviousData,
   });
 }

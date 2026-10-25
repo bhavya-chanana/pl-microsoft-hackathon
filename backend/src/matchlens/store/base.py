@@ -13,6 +13,7 @@ read back with single-partition queries.
     decisions    coordinator routing decisions, in order
     agent_runs   one per agent workflow or fan request: plan, agents, model, latency, errors
     fan_outputs  catch-ups and recaps, keyed by window, profile and match position
+    fan_votes    poll votes and fan player ratings, one per anonymous voter (hashed)
 
 The live process keeps a read-through cache in front of the store (see
 repository.py); the store is the source of truth that a restarted backend
@@ -66,6 +67,7 @@ CONTAINERS: dict[str, ContainerSpec] = {s.name: s for s in [
     ContainerSpec("decisions"),
     ContainerSpec("agent_runs", ("errors", "actions")),
     ContainerSpec("fan_outputs", ("result",)),
+    ContainerSpec("fan_votes"),
 ]}
 
 # Properties Cosmos DB adds to every item.

@@ -20,6 +20,7 @@ from matchlens.agents.pipeline import AgentTeam, InsightPipeline
 from matchlens.agents.services import CATCHUP_WINDOWS, FanServices, narration_text, personalise_feed
 from matchlens.domain.models import EventType
 from matchlens.mcp_server.server import mcp
+from matchlens.runtime.fans import VOTER_PATTERN
 from matchlens.runtime.manager import manager
 from matchlens.runtime.session import MatchSession, event_payload
 from matchlens.speech import Narrator
@@ -229,6 +230,57 @@ async def speech(
         log.warning("speech synthesis failed: %s", exc)
         raise HTTPException(502, "speech synthesis failed") from exc
     return Response(audio, media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=3600"})
+
+
+class VoteRequest(BaseModel):
+    voter_id: str = Field(pattern=VOTER_PATTERN, description="The browser's anonymous voter id")
+    option_id: str = Field(max_length=64)
+
+
+class RatingRequest(BaseModel):
+    voter_id: str = Field(pattern=VOTER_PATTERN)
+    player_id: str = Field(max_length=64)
+    score: int = Field(ge=1, le=10)
+
+
+def _fan_error(exc: Exception) -> HTTPException:
+    status = 404 if isinstance(exc, LookupError) else 409 if isinstance(exc, PermissionError) else 422
+    return HTTPException(status, str(exc))
+
+
+@app.get("/api/polls")
+async def polls() -> list[dict[str, Any]]:
+    """Fan polls opened so far, with live tallies."""
+    return _session().fans.public_polls()
+
+
+@app.post("/api/polls/{poll_id}/vote")
+async def vote(poll_id: str, req: VoteRequest) -> dict[str, Any]:
+    s = _session()
+    try:
+        poll = s.fans.vote(poll_id, req.voter_id, req.option_id)
+    except (LookupError, PermissionError, ValueError) as exc:
+        raise _fan_error(exc) from exc
+    s.fans_changed()
+    return poll.public()
+
+
+@app.get("/api/ratings")
+async def ratings() -> list[dict[str, Any]]:
+    """Data rating and fan rating for every player who has played."""
+    s = _session()
+    return s.fans.ratings(s.engine)
+
+
+@app.post("/api/ratings")
+async def rate(req: RatingRequest) -> dict[str, Any]:
+    s = _session()
+    try:
+        row = s.fans.rate(req.player_id, req.voter_id, req.score, s.engine)
+    except (LookupError, PermissionError, ValueError) as exc:
+        raise _fan_error(exc) from exc
+    s.fans_changed()
+    return row
 
 
 @app.get("/api/agents/decisions")
