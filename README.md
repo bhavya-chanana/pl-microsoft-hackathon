@@ -21,6 +21,10 @@ fictional.
 | **Explain** | A coordinator picks the moments worth explaining. Tactical and Narrator agents say why they matter, with evidence. A Fact-Checker verifies every claim against the stats engine and rewrites or blocks anything unsupported. | `agents/`, `factcheck/` |
 | **Render** | A Producer agent turns each insight into timed overlay JSON with priority and screen slot; a scheduler caps what is on screen. The broadcast view plays them over a live 2D pitch. | `agents/producer.py`, `frontend/src/features/broadcast/` |
 | **Personalise** | A Personaliser agent writes every insight for Casual, Analyst and Player-Focus modes in English, Hindi and Spanish, plus each club's angle. Fans also get "What did I miss?" catch-ups and half-time and full-time recaps. | `agents/services.py`, `frontend/src/features/companion/` |
+| **Coach** | Short ranked tactical briefs, each with its evidence, trade-off and confidence, fact-checked like every other insight. | `agents/`, `frontend/src/features/coach/` |
+| **Engage** | Fan polls open at key moments and resolve against what happened. Every player gets a rating from the data next to the fans' rating, and a match card (overall and six attributes) computed from this match alone. Insights can be read aloud with Azure AI Speech. | `runtime/fans.py`, `interpret/ratings.py`, `speech.py`, `frontend/src/features/fans/` |
+| **Archive** | Every match is stored. Reopen one later: a match cut off part-way resumes, a finished one opens as it ended. | `runtime/manager.py`, `frontend/src/features/replay/` |
+| **Video (local)** | A vision pipeline turns match footage into the same events and tracking, scored against hand labels. Developer-machine only; see [Video auto-eventing](#video-auto-eventing). | `vision/` |
 
 ## Architecture
 
@@ -99,6 +103,7 @@ controls to speed it up (up to 60x), pause it, or restart it from any minute.
 |---|---|---|
 | Match Centre | `/` | Fans: broadcast feed, personalised insights, timeline, stats, catch-up and recap |
 | Broadcast | `/broadcast` | Studio: full-width pitch with timed overlays |
+| Coach | `/coach` | Coaches: ranked tactical briefs with evidence |
 | Agent Room | `/agents` | The agent pipeline live: routing decisions, fact-check results, latency |
 
 ### Run modes
@@ -118,6 +123,9 @@ For live models, copy `backend/.env.example` to `backend/.env`, set `AZURE_OPENA
 API keys. Other settings (`MATCHLENS_SPEED`, `MATCHLENS_SEED`, model names, reasoning effort, timeouts) are listed
 in [`backend/.env.example`](backend/.env.example).
 
+Voice narration uses Azure AI Speech when `MATCHLENS_SPEECH_REGION` and `MATCHLENS_SPEECH_RESOURCE_ID` are set (also
+Entra ID, no keys); without them the browser's own voices read the insights.
+
 ### Tests and checks
 
 ```bash
@@ -132,6 +140,43 @@ The backend tests cover the simulator and its calibration, the feed adapters, th
 out-of-order events, corrections), the fact-checker (wrong claims rewritten, unfixable ones blocked), the agent
 workflow end to end, the recorded demo, and that every published overlay and insight validates against the
 documented schema.
+
+## Video auto-eventing
+
+`backend/src/matchlens/vision/` turns a match video into Matchlens events and tracking: it maps the camera's pixels to
+pitch metres, detects and tracks players (RT-DETR on tiles of the frame, then a ByteTrack-style tracker), splits them
+into teams by kit colour, and reads passes, carries, tackles, interceptions, shots and restarts from who has the
+ball. The result plays like any other match from the Past matches card.
+
+It is built and measured on [SoccerTrack v2](https://github.com/AtomScott/SoccerTrack-v2) research footage
+(CC BY 4.0, [dataset](https://huggingface.co/datasets/atomscott/soccertrack-v2)). That footage, its labels and everything derived from it stay in `backend/data/local/` (gitignored): none
+of it is in this repository, the deployed demo or the demo video, and a match built from it is shown as the fictional
+Westmoor v Eastbrook (BRD §6.3).
+
+Measured on a 4-minute clip of match 128057 (from the first-half kick-off), against the dataset's hand labels:
+
+| What | Result |
+|---|---|
+| Pitch calibration | median 0.9 m error (leave-one-out over 65 surveyed points) |
+| Team split | every player on the right team; both keepers found |
+| Player detection and tracking (first 20 s) | 96% recall, 90% precision, MOTA 0.86 |
+| Ball detection (first 20 s) | within 3 m on 40% of in-play frames |
+| Passes | 46% recall, 51% precision (±1 s, same team) |
+| Carries | 23% recall, 50% precision |
+| Shot, throw-ins, free kick | all found |
+
+The events above still use the dataset's player identities and ball track. Joining the detector's broken tracks
+into whole players and driving events from the detected ball are the next steps (BRD §6.2).
+
+```bash
+cd backend && uv sync --group vision
+```
+
+```bash
+cd backend && uv run --group vision python -m matchlens.vision 128057 --detect 20
+```
+
+The first run with `--detect` downloads the RT-DETR weights (`PekingU/rtdetr_r50vd`, Apache-2.0, about 172 MB).
 
 ## Data and schemas
 
@@ -161,6 +206,7 @@ backend/                 Python 3.12, FastAPI, Microsoft Agent Framework
     tools/, mcp_server/  match-state tools and the MCP server
     runtime/             live match session, pub/sub, run start and resume
     store/               Cosmos DB store, write-behind queue, read-through cache
+    vision/              video auto-eventing: calibration, detection, tracking, teams, events
     dataset/             open dataset export and JSON Schema generation
     api/                 REST and WebSocket API
   tests/
@@ -181,5 +227,7 @@ infra/                   Bicep for Azure Container Apps and Cosmos DB (azd up)
 | Tools | MCP server for match state |
 | Database | Azure Cosmos DB for NoSQL (serverless), managed identity |
 | Frontend | Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui, Motion, Recharts, React Flow |
+| Voice | Azure AI Speech, browser speech synthesis as fallback |
+| Vision (local only) | PyTorch, RT-DETR (Transformers), OpenCV, SciPy |
 | Hosting | Azure Container Apps, Azure Container Registry, Cosmos DB, managed identity, Log Analytics |
 | Infrastructure as code | Bicep with the Azure Developer CLI |
