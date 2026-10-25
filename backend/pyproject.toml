@@ -25,5 +25,17 @@ dev = [
     "pytest==9.1.1",
 ]
 
+# Video auto-eventing (matchlens.vision): local only, never in the demo image.
+# uv sync --group vision
+vision = [
+    "numpy==2.5.4",
+    "opencv-python-headless==5.0.0.93",
+    "scipy==1.18.1",
+    "supervision==0.31.2",
+    "torch==2.14.1",
+    "torchvision==0.29.1",
+    "transformers==5.20.2",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
