@@ -15,8 +15,8 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from matchlens.domain.models import Event, TrackingFrame
-from matchlens.ingest.adapters import FeedAdapter, ReplayControl, SyntheticReplayAdapter
+from matchlens.domain.models import Event, MatchMeta, TrackingFrame
+from matchlens.ingest.adapters import FeedAdapter, ReplayControl, StoredRunAdapter, SyntheticReplayAdapter
 from matchlens.runtime.session import MatchSession, SignalHandler
 from matchlens.simulator.engine import generate_match
 from matchlens.simulator.storyline import Storyline
@@ -120,21 +120,13 @@ class SessionManager:
         match = generate_match(seed=run["seed"])
         if match.meta.storyline_title != run.get("storyline"):
             raise ValueError(f"run {run_id} was not played from the default storyline")
-        recorder = self.repo.recorder(run_id)
-        events = [Event.model_validate({k: v for k, v in d.items() if k not in _EVENT_EXTRAS})
-                  for d in await recorder.load("events", order_by="sequence")]
-        frames = [TrackingFrame.model_validate(d) for d in await recorder.load("frames", order_by="elapsed")]
+        events, frames = await self._load(run_id)
         position = frames[-1].elapsed if frames else 0.0
         self.control = ReplayControl(speed=float(run.get("speed", 1.0)), start_elapsed=position)
         if run.get("paused"):
             self.control.pause()
         session = self._session(SyntheticReplayAdapter(match, self.control), run_id)
-        session.hydrate(events, frames)
-        for row in await recorder.load("insights"):
-            session.insights[row["insight_id"]] = row
-        for row in await recorder.load("overlays"):
-            session.overlays[row["overlay_id"]] = row
-        session.fans.load(await recorder.load("fan_votes"))
+        await self._fill(session, events, frames)
         session.recorder.begin(match_id=match.meta.match_id, seed=run["seed"], storyline=run.get("storyline"),
                                speed=self.control.speed, meta=match.meta.model_dump(mode="json"),
                                resumed_from=position, existing={k: v for k, v in run.items() if k != "run_id"})
@@ -145,6 +137,51 @@ class SessionManager:
         self.session = session
         session.start()
         return session
+
+    async def open_run(self, run_id: str) -> MatchSession:
+        """Reopen a stored run. A synthetic run left live carries on from where it stopped;
+        any other (finished, or played from a feed) opens as it was left, to look back on:
+        score, timeline, stats, insights, polls and ratings."""
+        run = await self.repo.get("runs", run_id, run_id)
+        stored = await self.repo.get("runs", run_id, "meta")
+        if not run or run.get("doc_type") != "run" or not stored:
+            raise LookupError(run_id)
+        run = {"run_id": run_id, **run}
+        if run.get("status") == "live" and run.get("seed") is not None:
+            try:
+                return await self.resume(run)
+            except ValueError:
+                pass  # another storyline: it cannot be regenerated, so open it as it was left
+        await self.stop()
+        self._prepare(None, None)
+        events, frames = await self._load(run_id)
+        self.control = ReplayControl(speed=float(run.get("speed", 1.0)))
+        session = self._session(StoredRunAdapter(MatchMeta.model_validate(stored["meta"])), run_id)
+        await self._fill(session, events, frames)
+        session.finished = session.archived = True
+        session.recorder.run = {k: v for k, v in run.items() if k != "run_id"}  # fan votes still land on it
+        for hook in self._resume_hooks:
+            await hook(session, run)
+        log.info("opened run %s at %s (%d events)", run_id, session.engine.state()["minute_label"], len(events))
+        self.session = session
+        return session
+
+    async def _load(self, run_id: str) -> tuple[list[Event], list[TrackingFrame]]:
+        recorder = self.repo.recorder(run_id)
+        events = [Event.model_validate({k: v for k, v in d.items() if k not in _EVENT_EXTRAS})
+                  for d in await recorder.load("events", order_by="sequence")]
+        frames = [TrackingFrame.model_validate(d) for d in await recorder.load("frames", order_by="elapsed")]
+        return events, frames
+
+    @staticmethod
+    async def _fill(session: MatchSession, events: list[Event], frames: list[TrackingFrame]) -> None:
+        """Rebuild a session from a stored run: the engine, published outputs and fan votes."""
+        session.hydrate(events, frames)
+        for row in await session.recorder.load("insights"):
+            session.insights[row["insight_id"]] = row
+        for row in await session.recorder.load("overlays"):
+            session.overlays[row["overlay_id"]] = row
+        session.fans.load(await session.recorder.load("fan_votes"))
 
     def set_control(self, speed: float | None = None, paused: bool | None = None) -> None:
         ctl = self.control

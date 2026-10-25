@@ -20,10 +20,19 @@ export const PROXY_GET = [
   /^speech$/,
   /^polls$/,
   /^ratings$/,
+  /^runs$/,
+  /^feeds$/,
   /^agents\/decisions$/,
   /^players\/[\w-]+$/,
   /^teams\/[\w-]+$/,
 ];
 
-/** Replay controls (demo only), fan votes and fan ratings. */
-export const PROXY_POST = [/^replay$/, /^replay\/control$/, /^polls\/[\w-]+\/vote$/, /^ratings$/];
+/** Replay controls and the match archive (demo only), fan votes and fan ratings. */
+export const PROXY_POST = [
+  /^replay$/,
+  /^replay\/control$/,
+  /^replay\/feed$/,
+  /^runs\/[\w-]+\/open$/,
+  /^polls\/[\w-]+\/vote$/,
+  /^ratings$/,
+];

@@ -93,6 +93,21 @@ class SyntheticReplayAdapter:
             yield item
 
 
+class StoredRunAdapter:
+    """A run reopened from the database as it was left: the session is hydrated from the
+    stored events and frames, and nothing more arrives."""
+
+    def __init__(self, meta: MatchMeta) -> None:
+        self._meta = meta
+
+    def meta(self) -> MatchMeta:
+        return self._meta
+
+    async def stream(self) -> AsyncIterator[FeedItem]:
+        return
+        yield
+
+
 class JsonLinesAdapter:
     """Reads a recorded feed: one JSON object per line with a "kind" field
     ("event" or "frame"). This is the shape a provider bridge would write after

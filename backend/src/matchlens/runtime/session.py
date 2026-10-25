@@ -54,6 +54,7 @@ class MatchSession:
         self._signal_handlers: list[SignalHandler] = []
         self._task: asyncio.Task[None] | None = None
         self.finished = False
+        self.archived = False  # reopened from the database: nothing more will arrive
         self.last_frame: dict[str, Any] | None = None
         # Published outputs of later pipeline stages, kept for late joiners.
         self.insights: dict[str, dict[str, Any]] = {}
@@ -221,5 +222,6 @@ class MatchSession:
             "momentum": [vars(p) for p in self.engine.momentum_series()],
             "frame": self.last_frame,
             "finished": self.finished,
+            "archived": self.archived,
             "polls": self.fans.public_polls(),
         }

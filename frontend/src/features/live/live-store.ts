@@ -15,7 +15,8 @@ import type {
   StreamMessage,
 } from "@/lib/contract";
 
-export type ConnectionStatus = "connecting" | "live" | "finished" | "offline" | "no_match";
+/** "archived": a past run reopened to look back on; nothing more arrives. */
+export type ConnectionStatus = "connecting" | "live" | "finished" | "archived" | "offline" | "no_match";
 
 /** Event types that belong on the fan timeline (passes and carries stay in the engine). */
 const KEY_EVENTS = new Set(["goal", "shot", "save", "card", "substitution", "kickoff", "half_time", "full_time"]);
@@ -77,7 +78,7 @@ export const useLive = create<LiveStore>()((set) => ({
       switch (message.type) {
         case "hello":
           return {
-            status: message.finished ? "finished" : "live",
+            status: message.archived ? "archived" : message.finished ? "finished" : "live",
             meta: message.meta,
             state: message.state,
             timeline: message.timeline.filter((e) => KEY_EVENTS.has(e.type)),
@@ -106,7 +107,7 @@ export const useLive = create<LiveStore>()((set) => ({
           const point = { elapsed: message.state.elapsed, index: message.state.momentum_index };
           const momentum =
             !last || point.elapsed - last.elapsed >= 30 ? [...s.momentum, point].slice(-MOMENTUM_KEEP) : s.momentum;
-          return { state: message.state, momentum, status: s.status === "finished" ? "finished" : "live" };
+          return { state: message.state, momentum, status: s.status === "finished" || s.status === "archived" ? s.status : "live" };
         }
         case "event":
           if (message.event.type === "pass") return { recentPasses: [...s.recentPasses, message.event].slice(-PASSES_KEEP) };

@@ -231,6 +231,7 @@ export const Snapshot = z.object({
   momentum: z.array(MomentumPoint),
   frame: Frame.nullable(),
   finished: z.boolean(),
+  archived: z.boolean().optional(),
   run_id: z.string().optional(),
   polls: z.array(Poll).default([]),
 });
@@ -410,6 +411,20 @@ export type Health = z.infer<typeof Health>;
 
 export const ReplayStatus = z.object({ speed: z.number(), paused: z.boolean() });
 export type ReplayStatus = z.infer<typeof ReplayStatus>;
+
+/** A stored replay, as the match archive lists it. */
+export const RunSummary = z.object({
+  run_id: z.string(),
+  match_id: z.string(),
+  status: z.string(),
+  match_status: z.string().optional(),
+  minute_label: z.string().default("0'"),
+  score: z.record(z.string(), z.number()).default({}),
+  created_at: z.string(),
+  source: z.string().optional(),
+  teams: z.array(z.object({ team_id: z.string(), short_name: z.string() })).optional(),
+});
+export type RunSummary = z.infer<typeof RunSummary>;
 
 export type FanProfile = {
   mode: Mode;

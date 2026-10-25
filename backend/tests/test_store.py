@@ -157,6 +157,45 @@ def test_finished_run_starts_a_new_one():
     assert [r["run_id"] for r in runs][:2] == [second, first]
 
 
+def test_past_runs_reopen():
+    store = MemoryStore()
+
+    async def main():
+        await store.open()
+        b = Backend(store)
+        b.writer.start()
+        first = await b.manager.start_synthetic(seed=7, speed=SPEED)
+        await b.play_until(None)
+        played = first.snapshot()
+        live = await b.manager.start_synthetic(seed=7, speed=SPEED)
+        await b.play_until(30)
+        await b.manager.stop()
+        await b.writer.flush()
+
+        later = Backend(store)  # another process, reading what the first one stored
+        later.writer.start()
+        runs = await later.repo.list_runs()
+        past = await later.manager.open_run(first.run_id)
+        reopened = past.snapshot()
+        past.fans.rate(next(iter(past.fans.ratings(past.engine)))["player_id"], "a" * 20, 8, past.engine)
+        resumed = await later.manager.open_run(live.run_id)
+        await later.play_until(None)
+        with pytest.raises(LookupError):
+            await later.manager.open_run("nope")
+        await later.manager.stop()
+        await later.writer.close()
+        return runs, played, reopened, resumed, live.run_id
+
+    runs, played, reopened, resumed, live_id = run(main())
+    assert runs[0]["teams"] == [{"team_id": "NBR", "short_name": "Northbridge"},
+                                {"team_id": "HBC", "short_name": "Harbour"}]
+    assert reopened["archived"] and reopened["finished"] and reopened["run_id"] == played["run_id"]
+    assert reopened["state"]["score"] == played["state"]["score"] and reopened["timeline"] == played["timeline"]
+    assert len(reopened["insights"]) == len(played["insights"]) and reopened["polls"] == played["polls"]
+    assert resumed.run_id == live_id and not resumed.archived and resumed.finished  # carried on to full time
+    assert resumed.engine.state()["status"] == "full_time"
+
+
 def test_fan_outputs_survive_a_restart(played):
     store = MemoryStore()
     client = ScriptedClient()

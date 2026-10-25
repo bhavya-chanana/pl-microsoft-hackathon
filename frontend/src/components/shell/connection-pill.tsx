@@ -8,6 +8,7 @@ const LABEL = {
   connecting: copy.connection.connecting,
   live: copy.connection.live,
   finished: copy.connection.finished,
+  archived: copy.connection.archived,
   offline: copy.connection.offline,
   no_match: copy.connection.noMatch,
 } as const;

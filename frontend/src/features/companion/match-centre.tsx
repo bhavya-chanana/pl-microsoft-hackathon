@@ -8,6 +8,7 @@ import { MomentumBar } from "@/features/broadcast/momentum-bar";
 import { useLive } from "@/features/live/live-store";
 import { ProfilePanel } from "@/features/profile/profile-panel";
 import { useProfile } from "@/features/profile/profile-store";
+import { PastMatches } from "@/features/replay/past-matches";
 import { ReplayControls } from "@/features/replay/replay-controls";
 import { MetricTile } from "@/features/stats/metric-tile";
 import { ShotMapPanel } from "@/features/stats/shot-map";
@@ -86,6 +87,7 @@ export function MatchCentre() {
           </Tabs>
         )}
         {wide && <ReplayControls className="max-w-xl" />}
+        {wide && <PastMatches className="max-w-xl" />}
       </div>
       <aside
         aria-label={copy.feed.heading}
@@ -137,6 +139,7 @@ export function MatchCentre() {
           </Tabs>
         )}
         {!wide && <ReplayControls />}
+        {!wide && <PastMatches />}
       </aside>
     </main>
   );

@@ -331,6 +331,16 @@ async def runs(limit: int = Query(default=20, le=100)) -> list[dict[str, Any]]:
     return [{k: v for k, v in r.items() if k != "state"} for r in await manager.repo.list_runs(limit)]
 
 
+@app.post("/api/runs/{run_id}/open")
+async def open_run(run_id: str) -> dict[str, Any]:
+    """Reopen a stored run: a live demo replay carries on, anything else opens as it was left."""
+    try:
+        s = await manager.open_run(run_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="no such run") from exc
+    return {"match_id": s.meta.match_id, "run_id": s.run_id, "archived": s.archived}
+
+
 @app.post("/api/replay/control")
 async def control_replay(req: ControlRequest) -> dict[str, Any]:
     _session()

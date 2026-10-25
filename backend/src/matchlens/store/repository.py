@@ -143,6 +143,9 @@ class RunRecorder:
             "status": "live", "speed": speed, "paused": False, "position_elapsed": 0.0,
             "minute_label": "0'", "score": {}, "created_at": stamp, "finished_at": None, "resumes": 0,
         }
+        # Enough to list the run without loading its meta: "Northbridge 3-2 Harbour".
+        self.run.setdefault("teams", [{"team_id": meta[side]["team_id"], "short_name": meta[side]["short_name"]}
+                                      for side in ("home", "away")])
         if resumed_from is not None:
             self.run["resumes"] = int(self.run.get("resumes", 0)) + 1
             self.run["resumed_at"] = stamp

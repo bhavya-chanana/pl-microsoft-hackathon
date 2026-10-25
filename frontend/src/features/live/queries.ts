@@ -2,6 +2,7 @@
 
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
+import { z } from "zod";
 
 import { getJson } from "@/lib/api";
 import {
@@ -16,6 +17,7 @@ import {
   PlayerRating,
   PlayerStats,
   Recap,
+  RunSummary,
   TeamStats,
 } from "@/lib/contract";
 import { profileQuery } from "@/features/profile/profile-store";
@@ -34,6 +36,8 @@ export const queryKeys = {
   decisions: ["decisions"] as const,
   health: ["health"] as const,
   ratings: ["ratings"] as const,
+  runs: ["runs"] as const,
+  feeds: ["feeds"] as const,
 };
 
 /** Refresh live queries when new insights land, at most once a second. */
@@ -150,5 +154,25 @@ export function useRatings() {
     queryFn: ({ signal }) => getJson("ratings", PlayerRating.array(), undefined, signal),
     refetchInterval: 10_000,
     placeholderData: keepPreviousData,
+  });
+}
+
+/** Stored replays, newest first (the match archive). */
+export function useRuns() {
+  const runId = useLive((s) => s.runId);
+  return useQuery({
+    queryKey: [...queryKeys.runs, runId],
+    queryFn: ({ signal }) => getJson("runs", RunSummary.array(), { limit: 8 }, signal),
+    refetchInterval: 30_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Recorded matches (from video, on this machine) that can be replayed. */
+export function useFeeds() {
+  return useQuery({
+    queryKey: queryKeys.feeds,
+    queryFn: ({ signal }) => getJson("feeds", z.string().array(), undefined, signal),
+    staleTime: 60_000,
   });
 }

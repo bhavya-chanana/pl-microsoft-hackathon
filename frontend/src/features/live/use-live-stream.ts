@@ -25,7 +25,8 @@ export function useLiveStream(): { reconnect: () => void } {
       if (parsed.success) apply(parsed.data);
     };
     source.onerror = () => {
-      if (useLive.getState().status !== "finished") setStatus("offline");
+      const { status } = useLive.getState();
+      if (status !== "finished" && status !== "archived") setStatus("offline");
     };
     return () => source.close();
   }, [apply, setStatus, attempt]);
