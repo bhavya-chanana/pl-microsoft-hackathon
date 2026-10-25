@@ -433,3 +433,171 @@ export type FanProfile = {
   playerId: string | null;
   metric: Metric | null;
 };
+
+/** One telestrator stroke, in pitch metres; drawn `at_s` seconds into the replay. */
+export const Drawing = z.object({
+  kind: z.enum(["lane", "carry", "shot", "ring", "zone", "path", "marker"]),
+  points: z.array(Point),
+  at_s: z.number(),
+  team_id: z.string().nullable(),
+  player_id: z.string().nullable(),
+  label: z.string().nullable(),
+  radius: z.number().nullable(),
+  emphasis: z.enum(["primary", "secondary"]),
+  event_id: z.string().nullable(),
+});
+export type Drawing = z.infer<typeof Drawing>;
+
+export const Moment = z.object({
+  insight_id: z.string(),
+  signal_type: z.string(),
+  minute_label: z.string(),
+  team_id: z.string().nullable(),
+  player_ids: z.array(z.string()),
+  start_elapsed: z.number(),
+  end_elapsed: z.number(),
+  focus_elapsed: z.number(),
+  frames: z.array(Frame),
+  drawings: z.array(Drawing),
+});
+export type Moment = z.infer<typeof Moment>;
+
+export const RhythmState = z.enum(["control", "balanced", "chaos"]);
+export type RhythmState = z.infer<typeof RhythmState>;
+
+export const PulseRow = z.object({
+  elapsed: z.number(),
+  minute_label: z.string(),
+  period: z.number(),
+  momentum: z.number(),
+  state: RhythmState,
+  controlling_team: z.string().nullable(),
+  turnovers_per_min: z.number(),
+  fouls_per_min: z.number(),
+  pass_share: z.record(z.string(), z.number()),
+  pressure: z.record(z.string(), z.number()),
+  passes: z.number(),
+});
+export type PulseRow = z.infer<typeof PulseRow>;
+
+export const PulsePin = z.object({
+  insight_id: z.string(),
+  type: z.string(),
+  elapsed: z.number(),
+  minute_label: z.string(),
+  team_id: z.string().nullable(),
+  player_ids: z.array(z.string()),
+  priority: z.number(),
+  card: z.string().nullable(),
+});
+export type PulsePin = z.infer<typeof PulsePin>;
+
+export const Pulse = z.object({
+  home_team_id: z.string(),
+  away_team_id: z.string(),
+  now: z.object({
+    elapsed: z.number(),
+    minute_label: z.string(),
+    momentum: z.number(),
+    state: RhythmState.nullable(),
+    controlling_team: z.string().nullable(),
+  }),
+  rows: z.array(PulseRow),
+  pins: z.array(PulsePin),
+  spells: z.array(
+    z.object({
+      state: RhythmState,
+      team_id: z.string().nullable(),
+      from_elapsed: z.number(),
+      to_elapsed: z.number(),
+      minutes: z.number(),
+    }),
+  ),
+});
+export type Pulse = z.infer<typeof Pulse>;
+
+export const PunditAnswer = z.object({
+  question: z.string(),
+  intent: z.string(),
+  answer: z.string(),
+  points: z.array(z.string()),
+  key_numbers: z.array(KeyNumber),
+  cited_moments: z.array(
+    z.object({ insight_id: z.string(), minute_label: z.string(), type: z.string(), team_id: z.string().nullable() }),
+  ),
+  minute_label: z.string(),
+  fact_check: FactCheck,
+  source: z.enum(["agent", "data"]),
+  agents: z.array(z.string()),
+  latency_ms: z.number().nullable(),
+});
+export type PunditAnswer = z.infer<typeof PunditAnswer>;
+
+export const BEAT_TYPES = ["goal", "big_chance", "yellow_card", "red_card", "substitution"] as const;
+export const Beat = z.object({
+  minute: z.number(),
+  type: z.enum(BEAT_TYPES),
+  team_id: z.string(),
+  player_id: z.string(),
+  related_player_id: z.string().nullable().optional(),
+  initially_credited_to: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+});
+export type Beat = z.infer<typeof Beat>;
+
+export const Storyline = z.object({
+  title: z.string(),
+  summary: z.string(),
+  phases: z.array(
+    z.object({
+      start_minute: z.number(),
+      end_minute: z.number(),
+      home_dominance: z.number(),
+      label: z.string().nullable().optional(),
+    }),
+  ),
+  beats: z.array(Beat),
+  scripted_goals_only: z.boolean().optional(),
+});
+export type Storyline = z.infer<typeof Storyline>;
+
+export const ScenarioPreset = z.object({ preset_id: z.string(), seed: z.number(), storyline: Storyline });
+export type ScenarioPreset = z.infer<typeof ScenarioPreset>;
+
+const RosterPlayer = z.object({
+  player_id: z.string(),
+  name: z.string(),
+  position: z.string(),
+  role: z.string(),
+  starting: z.boolean(),
+});
+const RosterTeam = z.object({ team_id: z.string(), name: z.string(), side: z.string(), players: z.array(RosterPlayer) });
+export const Scenarios = z.object({
+  presets: z.array(ScenarioPreset),
+  roster: z.object({ home: RosterTeam, away: RosterTeam }),
+});
+export type Scenarios = z.infer<typeof Scenarios>;
+export type RosterTeam = z.infer<typeof RosterTeam>;
+
+export const ScriptCheck = z.object({
+  title: z.string(),
+  summary: z.string(),
+  finished: z.boolean(),
+  beats: z.array(
+    z.object({
+      minute: z.number(),
+      type: z.string(),
+      team_id: z.string(),
+      player_id: z.string(),
+      related_player_id: z.string().nullable(),
+      status: z.enum(["delivered", "missed", "pending"]),
+      event_id: z.string().nullable(),
+      minute_label: z.string().nullable(),
+    }),
+  ),
+  delivered: z.number(),
+  total: z.number(),
+});
+export type ScriptCheck = z.infer<typeof ScriptCheck>;
+
+export const Kickoff = z.object({ match_id: z.string(), run_id: z.string(), title: z.string(), speed: z.number() });

@@ -51,6 +51,9 @@
   --color-tier-gold: var(--tier-gold);
   --color-tier-silver: var(--tier-silver);
   --color-tier-bronze: var(--tier-bronze);
+  --color-telestrator: var(--telestrator);
+  --color-pulse-control: var(--pulse-control);
+  --color-pulse-chaos: var(--pulse-chaos);
 
   --font-sans: var(--font-text), var(--font-devanagari), ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-display), var(--font-devanagari), ui-sans-serif, sans-serif;
@@ -119,6 +122,10 @@
   --tier-gold: oklch(0.74 0.14 85);
   --tier-silver: oklch(0.72 0.012 250);
   --tier-bronze: oklch(0.6 0.1 50);
+  /* Telestrator chalk and the Match Pulse rhythm bands. */
+  --telestrator: oklch(0.9 0.17 100);
+  --pulse-control: oklch(0.62 0.1 195);
+  --pulse-chaos: oklch(0.6 0.2 350);
 
   --elevation-1: 0 1px 2px oklch(0.3 0.03 255 / 0.06), 0 2px 8px oklch(0.3 0.03 255 / 0.05);
   --elevation-2: 0 4px 12px oklch(0.3 0.03 255 / 0.1), 0 12px 32px oklch(0.3 0.03 255 / 0.08);
@@ -166,6 +173,9 @@
   --tier-gold: oklch(0.8 0.13 85);
   --tier-silver: oklch(0.78 0.012 250);
   --tier-bronze: oklch(0.68 0.1 50);
+  --telestrator: oklch(0.92 0.17 102);
+  --pulse-control: oklch(0.74 0.1 195);
+  --pulse-chaos: oklch(0.7 0.19 350);
 
   --elevation-1: 0 1px 0 oklch(1 0 0 / 0.04) inset;
   --elevation-2: 0 8px 24px oklch(0.05 0.02 255 / 0.5), 0 1px 0 oklch(1 0 0 / 0.05) inset;

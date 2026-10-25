@@ -242,6 +242,14 @@ uses, plus the replay, archive, vote and rating `POST`s) and the WebSocket as Se
 | `GET /api/runs?limit=` | Stored runs, newest first: status, position, score, team names, resumes |
 | `POST /api/runs/{run_id}/open` | Reopen a stored run: a live one resumes, a finished one opens read-only. Returns `{match_id, run_id, archived}`; `404` if unknown |
 | `POST /api/replay/control` `{speed?, paused?}` | Change speed or pause |
+| `GET /api/moments/{insight_id}` | Replay of one key moment: `{insight_id, signal_type, minute_label, team_id, player_ids, start_elapsed, end_elapsed, focus_elapsed, frames[], events[], drawings[]}`. Each drawing is `{kind: lane\|carry\|shot\|ring\|zone\|path\|marker, points[{x,y}], at_s, team_id, player_id, label, radius, emphasis, event_id}` in pitch metres, `at_s` seconds after `start_elapsed`. No language model; `404` if the moment is unknown |
+| `GET /api/pulse` | Match Pulse: `{home_team_id, away_team_id, now, rows[], pins[], spells[]}`. One row per sampled minute: momentum, `state` (control, balanced or chaos), controlling team, turnovers and fouls a minute, pass share, pressing actions per team and passes |
+| `POST /api/ask` `{question, mode, language, club_id?, player_id?}` | Ask the Pundit. Returns `{question, intent, answer, points[], key_numbers[], cited_moments[], minute_label, fact_check, source: agent\|data, agents[], latency_ms}`. Capped service-wide by `MATCHLENS_ASK_PER_MINUTE` (default 40; `429` past it) |
+| `GET /api/scenarios` | Scenario Lab presets `{preset_id, seed, storyline}` and the roster a custom storyline may use |
+| `POST /api/scenarios/draft` `{prompt, language}` | Write a storyline from a description with the Scenario agent and check it is playable. `503` without live models, `422` `{message, problems[]}` if it cannot be made playable |
+| `POST /api/scenarios/kickoff` `{preset_id?, storyline?, seed, speed}` | Play a preset or a checked storyline from kick-off, replacing the current match for every viewer. Returns `{match_id, run_id, title, speed}`; `422` with the problems if the storyline is not playable |
+| `GET /api/scenarios/check` | Script vs reality for the running storyline: each beat `delivered`, `missed` or `pending`; `404` if the match was not played from a storyline |
+| `GET /api/dataset` | The running match as a zip: `meta.json`, `events.jsonl` (as delivered, corrections included) and `tracking.jsonl.gz` |
 | `/mcp` | MCP server (streamable HTTP) with the match-state tools, internal only |
 
 ### WebSocket `/ws`

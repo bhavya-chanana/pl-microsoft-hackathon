@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import gzip
 import importlib.util
+import io
+import json
 import logging
 import os
+import time
+import zipfile
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -15,16 +21,25 @@ from fastapi import FastAPI, HTTPException, Query, Response, WebSocket, WebSocke
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from matchlens.agents import pundit
 from matchlens.agents.contracts import FanProfile, Language, Mode
 from matchlens.agents.llm import build_clients
 from matchlens.agents.pipeline import AgentTeam, InsightPipeline
+from matchlens.agents.pundit import MAX_QUESTION
+from matchlens.agents.scenario import MAX_PROMPT, write_storyline
+from matchlens.agents.scenario import roster as scenario_roster
 from matchlens.agents.services import CATCHUP_WINDOWS, FanServices, narration_text, personalise_feed
 from matchlens.domain.models import EventType, SyntheticMatch
 from matchlens.ingest.adapters import ReplayControl, SyntheticReplayAdapter
+from matchlens.interpret.moments import moment
+from matchlens.interpret.pulse import pulse
 from matchlens.mcp_server.server import mcp
 from matchlens.runtime.fans import VOTER_PATTERN
 from matchlens.runtime.manager import manager
 from matchlens.runtime.session import MatchSession, event_payload
+from matchlens.simulator.roster import default_match_meta
+from matchlens.simulator.scenarios import PRESETS, check_storyline, presets, script_vs_reality
+from matchlens.simulator.storyline import Storyline, comeback_storyline
 from matchlens.speech import Narrator
 from matchlens.store.base import open_store
 from matchlens.store.repository import Repository
@@ -394,6 +409,136 @@ async def team(team_id: str) -> dict[str, Any]:
 @app.get("/api/signals")
 async def signals() -> list[dict[str, Any]]:
     return [x.model_dump(mode="json") for x in _session().engine.signals()]
+
+
+@app.get("/api/moments/{insight_id}")
+async def moment_replay(insight_id: str) -> dict[str, Any]:
+    """Replay of one moment: tracking frames around it, its events and telestrator drawings."""
+    s = _session()
+    signal = next((x for x in s.engine.signals() if x.signal_id == insight_id), None)
+    if signal is None:
+        raise HTTPException(404, "unknown moment")
+    return moment(s.engine, signal)
+
+
+@app.get("/api/pulse")
+async def match_pulse() -> dict[str, Any]:
+    """Match Pulse: momentum, control or chaos, pressing and tempo per minute, with the key moments pinned."""
+    return pulse(_session().engine)
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=2, max_length=MAX_QUESTION)
+    mode: Mode = Mode.CASUAL
+    language: Language = Language.EN
+    club_id: str | None = None
+    player_id: str | None = None
+
+
+# Ask the Pundit costs a model call per new question: cap the whole service, not per client.
+ASK_LIMIT = int(os.getenv("MATCHLENS_ASK_PER_MINUTE", "40"))
+_asked: deque[float] = deque()
+
+
+@app.post("/api/ask")
+async def ask_pundit(req: AskRequest) -> dict[str, Any]:
+    """Ask the Pundit: a fan's question answered from the match data and fact-checked."""
+    now = time.monotonic()
+    while _asked and now - _asked[0] > 60:
+        _asked.popleft()
+    if len(_asked) >= ASK_LIMIT:
+        raise HTTPException(429, "the pundit is busy; ask again in a moment")
+    _asked.append(now)
+    profile = _profile(req.mode, req.language, req.club_id, req.player_id, None)
+    result = await pundit.ask(_runtime().team, _session(), req.question, profile)
+    return result.model_dump(mode="json")
+
+
+class ScenarioDraftRequest(BaseModel):
+    prompt: str = Field(min_length=8, max_length=MAX_PROMPT)
+    language: Language = Language.EN
+
+
+class KickoffRequest(BaseModel):
+    preset_id: str | None = None
+    storyline: Storyline | None = None
+    seed: int = Field(default=7, ge=0, le=1_000_000)
+    speed: float = Field(default=15.0, gt=0, le=60)
+
+
+@app.get("/api/scenarios")
+async def scenario_presets() -> dict[str, Any]:
+    """Preset storylines for Scenario Lab, and the roster a custom storyline may use."""
+    return {"presets": presets(), "roster": scenario_roster(default_match_meta())}
+
+
+@app.post("/api/scenarios/draft")
+async def draft_scenario(req: ScenarioDraftRequest) -> dict[str, Any]:
+    """Turn a match described in words into a storyline (strong model), checked before it is offered."""
+    rt = _runtime()
+    if not rt.clients.settings.online:
+        raise HTTPException(503, "writing a match from a description needs the live models; pick a preset")
+    story, problems = await write_storyline(rt.team, default_match_meta(), req.prompt, req.language.value)
+    if story is None:
+        raise HTTPException(422, {"message": "the storyline could not be made playable", "problems": problems})
+    return {"storyline": story.model_dump(mode="json")}
+
+
+@app.post("/api/scenarios/kickoff")
+async def kickoff_scenario(req: KickoffRequest) -> dict[str, Any]:
+    """Play a preset or a checked storyline from kick-off. Replaces the current match for every viewer."""
+    seed = req.seed
+    if req.preset_id:
+        if req.preset_id not in PRESETS:
+            raise HTTPException(404, "unknown preset")
+        factory, seed = PRESETS[req.preset_id]
+        story = factory()
+    elif req.storyline:
+        story = req.storyline
+    else:
+        raise HTTPException(422, "give a preset_id or a storyline")
+    problems = check_storyline(default_match_meta(), story)
+    if problems:
+        raise HTTPException(422, {"message": "the storyline cannot be played", "problems": problems})
+    # The default comeback stays the default storyline, so the recorded demo and resume keep working.
+    is_default = story == comeback_storyline()
+    s = await manager.start_synthetic(seed=seed, speed=req.speed, storyline=None if is_default else story)
+    return {"match_id": s.meta.match_id, "run_id": s.run_id, "title": story.title, "speed": req.speed}
+
+
+@app.get("/api/scenarios/check")
+async def scenario_check() -> dict[str, Any]:
+    """Script vs reality: whether each scripted moment of the current storyline has happened."""
+    s = _session()
+    if manager.seed is None:
+        raise HTTPException(404, "this match was not played from a storyline")
+    return script_vs_reality(s.engine, manager.storyline or comeback_storyline())
+
+
+@app.get("/api/dataset")
+async def dataset_download() -> Response:
+    """The current match as a dataset: metadata, every event as delivered (corrections included), tracking."""
+    s = _session()
+    engine = s.engine
+    story = manager.storyline or (comeback_storyline() if manager.seed is not None else None)
+
+    def build() -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            meta = {"match": s.meta.model_dump(mode="json"), "seed": manager.seed, "run_id": s.run_id,
+                    "storyline": story.model_dump(mode="json") if story else None, "score": engine.score(),
+                    "status": engine.state()["status"], "synthetic": manager.seed is not None,
+                    "schemas": "docs/schema in the Matchlens repository"}
+            z.writestr("meta.json", json.dumps(meta, indent=2))
+            z.writestr("events.jsonl", "".join(e.model_dump_json() + "\n" for e in engine.feed_events()))
+            frames = "".join(f.model_dump_json() + "\n" for f in engine.frames_between(0, engine.c.elapsed))
+            z.writestr("tracking.jsonl.gz", gzip.compress(frames.encode()))
+        return buf.getvalue()
+
+    data = await asyncio.to_thread(build)
+    name = f"{s.run_id}.zip"
+    return Response(data, media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @app.websocket("/ws")

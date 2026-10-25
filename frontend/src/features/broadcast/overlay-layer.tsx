@@ -173,7 +173,7 @@ export function OverlayLayer({ onAir }: { onAir: OnAir }) {
           )}
         </AnimatePresence>
       </div>
-      <div className="absolute top-[14%] right-0">
+      <div className="absolute top-[24%] right-0 @2xl:top-[14%]">
         <AnimatePresence>
           {upper && (
             <motion.div

@@ -25,9 +25,14 @@ export const PROXY_GET = [
   /^agents\/decisions$/,
   /^players\/[\w-]+$/,
   /^teams\/[\w-]+$/,
+  /^moments\/[\w:.\-]+$/,
+  /^pulse$/,
+  /^scenarios$/,
+  /^scenarios\/check$/,
+  /^dataset$/,
 ];
 
-/** Replay controls and the match archive (demo only), fan votes and fan ratings. */
+/** Replay controls and the match archive (demo only), fan votes and fan ratings, the pundit, Scenario Lab. */
 export const PROXY_POST = [
   /^replay$/,
   /^replay\/control$/,
@@ -35,4 +40,10 @@ export const PROXY_POST = [
   /^runs\/[\w-]+\/open$/,
   /^polls\/[\w-]+\/vote$/,
   /^ratings$/,
+  /^ask$/,
+  /^scenarios\/draft$/,
+  /^scenarios\/kickoff$/,
 ];
+
+/** Paths whose answer may take a strong-model call or two (ms); everything else gets the default. */
+export const PROXY_SLOW: Record<string, number> = { "scenarios/draft": 100_000 };

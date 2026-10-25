@@ -6,6 +6,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** The response's `detail` as sent, for errors that carry more than a message. */
+    readonly detail: unknown = null,
   ) {
     super(message);
   }
@@ -15,7 +17,7 @@ async function parse<S extends z.ZodType>(response: Response, schema: S): Promis
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { detail?: unknown } | null;
     const detail = typeof body?.detail === "string" ? body.detail : response.statusText;
-    throw new ApiError(detail, response.status);
+    throw new ApiError(detail, response.status, body?.detail ?? null);
   }
   return schema.parse(await response.json());
 }
