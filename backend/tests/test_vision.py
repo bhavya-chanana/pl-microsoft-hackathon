@@ -9,6 +9,7 @@ cv2 = pytest.importorskip("cv2")
 pytest.importorskip("scipy")
 
 from matchlens.vision.pitch import PitchProjector  # noqa: E402
+from matchlens.vision.teams import LEFT, OTHER, RIGHT, shirt_colour, split_teams  # noqa: E402
 from matchlens.vision.tracks import fill_gaps, from_rows, per_second, project, smooth, speeds  # noqa: E402
 
 FPS = 25.0
@@ -59,3 +60,28 @@ def test_speeds_and_seconds():
     teleport = positions.copy()
     teleport[50:, 0, 0] += 40  # a projection glitch is not a sprint
     assert np.nanmax(speeds(teleport, FPS)) <= 12
+
+
+def lab(bgr):
+    return cv2.cvtColor(np.uint8([[bgr]]), cv2.COLOR_BGR2LAB)[0, 0].astype(float)
+
+
+def test_shirt_colour_ignores_grass():
+    crop = np.zeros((60, 24, 3), np.uint8)
+    crop[:] = (40, 140, 40)  # grass
+    crop[12:30, 6:18] = (200, 60, 20)  # a blue shirt
+    assert np.allclose(shirt_colour(crop), lab((200, 60, 20)), atol=1)
+    assert shirt_colour(np.full((60, 24, 3), (40, 140, 40), np.uint8)) is None
+
+
+def test_teams_by_kit():
+    rng = np.random.default_rng(1)
+    blue, white, red, black, yellow = (lab(c) for c in ((200, 60, 20), (235, 235, 235), (30, 30, 220), (20, 20, 20),
+                                                        (0, 230, 230)))
+    colours = np.array([blue] * 10 + [white] * 10 + [red, black, yellow]) + rng.normal(0, 3, (23, 3))
+    median_x = np.r_[rng.uniform(65, 90, 10), rng.uniform(15, 40, 10), 100.0, 4.0, 50.0]
+    split = split_teams(colours, median_x)
+    assert (split.labels[:10] == RIGHT).all() and (split.labels[10:20] == LEFT).all()  # white starts on the left
+    assert split.labels[20] == RIGHT and split.labels[21] == LEFT and split.labels[22] == OTHER
+    assert split.keepers == {20, 21}
+    assert split.kits[0] > "#d0d0d0" and split.kits[1].startswith("#1")
