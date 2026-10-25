@@ -81,3 +81,11 @@ class PitchProjector:
         metres[~(on_view & on_pitch)] = np.nan
         out[seen] = metres
         return out
+
+    def on_pitch(self, pixels: np.ndarray, margin: float = 0.0) -> np.ndarray:
+        """Mask of raw clip pixels that land inside the lines (give or take ``margin`` metres):
+        players, not the officials and staff along the touchline."""
+        metres = self.to_pitch(pixels)
+        with np.errstate(invalid="ignore"):
+            return ((metres[:, 0] >= -margin) & (metres[:, 0] <= PITCH_LENGTH + margin)
+                    & (metres[:, 1] >= -margin) & (metres[:, 1] <= PITCH_WIDTH + margin))

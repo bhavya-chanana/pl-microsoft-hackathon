@@ -29,6 +29,7 @@ def test_pixels_to_pitch(projector):
     out = projector.to_pitch(np.array([[12.0, 10.0], [2.0, 0.0], [500.0, 500.0], [np.nan, np.nan]]))
     assert np.allclose(out[:2], [[20.0, 20.0], [0.0, 0.0]])
     assert np.isnan(out[2:]).all()  # off the view, and unseen
+    assert projector.on_pitch(np.array([[12.0, 10.0], [55.5, 10.0], [500.0, 500.0]])).tolist() == [True, False, False]
 
 
 def test_fixed_point_maps_match_float_maps(projector):
@@ -188,3 +189,17 @@ def test_feed_is_a_playable_fictional_match():
     for item in feed_order(match.events, match.tracking):
         engine.ingest_event(item) if hasattr(item, "type") else engine.ingest_frame(item)
     assert engine.team_stats("WSM")["passes_completed"] == 1
+
+
+def test_tracker_keeps_identities():
+    from matchlens.vision.tracker import LOST_FRAMES, Tracker
+
+    tracker = Tracker()
+    ids = []
+    for f in range(10):
+        a = [100 + 6 * f, 50, 120 + 6 * f, 90, 0.9]  # running right
+        b = [300, 50, 320, 90, 0.9 if f < 5 else 0.3]  # half hidden from frame 5: a weak detection
+        ids.append(dict(tracker.update(f, np.array([a, b]))).keys())
+    assert all(list(k) == [1, 2] for k in ids)  # no new identities, the weak box kept its track
+    assert [i for i, _ in tracker.update(10, np.array([[600, 50, 620, 90, 0.4]]))] == []  # weak boxes start nothing
+    assert [i for i, _ in tracker.update(10 + LOST_FRAMES + 1, np.array([[300, 50, 320, 90, 0.9]]))] == [3]

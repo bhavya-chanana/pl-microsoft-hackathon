@@ -16,6 +16,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+import cv2
 import numpy as np
 
 from matchlens.domain.models import PITCH_LENGTH, PITCH_WIDTH
@@ -54,6 +55,13 @@ class SoccerTrackMatch:
     def clip(self) -> Path:
         return self._path("mot", "clips", f"{self.match}.mp4")
 
+    def width(self) -> int:
+        capture = cv2.VideoCapture(str(self.clip))
+        try:
+            return int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        finally:
+            capture.release()
+
     def projector(self) -> PitchProjector:
         """The shipped maps and homography, recalibrated on the surveyed keypoints."""
         raw = ("raw", self.match)
@@ -62,10 +70,14 @@ class SoccerTrackMatch:
             np.load(self._path(*raw, f"{self.match}_mapy.npy"), allow_pickle=False),
             np.load(self._path(*raw, f"{self.match}_homography.npy"), allow_pickle=False),
         )
+        return projector.calibrate(*self.keypoints())
+
+    def keypoints(self) -> tuple[np.ndarray, np.ndarray]:
+        """Surveyed pitch points: raw clip pixels (N, 2) and their pitch metres (N, 2)."""
         # {"(x,y)": [px, py]}: pitch metres -> raw clip pixel
-        keypoints = json.loads(self._path(*raw, f"{self.match}_keypoints.json").read_text())
-        pitch = [[float(v) for v in key.strip("()").split(",")] for key in keypoints]
-        return projector.calibrate(np.array(list(keypoints.values()), dtype=np.float64), np.array(pitch))
+        raw = json.loads(self._path("raw", self.match, f"{self.match}_keypoints.json").read_text())
+        pitch = [[float(v) for v in key.strip("()").split(",")] for key in raw]
+        return np.array(list(raw.values()), dtype=np.float64), np.array(pitch)
 
     def tracks(self) -> Tracks:
         """Ground-truth player boxes for the clip."""
