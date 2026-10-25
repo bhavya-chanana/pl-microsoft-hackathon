@@ -16,6 +16,7 @@ import { copy } from "@/lib/copy";
 import { CatchupDialog, RecapDialog } from "./catchup-dialog";
 import { InsightFeed } from "./insight-feed";
 import { MatchTimeline } from "./match-timeline";
+import { ListenToggle } from "./narration";
 
 function MatchHeading() {
   const meta = useLive((s) => s.meta);
@@ -84,6 +85,7 @@ export function MatchCentre() {
         <div className="flex flex-col gap-4 rounded-lg border bg-card p-4 shadow-raised">
           <CatchupDialog />
           <RecapDialog />
+          <ListenToggle />
         </div>
         <ProfilePanel className="rounded-lg border bg-card p-4" />
         {wide ? (

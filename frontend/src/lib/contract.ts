@@ -354,6 +354,8 @@ export const Health = z.object({
   llm: z.string().nullable(),
   processing_ms_p95: z.number().nullable(),
   agent_insight_ms_p95: z.number().nullable(),
+  /** "azure" when the backend can read insights aloud; otherwise the browser's voices are used. */
+  speech: z.string().nullable().optional(),
 });
 export type Health = z.infer<typeof Health>;
 

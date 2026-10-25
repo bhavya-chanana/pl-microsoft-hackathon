@@ -11,6 +11,7 @@ param backendMinReplicas int
 param matchSpeed string
 param backendImageName string
 param frontendImageName string
+param speechSku string
 
 var token = toLower(uniqueString(subscription().id, environmentName, location))
 var placeholderImage = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
@@ -47,6 +48,18 @@ resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     principalId: identity.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRole)
+  }
+}
+
+// Voice narration (Azure AI Speech, Entra ID only).
+module speech 'speech.bicep' = {
+  name: 'matchlens-speech'
+  params: {
+    location: location
+    tags: tags
+    token: token
+    principalId: identity.properties.principalId
+    sku: speechSku
   }
 }
 
@@ -114,6 +127,8 @@ resource backend 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'MATCHLENS_SPEED', value: matchSpeed }
             { name: 'MATCHLENS_COSMOS_ENDPOINT', value: cosmos.outputs.endpoint }
             { name: 'MATCHLENS_COSMOS_DATABASE', value: cosmos.outputs.databaseName }
+            { name: 'MATCHLENS_SPEECH_REGION', value: speech.outputs.region }
+            { name: 'MATCHLENS_SPEECH_RESOURCE_ID', value: speech.outputs.resourceId }
           ]
           probes: [
             {
@@ -181,3 +196,5 @@ output registryName string = registry.name
 output frontendUrl string = 'https://${frontend.properties.configuration.ingress.fqdn}'
 output backendUrl string = backendUrl
 output cosmosEndpoint string = cosmos.outputs.endpoint
+output speechResourceId string = speech.outputs.resourceId
+output speechRegion string = speech.outputs.region

@@ -174,6 +174,28 @@ class FanServices:
         return result
 
 
+def fan_text(ins: dict[str, Any], profile: FanProfile) -> dict[str, str]:
+    """An insight's headline and body in the fan's mode and language."""
+    return (ins["variants"].get(profile.mode.value, {}).get(profile.language.value)
+            or ins["variants"].get(Mode.CASUAL.value, {}).get(profile.language.value)
+            or {"headline": ins["headline"], "body": ins.get("explanation") or ""})
+
+
+def narration_text(session: MatchSession, insight_id: str, profile: FanProfile) -> str | None:
+    """What the commentator voice reads for one insight: the fan's headline and body, and their
+    club's angle when they follow a club."""
+    ins = session.insights.get(insight_id)
+    if not ins or ins["stage"] == "retracted":
+        return None
+    text = fan_text(ins, profile)
+    parts = [text["headline"].rstrip(".!?") + ".", text["body"]]
+    if profile.club_id:
+        angle = ins["club_angles"].get(profile.club_id, {}).get(profile.language.value)
+        if angle:
+            parts.append(angle)
+    return " ".join(p for p in parts if p)
+
+
 def personalise_feed(session: MatchSession, profile: FanProfile, limit: int = 50) -> list[dict[str, Any]]:
     """Insights rendered for one fan: their mode and language, their club's angle,
     and their favourite player's moments boosted (FR-035 to FR-037)."""
@@ -182,9 +204,7 @@ def personalise_feed(session: MatchSession, profile: FanProfile, limit: int = 50
         if ins["stage"] == "retracted":
             continue
         mode = profile.mode.value
-        text = (ins["variants"].get(mode, {}).get(profile.language.value)
-                or ins["variants"].get(Mode.CASUAL.value, {}).get(profile.language.value)
-                or {"headline": ins["headline"], "body": ins.get("explanation") or ""})
+        text = fan_text(ins, profile)
         involves_player = bool(profile.player_id and profile.player_id in ins["player_ids"])
         if mode == Mode.PLAYER_FOCUS.value and profile.player_id and not involves_player and ins["priority"] > 1:
             continue

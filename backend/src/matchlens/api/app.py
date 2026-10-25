@@ -10,18 +10,19 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from matchlens.agents.contracts import FanProfile, Language, Mode
 from matchlens.agents.llm import build_clients
 from matchlens.agents.pipeline import AgentTeam, InsightPipeline
-from matchlens.agents.services import CATCHUP_WINDOWS, FanServices, personalise_feed
+from matchlens.agents.services import CATCHUP_WINDOWS, FanServices, narration_text, personalise_feed
 from matchlens.domain.models import EventType
 from matchlens.mcp_server.server import mcp
 from matchlens.runtime.manager import manager
 from matchlens.runtime.session import MatchSession, event_payload
+from matchlens.speech import Narrator
 from matchlens.store.base import open_store
 from matchlens.store.repository import Repository
 from matchlens.store.writer import WriteBehind
@@ -43,6 +44,7 @@ class AgentRuntime:
         self.team = AgentTeam.build(self.clients)
         self.pipeline = InsightPipeline(self.team)
         self.fans = FanServices(self.team)
+        self.narrator = Narrator()
 
     async def on_signal(self, signal, session) -> None:
         await self.pipeline.handle(signal, session)
@@ -140,6 +142,7 @@ async def health() -> dict[str, Any]:
         "agent_insight_ms_p95": _p95(agent_lat),
         "run_id": s.run_id if s else None,
         "store": manager.repo.stats(),
+        "speech": "azure" if runtime and runtime.narrator.available else None,
     }
 
 
@@ -206,6 +209,26 @@ async def coach_brief(team_id: str, language: Language = Language.EN) -> dict[st
         raise HTTPException(404, "unknown team")
     result = await _runtime().fans.coach_brief(s, team_id, language.value)
     return result.model_dump(mode="json")
+
+
+@app.get("/api/speech")
+async def speech(
+    insight_id: str, mode: Mode = Mode.CASUAL, language: Language = Language.EN, club_id: str | None = None,
+    player_id: str | None = None,
+) -> Response:
+    """An insight read aloud (MP3) in the fan's mode and language, through Azure AI Speech."""
+    narrator = _runtime().narrator
+    if not narrator.available:
+        raise HTTPException(503, "speech is not configured; use the browser's voices")
+    text = narration_text(_session(), insight_id, _profile(mode, language, club_id, player_id, None))
+    if text is None:
+        raise HTTPException(404, "unknown insight")
+    try:
+        audio = await narrator.speak(text, language.value)
+    except Exception as exc:  # noqa: BLE001 - the browser falls back to its own voices
+        log.warning("speech synthesis failed: %s", exc)
+        raise HTTPException(502, "speech synthesis failed") from exc
+    return Response(audio, media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=3600"})
 
 
 @app.get("/api/agents/decisions")

@@ -142,6 +142,14 @@ export const copy = {
     agentsInvolved: "Agents involved",
     latency: (ms: number) => `Ready in ${ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`}`,
   },
+  narration: {
+    listen: "Listen",
+    listening: "Listening",
+    help: "Reads each new insight aloud as it lands.",
+    azureVoice: "Azure AI Speech voice",
+    browserVoice: "Your browser's voice",
+    unsupported: "This browser cannot read insights aloud.",
+  },
   factCheck: {
     verified: "Fact-checked",
     rewritten: "Corrected by fact-checker",

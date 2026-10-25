@@ -41,6 +41,10 @@ param backendMinReplicas int = 0
 @description('Replay speed the demo match starts at.')
 param matchSpeed string = '1'
 
+@description('Speech tier for voice narration. F0 is free (one per subscription); use S0 if one exists.')
+@allowed(['F0', 'S0'])
+param speechSku string = 'F0'
+
 @description('Set by azd after the first deploy, so re-provisioning keeps the running images.')
 param backendImageName string = ''
 param frontendImageName string = ''
@@ -71,6 +75,7 @@ module app 'app.bicep' = {
     matchSpeed: matchSpeed
     backendImageName: backendImageName
     frontendImageName: frontendImageName
+    speechSku: speechSku
   }
 }
 
@@ -90,4 +95,6 @@ output AZURE_CONTAINER_REGISTRY_NAME string = app.outputs.registryName
 output FRONTEND_URL string = app.outputs.frontendUrl
 output BACKEND_INTERNAL_URL string = app.outputs.backendUrl
 output MATCHLENS_COSMOS_ENDPOINT string = app.outputs.cosmosEndpoint
+output MATCHLENS_SPEECH_REGION string = app.outputs.speechRegion
+output MATCHLENS_SPEECH_RESOURCE_ID string = app.outputs.speechResourceId
 output MATCHLENS_LLM_MODE string = useOpenAi ? 'online' : 'offline'

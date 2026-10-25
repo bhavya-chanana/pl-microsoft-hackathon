@@ -17,6 +17,7 @@ export const PROXY_GET = [
   /^catchup$/,
   /^recap$/,
   /^coach$/,
+  /^speech$/,
   /^agents\/decisions$/,
   /^players\/[\w-]+$/,
   /^teams\/[\w-]+$/,
