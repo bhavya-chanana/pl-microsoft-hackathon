@@ -8,6 +8,7 @@ import importlib.util
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
@@ -18,7 +19,8 @@ from matchlens.agents.contracts import FanProfile, Language, Mode
 from matchlens.agents.llm import build_clients
 from matchlens.agents.pipeline import AgentTeam, InsightPipeline
 from matchlens.agents.services import CATCHUP_WINDOWS, FanServices, narration_text, personalise_feed
-from matchlens.domain.models import EventType
+from matchlens.domain.models import EventType, SyntheticMatch
+from matchlens.ingest.adapters import ReplayControl, SyntheticReplayAdapter
 from matchlens.mcp_server.server import mcp
 from matchlens.runtime.fans import VOTER_PATTERN
 from matchlens.runtime.manager import manager
@@ -111,6 +113,17 @@ def _session():
 
 class ReplayRequest(BaseModel):
     seed: int = 7
+    speed: float = Field(default=1.0, gt=0, le=60)
+    start_minute: float = Field(default=0.0, ge=0, le=100)
+
+
+# Recorded matches, e.g. from video auto-eventing (python -m matchlens.vision). Local data
+# only: the image ships none, so in the cloud the list is empty.
+FEEDS_DIR = Path(os.getenv("MATCHLENS_FEEDS_DIR", Path(__file__).resolve().parents[3] / "data" / "local" / "feeds"))
+
+
+class FeedRequest(BaseModel):
+    name: str = Field(pattern=r"^[A-Za-z0-9-]{1,64}$")
     speed: float = Field(default=1.0, gt=0, le=60)
     start_minute: float = Field(default=0.0, ge=0, le=100)
 
@@ -292,6 +305,23 @@ async def decisions(limit: int = Query(default=100, le=1000)) -> list[dict[str, 
 @app.post("/api/replay")
 async def start_replay(req: ReplayRequest) -> dict[str, Any]:
     s = await manager.start_synthetic(seed=req.seed, speed=req.speed, start_minute=req.start_minute)
+    return {"match_id": s.meta.match_id, "run_id": s.run_id, "speed": req.speed}
+
+
+@app.get("/api/feeds")
+async def feeds() -> list[str]:
+    """Recorded matches that can be replayed."""
+    return sorted(p.stem for p in FEEDS_DIR.glob("*.json")) if FEEDS_DIR.is_dir() else []
+
+
+@app.post("/api/replay/feed")
+async def start_recorded(req: FeedRequest) -> dict[str, Any]:
+    path = FEEDS_DIR / f"{req.name}.json"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="no such recorded match")
+    match = SyntheticMatch.model_validate_json(await asyncio.to_thread(path.read_text))
+    control = ReplayControl(speed=req.speed, start_elapsed=req.start_minute * 60)
+    s = await manager.start_feed(SyntheticReplayAdapter(match, control), control, source="recorded")
     return {"match_id": s.meta.match_id, "run_id": s.run_id, "speed": req.speed}
 
 

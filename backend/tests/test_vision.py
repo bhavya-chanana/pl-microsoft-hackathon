@@ -8,6 +8,8 @@ import pytest
 cv2 = pytest.importorskip("cv2")
 pytest.importorskip("scipy")
 
+from matchlens.domain.models import EventType as T  # noqa: E402
+from matchlens.domain.models import Outcome  # noqa: E402
 from matchlens.vision.pitch import PitchProjector  # noqa: E402
 from matchlens.vision.teams import LEFT, OTHER, RIGHT, shirt_colour, split_teams  # noqa: E402
 from matchlens.vision.tracks import fill_gaps, from_rows, per_second, project, smooth, speeds  # noqa: E402
@@ -95,8 +97,6 @@ def path(frames, keys):
 
 
 def test_events_from_tracking():
-    from matchlens.domain.models import EventType as T
-    from matchlens.domain.models import Outcome
     from matchlens.vision.events import detect
 
     n = 200
@@ -119,8 +119,6 @@ def test_events_from_tracking():
 
 
 def test_shot_and_goal():
-    from matchlens.domain.models import EventType as T
-    from matchlens.domain.models import Outcome
     from matchlens.vision.events import detect
 
     n = 120
@@ -136,7 +134,6 @@ def test_shot_and_goal():
 
 
 def test_restarts_named_by_place():
-    from matchlens.domain.models import EventType as T
     from matchlens.vision.events import _restart
 
     assert _restart(LEFT, (52.5, 33.0)) == (T.KICKOFF, LEFT)
@@ -147,7 +144,6 @@ def test_restarts_named_by_place():
 
 
 def test_scoring_against_labels():
-    from matchlens.domain.models import EventType as T
     from matchlens.vision.evaluate import Labelled, score
     from matchlens.vision.events import Detected
 
@@ -157,3 +153,38 @@ def test_scoring_against_labels():
     by_type = {s.type: s for s in score(found, labels, FPS)}
     assert (by_type[T.PASS].matched, by_type[T.PASS].recall, round(by_type[T.PASS].precision, 2)) == (1, 0.5, 0.33)
     assert by_type[T.CARRY].matched == 1  # compared at the start of the run
+
+
+def test_feed_is_a_playable_fictional_match():
+    from matchlens.ingest.adapters import feed_order
+    from matchlens.interpret.engine import MatchEngine
+    from matchlens.vision.events import Detected
+    from matchlens.vision.feed import build_match
+    from matchlens.vision.teams import TeamSplit
+
+    # Eleven a side in a 4-4-2 shape, standing still for three seconds.
+    shape = [(5, 34)] + [(20, y) for y in (10, 27, 41, 58)] + [(35, y) for y in (10, 27, 41, 58)] + [(48, 25), (48, 43)]
+    left = np.array(shape, dtype=float)
+    right = np.c_[105 - left[:, 0], 68 - left[:, 1]]
+    players = np.repeat(np.r_[left, right][None], 75, axis=0)
+    split = TeamSplit(labels=np.array([LEFT] * 11 + [RIGHT] * 11), keepers=frozenset({0, 11}),
+                      kits=("#1f3a93", "#e8e8e8"))
+    found = [Detected(T.KICKOFF, 0, 9, LEFT, start=(52.5, 34)),
+             Detected(T.PASS, 10, 9, LEFT, other=10, start=(48, 25), end=(48, 43), outcome=Outcome.SUCCESS)]
+    match = build_match("video-test", split, players, np.full((75, 2), 34.0), found, FPS)
+
+    home, away = match.meta.home, match.meta.away
+    assert (home.name, home.formation, home.colour, away.side) == ("Westmoor", "4-4-2", "#1f3a93", "away")
+    roles = [match.meta.players[p].role for p in home.starting_xi]
+    assert roles == ["GK", "LB", "CB", "CB", "RB", "LM", "CM", "CM", "RM", "CF", "CF"]
+    shirts = [match.meta.players[p].shirt for p in home.starting_xi]
+    assert shirts[:5] == [1, 3, 5, 4, 2] and len(set(shirts)) == 11
+    passing = match.events[1]
+    assert match.events[-1].type == T.FULL_TIME and match.events[-1].elapsed == 2.96
+    assert passing.player_id.startswith("WSM-") and passing.related_player_id != passing.player_id
+    assert len(match.tracking) == 3 and len(match.tracking[0].entities) == 23
+
+    engine = MatchEngine(match.meta)
+    for item in feed_order(match.events, match.tracking):
+        engine.ingest_event(item) if hasattr(item, "type") else engine.ingest_frame(item)
+    assert engine.team_stats("WSM")["passes_completed"] == 1
