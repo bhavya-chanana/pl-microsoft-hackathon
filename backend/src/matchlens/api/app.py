@@ -9,9 +9,10 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from matchlens.auth import AuthSettings, create_session, decode_session, verify_google_credential
 
 from matchlens.agents.contracts import FanProfile, Language, Mode
 from matchlens.agents.llm import build_clients
@@ -55,14 +56,18 @@ class AgentRuntime:
 
 
 runtime: AgentRuntime | None = None
+auth_settings = AuthSettings.from_env()
+store_backend = None
+SESSION_COOKIE = "matchlens_session"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global runtime
+    global runtime, store_backend
     fi_state.start()  # sensor-first match data; seeds the demo match in the background
     runtime = AgentRuntime()
     store = await open_store()
+    store_backend = store
     writer = WriteBehind(store)
     writer.start()
     manager.attach(Repository(store, writer))
@@ -81,6 +86,7 @@ async def lifespan(app: FastAPI):
         await manager.stop()
         await writer.close()  # flush what the match wrote last
         await store.close()
+        store_backend = None
 
 
 app = FastAPI(title="Matchlens", version="0.1.0", lifespan=lifespan)
@@ -112,6 +118,50 @@ class ControlRequest(BaseModel):
     paused: bool | None = None
 
 
+class GoogleLoginRequest(BaseModel):
+    credential: str = Field(min_length=20, max_length=10_000)
+
+
+class FanProfileRequest(BaseModel):
+    mode: Mode = Mode.CASUAL
+    language: Language = Language.EN
+    club_id: str | None = Field(default=None, max_length=80)
+    player_id: str | None = Field(default=None, max_length=80)
+    metric: str | None = Field(default=None, max_length=80)
+
+
+class VoteRequest(BaseModel):
+    match_id: str = Field(min_length=1, max_length=120)
+    choice: str = Field(pattern="^(home|away|close-call)$")
+
+
+class RatingRequest(BaseModel):
+    match_id: str = Field(min_length=1, max_length=120)
+    player_id: str = Field(min_length=1, max_length=80)
+    score: int = Field(ge=1, le=5)
+
+
+def _auth_user(request: Request) -> dict[str, Any]:
+    if not auth_settings.session_secret:
+        raise HTTPException(503, "Sign-in is not configured on this server")
+    token = request.cookies.get(SESSION_COOKIE)
+    claims = decode_session(token, auth_settings.session_secret) if token else None
+    if not claims:
+        raise HTTPException(401, "Sign in to continue")
+    return claims
+
+
+def _fan_store():
+    if store_backend is None:
+        raise HTTPException(503, "Fan account storage is not ready")
+    return store_backend
+
+
+def _account_doc_id(user_id: str, *parts: str) -> str:
+    import hashlib
+    return hashlib.sha256(": ".join((user_id, *parts)).encode()).hexdigest()
+
+
 def _runtime() -> AgentRuntime:
     if runtime is None:
         raise HTTPException(503, "agents not ready")
@@ -136,6 +186,105 @@ async def health() -> dict[str, Any]:
         "run_id": s.run_id if s else None,
         "store": manager.repo.stats(),
     }
+
+
+@app.post("/api/auth/google")
+async def google_login(req: GoogleLoginRequest, response: Response) -> dict[str, Any]:
+    if not auth_settings.google_client_id or not auth_settings.session_secret:
+        raise HTTPException(503, "Set GOOGLE_CLIENT_ID and MATCHLENS_AUTH_SECRET to enable Google sign-in")
+    try:
+        user = verify_google_credential(req.credential, auth_settings.google_client_id)
+    except Exception as exc:  # Google verification errors should not disclose token details.
+        log.info("Google sign-in rejected: %s", type(exc).__name__)
+        raise HTTPException(401, "Google sign-in could not be verified") from exc
+    expires = 60 * 60 * 24 * 7
+    response.set_cookie(SESSION_COOKIE, create_session(user, auth_settings.session_secret, expires),
+                        max_age=expires, httponly=True, secure=auth_settings.secure_cookie,
+                        samesite="lax", path="/")
+    store = _fan_store()
+    profile = await store.read("fan_profiles", user["sub"], "profile")
+    if profile is None:
+        profile = {"mode": Mode.CASUAL.value, "language": Language.EN.value,
+                   "club_id": None, "player_id": None, "metric": None}
+        await store.upsert_many("fan_profiles", user["sub"], [{"id": "profile", "run_id": user["sub"], **profile}])
+    return {"user": user, "profile": profile}
+
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request) -> dict[str, Any]:
+    user = _auth_user(request)
+    profile = await _fan_store().read("fan_profiles", user["sub"], "profile")
+    return {"user": {k: user.get(k, "") for k in ("sub", "email", "name", "picture")},
+            "profile": profile or {"mode": "casual", "language": "en", "club_id": None,
+                                   "player_id": None, "metric": None}}
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(response: Response) -> dict[str, bool]:
+    response.delete_cookie(SESSION_COOKIE, httponly=True, secure=auth_settings.secure_cookie,
+                           samesite="lax", path="/")
+    return {"ok": True}
+
+
+@app.post("/api/profile")
+async def save_fan_profile(req: FanProfileRequest, request: Request) -> dict[str, Any]:
+    user = _auth_user(request)
+    profile = req.model_dump(mode="json")
+    await _fan_store().upsert_many("fan_profiles", user["sub"],
+                                   [{"id": "profile", "run_id": user["sub"], **profile}])
+    return profile
+
+
+@app.get("/api/engagement")
+async def fan_engagement(request: Request, match_id: str = Query(min_length=1, max_length=120)) -> dict[str, Any]:
+    user = _auth_user(request)
+    store = _fan_store()
+    vote_doc = await store.read("fan_poll_votes", match_id, _account_doc_id(user["sub"], match_id))
+    rows = await store.query("fan_player_ratings", match_id)
+    ratings = {row["player_id"]: row["score"] for row in rows if row.get("user_id") == user["sub"]}
+    rating_totals: dict[str, list[int]] = {}
+    for row in rows:
+        if row.get("player_id") and isinstance(row.get("score"), int):
+            totals = rating_totals.setdefault(row["player_id"], [0, 0])
+            totals[0] += row["score"]
+            totals[1] += 1
+    rating_averages = {player: {"average": round(total / count, 1), "count": count}
+                       for player, (total, count) in rating_totals.items()}
+    counts = {"home": 0, "away": 0, "close-call": 0}
+    for row in await store.query("fan_poll_votes", match_id):
+        choice = row.get("choice")
+        if choice in counts:
+            counts[choice] += 1
+    return {"vote": vote_doc.get("choice") if vote_doc else None, "ratings": ratings,
+            "poll_counts": counts, "rating_averages": rating_averages}
+
+
+@app.post("/api/engagement/vote")
+async def cast_fan_vote(req: VoteRequest, request: Request) -> dict[str, Any]:
+    user = _auth_user(request)
+    session = _session()
+    if req.match_id != session.meta.match_id:
+        raise HTTPException(409, "The poll is for a different match")
+    doc_id = _account_doc_id(user["sub"], req.match_id)
+    from matchlens.store.repository import now_iso
+    doc = {"id": doc_id, "run_id": req.match_id, "user_id": user["sub"],
+           "choice": req.choice, "updated_at": now_iso()}
+    await _fan_store().upsert_many("fan_poll_votes", req.match_id, [doc])
+    return {"vote": req.choice}
+
+
+@app.post("/api/engagement/rating")
+async def rate_fan_player(req: RatingRequest, request: Request) -> dict[str, Any]:
+    user = _auth_user(request)
+    session = _session()
+    if req.match_id != session.meta.match_id or req.player_id not in session.meta.players:
+        raise HTTPException(404, "Unknown player or match")
+    doc_id = _account_doc_id(user["sub"], req.match_id, req.player_id)
+    from matchlens.store.repository import now_iso
+    doc = {"id": doc_id, "run_id": req.match_id, "user_id": user["sub"],
+           "player_id": req.player_id, "score": req.score, "updated_at": now_iso()}
+    await _fan_store().upsert_many("fan_player_ratings", req.match_id, [doc])
+    return {"player_id": req.player_id, "score": req.score}
 
 
 def _profile(mode: Mode, language: Language, club_id: str | None, player_id: str | None,

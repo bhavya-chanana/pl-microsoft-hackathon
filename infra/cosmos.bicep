@@ -24,6 +24,9 @@ var containers = [
   { name: 'decisions', unindexed: [] }
   { name: 'agent_runs', unindexed: ['errors', 'actions'] }
   { name: 'fan_outputs', unindexed: ['result'] }
+  { name: 'fan_profiles', unindexed: [] }
+  { name: 'fan_poll_votes', unindexed: [] }
+  { name: 'fan_player_ratings', unindexed: [] }
 ]
 
 resource account 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {

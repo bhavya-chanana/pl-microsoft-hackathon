@@ -25,6 +25,15 @@ from .conftest import replay_order
 OFFLINE = LlmSettings(endpoint=None, fast_model="fast", strong_model="strong", mode="offline")
 
 
+def test_settings_read_optional_azure_api_key(monkeypatch):
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/openai/v1/")
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "local-test-key")
+    monkeypatch.setenv("MATCHLENS_LLM", "online")
+    settings = LlmSettings.from_env()
+    assert settings.api_key == "local-test-key"
+    assert settings.online
+
+
 class ScriptedClient(BaseChatClient):
     """Behaves like the offline client, but lets a test tamper with answers per task."""
 
@@ -289,3 +298,4 @@ def test_personalised_feed(played):
     focus = personalise_feed(session, FanProfile(mode=Mode.PLAYER_FOCUS, player_id="NBR-10"))
     assert all(x["favourite_player"] or x["signal_type"] == "goal" for x in focus)
     assert any(x["signal_type"] == "milestone" for x in focus)
+    assert [x["relevance"] for x in focus] == sorted((x["relevance"] for x in focus), reverse=True)

@@ -1,14 +1,15 @@
 """Model clients (BRD §8.1, NFR cost and resilience).
 
 * Online: Azure OpenAI models in Microsoft Foundry through Agent Framework
-  (Responses API), authenticated with Entra ID (``DefaultAzureCredential``:
-  Azure CLI locally, managed identity in Azure), so no API keys are stored.
+  (Responses API), authenticated with either an Azure OpenAI API key or Entra
+  ID (``DefaultAzureCredential``: Azure CLI locally, managed identity in Azure).
 * Offline: a deterministic client that answers from the data-only templates.
   It keeps the full multi-agent workflow runnable without Azure (tests, local
   development, credit exhaustion) and makes the fallback path explicit.
 
 Configuration (environment or backend/.env):
     AZURE_OPENAI_ENDPOINT        https://<resource>.openai.azure.com/openai/v1/
+    AZURE_OPENAI_API_KEY         optional local API key (prefer Entra ID in Azure)
     FOUNDRY_PROJECT_ENDPOINT     alternative: https://<resource>.services.ai.azure.com/api/projects/<project>
     MATCHLENS_MODEL_FAST         deployment for frequent calls (default gpt-5-mini)
     MATCHLENS_MODEL_STRONG       deployment for recaps (default gpt-5-mini)
@@ -45,6 +46,7 @@ class LlmSettings:
     kind: str = "openai"  # openai (Azure OpenAI v1 endpoint) | foundry (project endpoint)
     fast_reasoning: str = "low"
     strong_reasoning: str = "high"
+    api_key: str | None = None
 
     @property
     def online(self) -> bool:
@@ -68,6 +70,7 @@ class LlmSettings:
             kind="openai" if openai_endpoint else "foundry",
             fast_reasoning=os.getenv("MATCHLENS_REASONING_FAST", "low"),
             strong_reasoning=os.getenv("MATCHLENS_REASONING_STRONG", "high"),
+            api_key=os.getenv("AZURE_OPENAI_API_KEY") or None,
         )
 
 
@@ -158,9 +161,6 @@ def _live_clients(settings: LlmSettings) -> ModelClients:
         offline = OfflineChatClient()
         return ModelClients(fast=offline, strong=offline, settings=settings)
 
-    from azure.identity.aio import DefaultAzureCredential
-
-    credential = DefaultAzureCredential(exclude_interactive_browser_credential=True)
     if settings.kind == "openai":
         from agent_framework.openai import OpenAIChatClient
 
@@ -169,9 +169,16 @@ def _live_clients(settings: LlmSettings) -> ModelClients:
         root = settings.endpoint.split("/openai/")[0].rstrip("/") + "/"
 
         def make(model: str) -> BaseChatClient:
+            if settings.api_key:
+                return OpenAIChatClient(model=model, azure_endpoint=root, api_key=settings.api_key)
+            from azure.identity.aio import DefaultAzureCredential
+            credential = DefaultAzureCredential(exclude_interactive_browser_credential=True)
             return OpenAIChatClient(model=model, azure_endpoint=root, credential=credential)
     else:
         from agent_framework.foundry import FoundryChatClient
+        from azure.identity.aio import DefaultAzureCredential
+
+        credential = DefaultAzureCredential(exclude_interactive_browser_credential=True)
 
         def make(model: str) -> BaseChatClient:
             return FoundryChatClient(project_endpoint=settings.endpoint, model=model, credential=credential)

@@ -26,6 +26,9 @@ plus `id` and `run_id`.
 | `decisions` | sequence number | coordinator decision | Signal, revision, plan (`full`, `light`, `data_only`, `retract`, `skip`) and reason |
 | `agent_runs` | random | agent workflow or fan request | Plan, outcome (`published`, `superseded`, `timeout`, ...), agents used, fact-check status, fallbacks, **model**, latency |
 | `fan_outputs` | hash of window, profile and match position | catch-up or recap | The full result, so the same question is answered once per run |
+| `fan_profiles` | Google subject ID | saved mode, language, favorite club/player, pinned metric | One profile per signed-in fan |
+| `fan_poll_votes` | match ID | fan subject, choice, update time | One changeable vote per fan per match |
+| `fan_player_ratings` | match ID | fan subject, player, 1–5 score, update time | One changeable rating per fan/player/match |
 
 Fields that are never filtered on (large text maps, coordinates, entity arrays) are excluded from the index, which
 lowers the write cost; everything else is indexed for ad hoc queries in Data Explorer, for example:

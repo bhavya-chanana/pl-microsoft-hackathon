@@ -66,6 +66,9 @@ CONTAINERS: dict[str, ContainerSpec] = {s.name: s for s in [
     ContainerSpec("decisions"),
     ContainerSpec("agent_runs", ("errors", "actions")),
     ContainerSpec("fan_outputs", ("result",)),
+    ContainerSpec("fan_profiles"),
+    ContainerSpec("fan_poll_votes"),
+    ContainerSpec("fan_player_ratings"),
 ]}
 
 # Properties Cosmos DB adds to every item.

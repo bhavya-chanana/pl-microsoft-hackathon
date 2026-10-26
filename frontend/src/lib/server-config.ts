@@ -8,6 +8,8 @@ export function backendUrl(): string {
 /** Read-only backend paths the browser may reach through the proxy. */
 export const PROXY_GET = [
   /^health$/,
+  /^auth\/me$/,
+  /^engagement$/,
   /^match$/,
   /^state$/,
   /^timeline$/,
@@ -26,4 +28,5 @@ export const PROXY_GET = [
 ];
 
 /** Replay controls (demo only). */
-export const PROXY_POST = [/^replay$/, /^replay\/control$/, /^fi\/auth\/(login|logout)$/, /^fi\/me\/preferences$/];
+export const PROXY_POST = [/^replay$/, /^replay\/control$/, /^auth\/(google|logout)$/, /^profile$/,
+  /^engagement\/(vote|rating)$/, /^fi\/auth\/(login|logout)$/, /^fi\/me\/preferences$/];

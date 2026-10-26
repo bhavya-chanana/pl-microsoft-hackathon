@@ -33,3 +33,6 @@ backend/demo/*.tmp
 
 # Football Intelligence local database and dev session secret
 backend/.data/
+
+# Separately cloned SoccerNet game-state repo (own git, data and venv)
+vision/soccernet-sn-gamestate/

@@ -9,6 +9,7 @@ dependencies = [
     "azure-cosmos==4.17.1",
     "azure-identity==1.26.0",
     "fastapi==0.161.0",
+    "google-auth==2.49.1",
     "mcp==1.30.0",
     "pydantic==2.14.1",
     "uvicorn[standard]==0.54.0",

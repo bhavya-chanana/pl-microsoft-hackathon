@@ -202,5 +202,10 @@ def personalise_feed(session: MatchSession, profile: FanProfile, limit: int = 50
             "key_numbers": ins["key_numbers"], "stage": ins["stage"], "fact_check": ins["fact_check"]["status"],
             "favourite_player": involves_player, "relevance": relevance,
         })
+    # Keep the freshest match window, then use the already-computed fan relevance
+    # to order that window. This avoids letting an old favourite-player moment
+    # displace current match context while making personalisation visible.
     out.sort(key=lambda x: -x["elapsed"])
-    return out[:limit]
+    recent = out[:limit]
+    recent.sort(key=lambda x: (-x["relevance"], -x["elapsed"]))
+    return recent
