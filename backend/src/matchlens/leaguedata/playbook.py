@@ -356,6 +356,10 @@ def template_draft(payload: Mapping[str, Any]) -> PlaybookDraft:
         summary=summary)
 
 
+ITEM_MAX = 400
+SUMMARY_MAX = 700
+
+
 def check_draft(draft: PlaybookDraft, payload: Mapping[str, Any]) -> list[str]:
     """Problems that block a draft: invented numbers, unknown players, missing or oversized fields."""
     from matchlens.factcheck.verify import numbers_in, unaccounted_numbers
@@ -369,9 +373,10 @@ def check_draft(draft: PlaybookDraft, payload: Mapping[str, Any]) -> list[str]:
             problems.append(f"{name} must not be empty")
         if len(items) > 6:
             problems.append(f"{name} has {len(items)} items; at most 6")
+        limit = SUMMARY_MAX if name == "summary" else ITEM_MAX  # the summary is two or three sentences
         for text in items:
-            if len(text) > 400:
-                problems.append(f"{name}: an item is longer than 400 characters")
+            if len(text) > limit:
+                problems.append(f"{name}: an item is longer than {limit} characters")
         bad = unaccounted_numbers(" ".join(items), allowed)
         if bad:
             problems.append(f"{name}: numbers not in the data: {', '.join(bad)}")
