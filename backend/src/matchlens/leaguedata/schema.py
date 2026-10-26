@@ -240,7 +240,7 @@ class IdLink(_Row):
     source: SourceName
     source_id: str
     confidence: float = Field(ge=0, le=1)
-    method: Literal["exact_id", "name_club_season", "name_birth", "override", "fuzzy"]
+    method: Literal["exact_id", "name_club_season", "name_birth", "name", "override", "fuzzy", "new"]
 
 
 TABLES: dict[str, type[_Row]] = {

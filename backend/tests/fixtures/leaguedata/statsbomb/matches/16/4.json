@@ -1,0 +1,73 @@
+[
+ {
+  "match_id": 1002,
+  "match_date": "2018-03-07",
+  "kick_off": "11:45:00.000",
+  "competition": {
+   "competition_id": 16,
+   "competition_name": "Fictional Champions"
+  },
+  "season": {
+   "season_id": 4,
+   "season_name": "2017/2018"
+  },
+  "home_team": {
+   "home_team_id": 10,
+   "home_team_name": "Northvale Rovers FC",
+   "home_team_gender": "male",
+   "country": {
+    "id": 1,
+    "name": "Elbonia"
+   },
+   "managers": [
+    {
+     "id": 701,
+     "name": "Dario Quenby Ferreira",
+     "nickname": "Dario Quenby",
+     "dob": "1963-01-26",
+     "country": {
+      "id": 2,
+      "name": "Zubrowka"
+     }
+    }
+   ]
+  },
+  "away_team": {
+   "away_team_id": 20,
+   "away_team_name": "Eastport United",
+   "away_team_gender": "male",
+   "country": {
+    "id": 1,
+    "name": "Elbonia"
+   },
+   "managers": [
+    {
+     "id": 702,
+     "name": "Mara Teller",
+     "nickname": null,
+     "dob": "1970-02-02",
+     "country": {
+      "id": 1,
+      "name": "Elbonia"
+     }
+    }
+   ]
+  },
+  "home_score": 1,
+  "away_score": 1,
+  "match_status": "available",
+  "match_status_360": "unavailable",
+  "competition_stage": {
+   "id": 3,
+   "name": "Round of 16"
+  },
+  "stadium": {
+   "id": 10,
+   "name": "Quarry Park"
+  },
+  "referee": {
+   "id": 6,
+   "name": "Ines Holloway"
+  }
+ }
+]

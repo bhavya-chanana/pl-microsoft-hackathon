@@ -1,0 +1,269 @@
+[
+ {
+  "id": "x-h",
+  "index": 0,
+  "period": 1,
+  "minute": 0,
+  "type": {
+   "id": 0,
+   "name": "Starting XI"
+  },
+  "team": {
+   "id": 10,
+   "name": "10"
+  },
+  "tactics": {
+   "formation": 433,
+   "lineup": []
+  }
+ },
+ {
+  "id": "x-a",
+  "index": 1,
+  "period": 1,
+  "minute": 0,
+  "type": {
+   "id": 0,
+   "name": "Starting XI"
+  },
+  "team": {
+   "id": 20,
+   "name": "20"
+  },
+  "tactics": {
+   "formation": 3421,
+   "lineup": []
+  }
+ },
+ {
+  "id": "p-1",
+  "index": 2,
+  "period": 1,
+  "minute": 9,
+  "type": {
+   "id": 0,
+   "name": "Pass"
+  },
+  "team": {
+   "id": 10,
+   "name": "10"
+  },
+  "player": {
+   "id": 502,
+   "name": "Bram Keddy"
+  },
+  "location": [
+   80,
+   30
+  ],
+  "pass": {
+   "through_ball": true
+  }
+ },
+ {
+  "id": "s-1",
+  "index": 3,
+  "period": 1,
+  "minute": 10,
+  "type": {
+   "id": 0,
+   "name": "Shot"
+  },
+  "team": {
+   "id": 10,
+   "name": "10"
+  },
+  "player": {
+   "id": 501,
+   "name": "Alvin Marlowe"
+  },
+  "location": [
+   108.0,
+   36.0
+  ],
+  "play_pattern": {
+   "id": 1,
+   "name": "Regular Play"
+  },
+  "shot": {
+   "statsbomb_xg": 0.3,
+   "key_pass_id": "p-1",
+   "outcome": {
+    "name": "Goal"
+   },
+   "type": {
+    "name": "Open Play"
+   },
+   "body_part": {
+    "name": "Right Foot"
+   }
+  }
+ },
+ {
+  "id": "s-2",
+  "index": 4,
+  "period": 1,
+  "minute": 30,
+  "type": {
+   "id": 0,
+   "name": "Shot"
+  },
+  "team": {
+   "id": 20,
+   "name": "20"
+  },
+  "player": {
+   "id": 601,
+   "name": "Dov Pellin"
+  },
+  "location": [
+   108.0,
+   40.0
+  ],
+  "play_pattern": {
+   "id": 1,
+   "name": "Regular Play"
+  },
+  "shot": {
+   "statsbomb_xg": 0.76,
+   "outcome": {
+    "name": "Saved"
+   },
+   "type": {
+    "name": "Penalty"
+   },
+   "body_part": {
+    "name": "Left Foot"
+   }
+  }
+ },
+ {
+  "id": "g-1",
+  "index": 5,
+  "period": 1,
+  "minute": 50,
+  "type": {
+   "id": 0,
+   "name": "Own Goal Against"
+  },
+  "team": {
+   "id": 20,
+   "name": "20"
+  },
+  "player": {
+   "id": 601,
+   "name": "Dov Pellin"
+  }
+ },
+ {
+  "id": "s-3",
+  "index": 6,
+  "period": 1,
+  "minute": 70,
+  "type": {
+   "id": 0,
+   "name": "Shot"
+  },
+  "team": {
+   "id": 10,
+   "name": "10"
+  },
+  "player": {
+   "id": 501,
+   "name": "Alvin Marlowe"
+  },
+  "location": [
+   100.0,
+   20.0
+  ],
+  "play_pattern": {
+   "id": 3,
+   "name": "From Corner"
+  },
+  "shot": {
+   "statsbomb_xg": 0.05,
+   "outcome": {
+    "name": "Blocked"
+   },
+   "type": {
+    "name": "Open Play"
+   },
+   "body_part": {
+    "name": "Head"
+   }
+  }
+ },
+ {
+  "id": "s-4",
+  "index": 7,
+  "period": 5,
+  "minute": 120,
+  "type": {
+   "id": 0,
+   "name": "Shot"
+  },
+  "team": {
+   "id": 10,
+   "name": "10"
+  },
+  "player": {
+   "id": 501,
+   "name": "Alvin Marlowe"
+  },
+  "location": [
+   110.0,
+   40.0
+  ],
+  "shot": {
+   "statsbomb_xg": 0.7,
+   "outcome": {
+    "name": "Goal"
+   },
+   "type": {
+    "name": "Penalty"
+   },
+   "body_part": {
+    "name": "Right Foot"
+   }
+  }
+ },
+ {
+  "id": "s-5",
+  "index": 8,
+  "period": 1,
+  "minute": 80,
+  "type": {
+   "id": 0,
+   "name": "Shot"
+  },
+  "team": {
+   "id": 10,
+   "name": "10"
+  },
+  "player": {
+   "id": 502,
+   "name": "Bram Keddy"
+  },
+  "location": [
+   95.0,
+   50.0
+  ],
+  "play_pattern": {
+   "id": 6,
+   "name": "From Counter"
+  },
+  "shot": {
+   "statsbomb_xg": 0.1,
+   "follows_dribble": true,
+   "outcome": {
+    "name": "Off T"
+   },
+   "type": {
+    "name": "Open Play"
+   },
+   "body_part": {
+    "name": "Other"
+   }
+  }
+ }
+]

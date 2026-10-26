@@ -1,0 +1,6 @@
+player_id,first_name,last_name,name,date_of_birth,country_of_citizenship,height_in_cm,foot,position,sub_position
+11,Alvin,Marlowe,Alvin Marlowe,1996-03-04 00:00:00,Elbonia,181,right,Attack,Centre-Forward
+12,Bram,Keddy,Bram Keddy,1999-11-30 00:00:00,Elbonia,175,both,Midfield,Central Midfield
+13,Cato,Ruvane,Cato Ruvane,2001-01-02 00:00:00,Zubrowka,,,Defender,Centre-Back
+21,Dov,Pellin,Dov Pellin,1990-05-05 00:00:00,Zubrowka,190,left,Defender,Centre-Back
+22,Evo,Lanter,,1994-07-07 00:00:00,Elbonia,,,Midfield,Defensive Midfield

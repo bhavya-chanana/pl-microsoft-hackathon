@@ -1,0 +1,106 @@
+[
+ {
+  "team_id": 10,
+  "team_name": "Northvale Rovers FC",
+  "lineup": [
+   {
+    "player_id": 501,
+    "player_name": "Alvin Marlowe",
+    "player_nickname": null,
+    "jersey_number": 9,
+    "country": {
+     "id": 1,
+     "name": "Elbonia"
+    },
+    "cards": [],
+    "positions": [
+     {
+      "position": "Center Forward",
+      "from": "00:00",
+      "to": null,
+      "start_reason": "Starting XI",
+      "end_reason": "x"
+     }
+    ]
+   },
+   {
+    "player_id": 502,
+    "player_name": "Bram Keddy",
+    "player_nickname": null,
+    "jersey_number": 8,
+    "country": {
+     "id": 1,
+     "name": "Elbonia"
+    },
+    "cards": [],
+    "positions": [
+     {
+      "position": "Left Center Midfield",
+      "from": "00:00",
+      "to": "59:11",
+      "start_reason": "Starting XI",
+      "end_reason": "x"
+     }
+    ]
+   },
+   {
+    "player_id": 503,
+    "player_name": "Cato Ruvane",
+    "player_nickname": null,
+    "jersey_number": 4,
+    "country": {
+     "id": 1,
+     "name": "Elbonia"
+    },
+    "cards": [],
+    "positions": [
+     {
+      "position": "Right Center Midfield",
+      "from": "59:11",
+      "to": null,
+      "start_reason": "Substitution - On (Tactical)",
+      "end_reason": "x"
+     }
+    ]
+   },
+   {
+    "player_id": 504,
+    "player_name": "Unused Reserve",
+    "player_nickname": null,
+    "jersey_number": 1,
+    "country": {
+     "id": 1,
+     "name": "Elbonia"
+    },
+    "cards": [],
+    "positions": []
+   }
+  ]
+ },
+ {
+  "team_id": 20,
+  "team_name": "Eastport United",
+  "lineup": [
+   {
+    "player_id": 601,
+    "player_name": "Dov Pellin",
+    "player_nickname": null,
+    "jersey_number": 5,
+    "country": {
+     "id": 1,
+     "name": "Elbonia"
+    },
+    "cards": [],
+    "positions": [
+     {
+      "position": "Center Back",
+      "from": "00:00",
+      "to": null,
+      "start_reason": "Starting XI",
+      "end_reason": "x"
+     }
+    ]
+   }
+  ]
+ }
+]

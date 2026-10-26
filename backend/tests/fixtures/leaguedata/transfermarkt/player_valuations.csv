@@ -1,0 +1,4 @@
+player_id,date,market_value_in_eur,current_club_name,current_club_id,player_club_domestic_competition_id
+11,2023-06-01,12000000,Northvale Rovers FC,100,GB1
+11,2024-01-01,15000000,Northvale Rovers FC,100,GB1
+99,2023-06-01,500000,Nobody,1,GB1

@@ -1,0 +1,9 @@
+game_lineups_id,date,game_id,player_id,club_id,player_name,type,position,number,team_captain
+a1,2023-08-12,1,11,100,Alvin Marlowe,starting_lineup,Centre-Forward,9,1
+a2,2023-08-12,1,12,100,Bram Keddy,starting_lineup,Central Midfield,8,0
+a3,2023-08-12,1,13,100,Cato Ruvane,substitutes,Centre-Back,4,0
+a4,2023-08-12,1,14,100,Unused Reserve,substitutes,Goalkeeper,-,0
+a5,2023-08-12,1,21,200,Dov Pellin,starting_lineup,Centre-Back,5,1
+a6,2023-08-12,1,22,200,Evo Lanter,starting_lineup,Defensive Midfield,6,0
+a7,2023-08-12,1,22,200,Evo Lanter,starting_lineup,Defensive Midfield,6,0
+a8,2024-06-01,4,11,100,Alvin Marlowe,starting_lineup,Centre-Forward,9,1
