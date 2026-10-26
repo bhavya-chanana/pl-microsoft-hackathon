@@ -89,6 +89,8 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--limit", type=int, default=None, help="cap per league-season (smoke tests)")
         p.add_argument("--refresh", action="store_true", help="re-download files already on disk")
         p.add_argument("--data-dir", type=Path, default=None, help="override the data folder")
+        if name == "curate":
+            p.add_argument("--version", type=int, default=None, help="curated version number (default: next)")
     return parser
 
 
@@ -133,7 +135,7 @@ def _row_count(path: Path) -> int | None:
             import duckdb
         except ImportError:
             return None
-        return duckdb.sql(f"select count(*) from read_parquet('{path}')").fetchone()[0]
+        return duckdb.sql(f"select count(*) from read_parquet('{path}')").fetchall()[0][0]
     return None
 
 

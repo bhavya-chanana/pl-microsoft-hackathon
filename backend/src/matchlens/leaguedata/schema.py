@@ -55,6 +55,7 @@ class SourceIds(_Row):
     wikidata: str | None = None
     statsbomb: str | None = None
     football_data: str | None = None
+    openfootball: str | None = None
 
 
 class Match(_Row):
