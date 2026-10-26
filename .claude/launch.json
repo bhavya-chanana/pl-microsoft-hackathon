@@ -54,6 +54,24 @@
         "cd /Users/bhavyachanana/code/pl-microsoft-hackathon/.claude/worktrees/tactics-brain/frontend && MATCHLENS_BACKEND_URL=http://localhost:8768 npx next dev --port 3012"
       ],
       "port": 3012
+    },
+    {
+      "name": "all-features-backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/bhavyachanana/code/pl-microsoft-hackathon/backend && MATCHLENS_LLM=offline MATCHLENS_CASSETTE=demo/hero-match.json MATCHLENS_KB_DIR=/Users/bhavyachanana/code/pl-microsoft-hackathon/.claude/worktrees/tactics-brain/backend/data/local/leaguedata/kb uv run uvicorn matchlens.api.app:app --port 8765 --log-config /Users/bhavyachanana/code/pl-microsoft-hackathon/logs/logging.json 2>&1 | tee -a /Users/bhavyachanana/code/pl-microsoft-hackathon/logs/backend.log"
+      ],
+      "port": 8765
+    },
+    {
+      "name": "all-features-frontend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/bhavyachanana/code/pl-microsoft-hackathon/frontend && npm run dev 2>&1 | tee -a /Users/bhavyachanana/code/pl-microsoft-hackathon/logs/frontend.log"
+      ],
+      "port": 3000
     }
   ]
 }

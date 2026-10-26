@@ -37,6 +37,13 @@ function StatRow({ label, home, away, digits = 0, unit = "" }: { label: string; 
   );
 }
 
+/** Whole-number possession that adds up to 100: rounded on its own, 54.5 and 45.5 would show as 55 and 46. */
+function possessionSplit(home: number | null, away: number | null): { home: number; away: number } {
+  if (home == null || away == null || home + away <= 0) return { home: 50, away: 50 };
+  const share = Math.round((home / (home + away)) * 100);
+  return { home: share, away: 100 - share };
+}
+
 function Failed({ retry }: { retry: () => void }) {
   return (
     <div role="alert" className="flex flex-col items-start gap-3">
@@ -65,6 +72,7 @@ export function TeamComparison() {
   if (!home.data || !away.data) return <Failed retry={() => void Promise.all([home.refetch(), away.refetch()])} />;
   const h = home.data;
   const a = away.data;
+  const possession = possessionSplit(h.possession_pct, a.possession_pct);
   return (
     <section aria-labelledby="team-stats" className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -74,7 +82,7 @@ export function TeamComparison() {
         </h3>
         <span className={cn("font-display text-lg font-semibold", sideTone.away.text)}>{meta.away.short_name}</span>
       </div>
-      <StatRow label={L.possession} home={h.possession_pct ?? 50} away={a.possession_pct ?? 50} unit="%" />
+      <StatRow label={L.possession} home={possession.home} away={possession.away} unit="%" />
       <StatRow label={L.shots} home={h.shots} away={a.shots} />
       <StatRow label={L.onTarget} home={h.shots_on_target} away={a.shots_on_target} />
       <StatRow label={L.xg} home={h.xg} away={a.xg} digits={2} />
