@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import functools
 import json
 import logging
 import os
@@ -330,7 +331,9 @@ def _allowed_numbers(digest: Digest) -> tuple[set[float], list[float]]:
     return exact, percent
 
 
-_SCORE = re.compile(r"(?<![\d.\-])\d{1,2}-\d{1,2}(?![\d\-])")
+# single digits only: "84-94" is a minute window and "17-6" a shot count, both left to the number check
+_SCORE = re.compile(r"(?<![\d.\-])\d-\d(?![\d\-])")
+_RANGE = re.compile(r"(?<![\w.])(\d{1,3})\s?[-–]\s?(\d{1,3})(?![\w.])")
 _SCORE_STR = re.compile(r"\d{1,2}-\d{1,2}")
 
 
@@ -350,9 +353,14 @@ def _unaccounted(text: str, exact: set[float], percent: list[float]) -> list[str
     """Numbers in ``text`` that are neither digest values (to the precision written), percentages of
     them, nor an explicit minute."""
     clean = _EVIDENCE_IN_TEXT.sub(" ", _PLACEHOLDER.sub(" ", text))
+    # a rising pair of minutes ("the 84-94 spell") is a time window
+    windows = {i for r in _RANGE.finditer(clean) if int(r.group(1)) < int(r.group(2)) <= MAX_MINUTE
+               for i in (r.start(1), r.start(2))}
     bad: list[str] = []
     for m in _NUMBER.finditer(clean):
         raw = m.group(0)
+        if m.start() in windows:
+            continue
         value = float(raw.replace(",", "."))
         decimals = len(raw.replace(",", ".").split(".")[1]) if "." in raw.replace(",", ".") else 0
         after, before = clean[m.end():m.end() + 12], clean[max(0, m.start() - 10):m.start()]
@@ -439,6 +447,20 @@ def _parts(word: str) -> list[str]:
 _ENGLISH_SUFFIX = re.compile(r"(?:ed|ing|ly|ion|ions|ness|ment|ments|ive|ous|ful|ity|ally|able|ible|ence|ance|less)$")
 
 
+WORD_LIST = Path("/usr/share/dict/words")
+_FOOTBALL_ENGLISH = frozenset("equaliser equalizer winner opener".split())
+
+
+@functools.cache
+def _english_words() -> frozenset[str]:
+    """Lower-case entries of the system word list (proper nouns there are capitalised, so they stay out)."""
+    try:
+        text = WORD_LIST.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return _FOOTBALL_ENGLISH
+    return _FOOTBALL_ENGLISH | frozenset(w for w in text.split() if w.islower())
+
+
 def _plain(word: str, vocab: set[str], initial: bool, known: frozenset[str] = frozenset()) -> bool:
     """True when a capitalised word is ordinary English / football / digest vocabulary."""
     if len(word) >= 2 and word.isupper():
@@ -450,8 +472,9 @@ def _plain(word: str, vocab: set[str], initial: bool, known: frozenset[str] = fr
     if any(p in known and p not in ok for p in parts):
         return False  # a surname / club word from the tables ("Sterling", "Villa")
     if initial:
-        # a sentence opener: ordinary vocabulary, or a word shaped like English ("Compared", "Notably")
-        return all(p in ok or (len(p) >= 6 and _ENGLISH_SUFFIX.search(p)) for p in parts)
+        # a sentence or label opener ("Near-post corners: ...") passes when it is an English word
+        english = _english_words()
+        return all(p in ok or p in english or (len(p) >= 6 and _ENGLISH_SUFFIX.search(p)) for p in parts)
     # mid-sentence capital: only digest vocabulary and months/days (nationalities, cities, surnames are refused)
     return all(p in vocab or p in set(_MONTHS_DAYS.split()) for p in parts)
 
@@ -520,7 +543,8 @@ def verify(draft: MatchReasoningDraft, digest: Digest, known_names: Iterable[str
         names = name_problems(text, digest, known)
         if names:
             problems.append(f"{path}: name(s) {', '.join(names)} are not allowed in blind mode; refer to people and "
-                            "clubs only by the {H}/{A}/{P:..}/{M:..} placeholders from the digest")
+                            "clubs only by the {H}/{A}/{P:..}/{M:..} placeholders from the digest (if a flagged word "
+                            "is ordinary English, write it in lower case or use another word)")
         bad = _unaccounted(text, exact, percent)
         wrong_scores = [x for x in _SCORE.findall(text) if x not in scorelines]
         if wrong_scores:

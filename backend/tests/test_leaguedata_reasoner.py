@@ -389,6 +389,9 @@ def test_name_check_has_few_false_positives(tables, digest):
         "Notably, {A} pressed less. Overall the shape held. Instead of pressing, {H} sat deeper. Unusually direct play.",
         "Premier League and Champions League football; the La Liga and Serie A sample is separate.",
         "Mentality is a light tiebreaker: {H} had won 3 of 4 when leading (M:xg_per_shot).",
+        # pilot false positives: capitalised openers and labels
+        "Near-post corners: {H} won the first contact. Territorial control went to {A}. Style: direct.",
+        "Equaliser from a set piece. Primary threat came down the middle. Fast breaks hurt {H}.",
     ]
     for text in sample:
         assert names_in(digest, text, tables.known_names()) == [], text
@@ -545,3 +548,12 @@ def test_main_selects_and_runs_offline(tables, tmp_path, monkeypatch, capsys):
     assert len(list(cfg.reasoning_dir.rglob("*.json"))) == 3
     assert "passed" in capsys.readouterr().out
     assert len(list(rs.iter_reasonings(cfg, ["EPL"], [SEASON]))) == 3
+
+
+def test_minute_windows_are_not_scorelines_or_invented_numbers(digest):
+    good = rs.offline_draft(digest.payload())
+    ok = rs.verify(mutate(good, why_won="{H} sat deep through the 84-94 spell and the 23–73 stretch."), digest)
+    assert not any("why_won" in p for p in ok), ok
+    # a falling pair is not a window, and single-digit pairs are still checked as scorelines
+    bad = rs.verify(mutate(good, why_won="{H} out-shot {A} 93-81 and should have won 7-3."), digest)
+    assert any("why_won" in p and "93" in p for p in bad) and any("7-3" in p for p in bad), bad
