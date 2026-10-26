@@ -482,6 +482,13 @@ export const copy = {
       },
       verdictState: { pending: "Waiting for the scores", done: "Written", failed: "Not produced" },
       failed: "The board could not be completed.",
+      notes: {
+        recipes: (n: number, total: number) =>
+          `${n} of ${total} ${total === 1 ? "idea" : "ideas"} came from built-in recipes because the AI did not answer in time.`,
+        dataVerdict: "The verdict is a data-only summary of the scores.",
+        other: "Some steps did not finish, so this board may be thinner than usual.",
+      },
+      details: "Details",
     },
     // Stage
     stage: {
@@ -527,7 +534,7 @@ export const copy = {
       scrub: "Time in the rollout",
       speed: "Playback speed",
       speedValue: (s: number) => `${s}×`,
-      time: (t: number, total: number) => `${t.toFixed(1)} of ${total.toFixed(0)} s`,
+      time: (t: number, total: number) => `${Math.min(Math.max(t, 0), total).toFixed(1)} of ${total.toFixed(1)} s`,
       reducedMotion: "Motion is reduced. Use the slider or the step buttons.",
     },
     // Branch compare

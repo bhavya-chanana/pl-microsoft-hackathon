@@ -36,11 +36,24 @@ function Row({ name, state, text }: { name: string; state: TacticStatus | "pendi
   );
 }
 
+/** Plain-language reading of the backend's developer error strings; the raw strings stay in a disclosure. */
+function summarise(board: TacticsBoard): string[] {
+  const notes: string[] = [];
+  const recipes = board.tactics.filter((x) => x.persona === "recipe").length;
+  const verdictFallback = board.errors.some((e) => e.startsWith("gaffer"));
+  const otherErrors = board.errors.filter((e) => !e.startsWith("gaffer"));
+  if (recipes > 0 && otherErrors.length > 0) notes.push(t.notes.recipes(recipes, board.tactics.length));
+  else if (otherErrors.length > 0) notes.push(t.notes.other);
+  if (verdictFallback) notes.push(t.notes.dataVerdict);
+  return notes;
+}
+
 /** What the agents did to make this board: one call per persona, then the verdict, with the model used. */
 export function AgentTrace({ board }: { board: TacticsBoard }) {
   const ready = board.tactics.filter((x) => x.status === "ready").length;
   const settled = board.tactics.filter((x) => x.status === "ready" || x.status === "rejected").length;
   const verdictState = board.verdict ? "ready" : board.status === "failed" ? "rejected" : "pending";
+  const notes = summarise(board);
   return (
     <section aria-labelledby="trace-heading" className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-raised">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -59,7 +72,7 @@ export function AgentTrace({ board }: { board: TacticsBoard }) {
           {t.evaluator}: {board.evaluator}
         </span>
       </div>
-      <p role="status" aria-live="polite" className="text-sm font-medium tabular-nums">
+      <p role="status" aria-live="polite" className={cn("text-sm font-medium tabular-nums", board.status === "failed" && "text-blocked")}>
         {board.status === "failed" ? t.failed : t.statusLine(ready, board.tactics.length)}
         <span className="sr-only">{settled === board.tactics.length && board.tactics.length > 0 ? `. ${board.verdict?.headline ?? ""}` : ""}</span>
       </p>
@@ -70,11 +83,23 @@ export function AgentTrace({ board }: { board: TacticsBoard }) {
         <Row name={t.verdict} state={verdictState} text={board.verdict ? t.verdictState.done : board.status === "failed" ? t.verdictState.failed : t.verdictState.pending} />
       </ul>
       {board.errors.length > 0 && (
-        <ul role="alert" className="list-disc pl-5 text-sm text-blocked">
-          {board.errors.map((e) => (
-            <li key={e}>{e}</li>
-          ))}
-        </ul>
+        <div className="flex flex-col gap-1">
+          {notes.length > 0 && (
+            <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground">
+              {notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
+          <details className="text-xs text-muted-foreground">
+            <summary className="flex min-h-11 cursor-pointer items-center focus-visible:outline-2 focus-visible:outline-ring">{t.details}</summary>
+            <ul className="list-disc pl-5 font-mono">
+              {board.errors.map((e) => (
+                <li key={e}>{e}</li>
+              ))}
+            </ul>
+          </details>
+        </div>
       )}
     </section>
   );

@@ -93,7 +93,8 @@ function EventLog({ rollout, situation, time }: { rollout: RolloutView; situatio
       ) : (
         <ol className="flex flex-col gap-1 text-sm">
           {events.map((e) => {
-            const at = e.elapsed - t0;
+            // Events can sit a hair before the first frame; never show a negative time.
+            const at = Math.max(0, e.elapsed - t0);
             const happened = at <= time + 0.05;
             return (
               <li key={e.event_id} className={cn("flex gap-3 transition-opacity", !happened && "opacity-45")}>
