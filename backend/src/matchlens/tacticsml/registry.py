@@ -28,6 +28,8 @@ def get_tactical_model() -> TacticalModel:
         except ImportError:
             if choice == "learned":
                 log.warning("learned tactical model unavailable; using the baseline")
+        except Exception:  # unreadable weights must not take every board down with them
+            log.exception("could not load the learned tactical model; using the baseline")
     from matchlens.tacticsml.baseline import BaselineModel
 
     return BaselineModel()

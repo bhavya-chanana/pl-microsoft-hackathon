@@ -26,6 +26,8 @@ log = logging.getLogger(__name__)
 
 _last_request: dict[str, float] = {}
 
+MAX_BYTES = 256 * 1024 * 1024  # no provider file comes close; a bigger body is an error page or abuse
+
 
 class FetchError(RuntimeError):
     pass
@@ -55,6 +57,9 @@ def fetch_bytes(url: str, cache: Path, cfg: Config, *, refresh: bool = False,
                 headers: dict[str, str] | None = None, data: bytes | None = None,
                 retries: int = 4) -> bytes:
     """Return the body of ``url``, from ``cache`` when present."""
+    # Cache paths are built from provider ids; never let one escape the data folder.
+    if not cache.resolve().is_relative_to(cfg.root.resolve()):
+        raise FetchError(f"{url}: cache path {cache} is outside {cfg.root}")
     if cache.exists() and not refresh:
         return cache.read_bytes()
     host = urlparse(url).netloc
@@ -64,7 +69,9 @@ def fetch_bytes(url: str, cache: Path, cfg: Config, *, refresh: bool = False,
         try:
             req = urllib.request.Request(url, data=data, headers=req_headers)
             with urllib.request.urlopen(req, timeout=60) as resp:
-                body = resp.read()
+                body = resp.read(MAX_BYTES + 1)
+                if len(body) > MAX_BYTES:
+                    raise FetchError(f"{url}: response larger than {MAX_BYTES} bytes")
                 if resp.headers.get("Content-Encoding") == "gzip":
                     body = gzip.decompress(body)
             write_atomic(cache, body)

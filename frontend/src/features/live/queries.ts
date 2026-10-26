@@ -269,6 +269,7 @@ export function useTacticsBoard(boardId: string | null) {
       const { data, error } = query.state;
       if (data?.status === "done" || data?.status === "failed") return false;
       if (error instanceof ApiError && error.status === 404) return false;
+      if (error && query.state.errorUpdateCount >= 5) return false; // the engine is gone; stop asking
       return 750;
     },
     staleTime: 0,
