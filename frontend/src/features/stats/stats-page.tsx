@@ -20,7 +20,8 @@ export function StatsPage() {
       <header>
         <h1 className="text-[28px] leading-[34px] font-semibold tracking-tight">{copy.statsPage.heading}</h1>
       </header>
-      <Segmented
+      <div className="sticky top-[var(--stack-h)] z-30 -mx-4 bg-background px-4 py-2 md:-mx-6 md:px-6">
+        <Segmented
         label={copy.statsPage.heading}
         value={view}
         onChange={setView}
@@ -30,6 +31,7 @@ export function StatsPage() {
           { value: "shots", label: copy.statsPage.shots },
         ]}
       />
+      </div>
       <StablePanel panelKey={view}>
         {view === "team" && (
           <div className="flex flex-col gap-6">
