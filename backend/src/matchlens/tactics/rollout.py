@@ -11,6 +11,8 @@ import asyncio
 import hashlib
 import threading
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 from matchlens.simulator.fork import RolloutTrace, SimSnapshot
 from matchlens.simulator.style import NEUTRAL, SimStyle
@@ -21,6 +23,8 @@ BASELINE_ID = "baseline"
 MAX_PARALLEL = 2  # simulation threads at once, across all boards: a rollout run is pure CPU
 
 _slots = threading.BoundedSemaphore(MAX_PARALLEL)
+# Async callers queue here rather than in the default executor, so waiting rollouts never starve other to_thread work.
+_pool = ThreadPoolExecutor(max_workers=MAX_PARALLEL, thread_name_prefix="rollout")
 
 
 class RolloutCancelled(Exception):
@@ -144,9 +148,9 @@ async def run_monte_carlo_async(
     cancel: threading.Event | None = None,
 ) -> list[RolloutTrace]:
     """``run_monte_carlo`` in a worker thread, so a board can evaluate several tactics without blocking the loop."""
-    return await asyncio.to_thread(run_monte_carlo, snap, intent, styles, k=k, horizon_s=horizon_s,
-                                   frame_dt=frame_dt, base_seed=base_seed, tactic_id=tactic_id, use_cache=use_cache,
-                                   cancel=cancel)
+    run = partial(run_monte_carlo, snap, intent, styles, k=k, horizon_s=horizon_s, frame_dt=frame_dt,
+                  base_seed=base_seed, tactic_id=tactic_id, use_cache=use_cache, cancel=cancel)
+    return await asyncio.get_running_loop().run_in_executor(_pool, run)
 
 
 def clear_cache() -> None:

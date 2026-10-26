@@ -615,12 +615,12 @@ def verdict_payload(
 _COUNT_WORDS = (
     "three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen "
     "nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred thousand million dozen "
-    "tres cuatro cinco seis siete ocho nueve diez once doce trece catorce quince veinte treinta cuarenta "
+    "tres cuatro cinco seis siete ocho nueve diez doce trece catorce quince veinte treinta cuarenta "
     "cincuenta sesenta setenta ochenta noventa cien ciento mil millon millones docena"
 ).split()
 _COUNT_WORD = re.compile(r"\b(" + "|".join(_COUNT_WORDS) + r")\b", re.IGNORECASE)
 _COMMON_WORDS = frozenset((
-    "the this that these those then there here they them their it its he his we our and but so or if while because "
+    "gaffer gaffer's the this that these those then there here they them their it its he his we our and but so or if while because "
     "however overall also still both with without given expect keep when where why what who how on in at for by as "
     "to from after before once since until even only both either neither some any all each every most more less "
     "el la los las un una y o pero si con sin en por para como cuando donde porque aunque tambien "

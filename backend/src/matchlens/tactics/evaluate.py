@@ -71,7 +71,7 @@ class TraceFacts:
 
 def restart_awarded_to(trace: RolloutTrace) -> str | None:
     """The team a rollout's ending restart (throw-in, goal kick, corner, free kick) is awarded to, if any."""
-    parts = trace.terminal.split(":")
+    parts = trace.terminal.split(":", 2)
     return parts[2] if len(parts) == 3 and parts[0] == "restart" else None
 
 
