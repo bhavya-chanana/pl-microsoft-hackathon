@@ -97,7 +97,7 @@ def _possession_chain(engine: MatchEngine, shot: Event) -> list[Event]:
     return list(reversed(chain))
 
 
-def _event_strokes(e: Event, start: float, engine: MatchEngine, primary: bool = False) -> list[Drawing]:
+def event_strokes(e: Event, start: float, engine: MatchEngine, primary: bool = False) -> list[Drawing]:
     if not e.start:
         return []
     at = round(max(0.0, e.elapsed - start), 2)
@@ -125,7 +125,7 @@ def _shot_moment(engine: MatchEngine, signal: Signal) -> tuple[float, float, lis
     first = chain[0].elapsed if chain else shot.elapsed
     start = max(shot.elapsed - MAX_LEAD_S, min(first - 2.0, shot.elapsed - LEAD_S))
     end = shot.elapsed + TAIL_S
-    drawings = [d for e in chain for d in _event_strokes(e, start, engine)]
+    drawings = [d for e in chain for d in event_strokes(e, start, engine)]
     at = round(shot.elapsed - start, 2)
     if shot.start:
         target = shot.end or _xy(PITCH_LENGTH if shot.start.x > PITCH_LENGTH / 2 else 0.0, PITCH_WIDTH / 2)
@@ -137,6 +137,9 @@ def _shot_moment(engine: MatchEngine, signal: Signal) -> tuple[float, float, lis
                                 team_id=shot.team_id, player_id=shot.player_id, emphasis="primary",
                                 label=_short(engine, shot.player_id), event_id=shot.event_id))
     return start, end, [*chain, shot], drawings
+
+
+_event_strokes = event_strokes  # former private name
 
 
 def _short(engine: MatchEngine, player_id: str | None) -> str | None:
@@ -178,7 +181,7 @@ def _spell_moment(engine: MatchEngine, signal: Signal) -> tuple[float, float, li
                                            types={EventType.PASS}) if e.outcome.value == "success"][-10:]
         events = passes
         for t, e in zip(_spread(len(passes), start, end), passes, strict=True):
-            drawings += [d.model_copy(update={"at_s": t}) for d in _event_strokes(e, start, engine)]
+            drawings += [d.model_copy(update={"at_s": t}) for d in event_strokes(e, start, engine)]
     else:
         # Chaos, momentum swings and anything else spread over minutes: replay the sequence of
         # evidence events, joined in order, so the eye follows the ball changing hands.
@@ -200,7 +203,7 @@ def _player_moment(engine: MatchEngine, signal: Signal) -> tuple[float, float, l
     drawings: list[Drawing] = []
     if signal.type == SignalType.HARD_PASS and events:
         e = events[0]
-        drawings += _event_strokes(e, start, engine, primary=True)
+        drawings += event_strokes(e, start, engine, primary=True)
         if e.start:
             drawings.append(Drawing(kind="ring", points=[_xy(e.start.x, e.start.y)], radius=2.4,
                                     at_s=round(max(0.0, e.elapsed - start - 0.5), 2), team_id=e.team_id,

@@ -43,6 +43,7 @@ class Situation(_Model):
     ball_zone: str  # tactics.intent zone of the ball, for the possession team
     phase: Literal["build_up", "progression", "final_third", "transition", "set_piece", "defending"]
     coaching_team_id: str
+    attacking_right: dict[str, bool] = Field(default_factory=dict)  # team_id -> attacks towards x=105
     players: list[PlayerSpot]
     frame: TrackingFrame
 
