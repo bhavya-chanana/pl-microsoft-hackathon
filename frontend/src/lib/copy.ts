@@ -203,6 +203,11 @@ export const copy = {
       conceded: "Goals conceded",
     } as Record<string, string>,
   },
+  broadcastControls: {
+    back: "Back to Match centre",
+    sound: "Turn on commentary",
+    soundOn: "Turn off commentary",
+  },
   narration: {
     listen: "Listen",
     listening: "Listening",
