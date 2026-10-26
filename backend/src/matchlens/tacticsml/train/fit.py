@@ -71,14 +71,20 @@ def load_dataset(sources: Sequence[str], split: str) -> Dataset:
         raise SystemExit("matchlens.tacticsml.train.build is not available yet (shard reader)") from exc
     parts: list[dict] = []
     keys: tuple[str, ...] = ()
-    for shard in read_shards(list(sources), split):
+    try:
+        got = read_shards(list(sources), split)
+    except Exception as exc:  # C3's DataUnavailable when no shards match the split
+        if type(exc).__name__ == "DataUnavailable":
+            raise SystemExit(f"no shards found for sources={list(sources)} split={split!r}: {exc}") from exc
+        raise
+    for shard in ([got] if isinstance(got, dict) else got):  # one concatenated dict, or an iterable of them
         if not isinstance(shard, dict):
             shard = getattr(shard, "arrays", None) or dict(shard)
         pk = shard.get("profile_keys")
         if pk is not None and len(pk):
             keys = tuple(str(k) for k in pk)
-        parts.append({k: np.asarray(v) for k, v in shard.items() if k != "profile_keys" and k != "node_ids"
-                      and not isinstance(v, str)})
+        parts.append({k: np.asarray(v) for k, v in shard.items()
+                      if k in GEOM_KEYS or k in LABEL_KEYS or k in ("target_pos", "target_valid")})
     if not parts:
         raise SystemExit(f"no shards found for sources={list(sources)} split={split!r}")
     out: dict[str, np.ndarray] = {}
