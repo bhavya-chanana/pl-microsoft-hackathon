@@ -16,6 +16,7 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from matchlens.domain.models import (
     PITCH_LENGTH,
@@ -41,11 +42,27 @@ from matchlens.domain.pitch import (
 )
 from matchlens.simulator.roster import default_match_meta
 from matchlens.simulator.storyline import Beat, BeatType, Storyline, comeback_storyline
+from matchlens.simulator.style import NEUTRAL, SimStyle
+
+if TYPE_CHECKING:
+    from matchlens.simulator.fork import RolloutTrace, SimSnapshot
+    from matchlens.simulator.intent_exec import IntentController
 
 HALF_LENGTH = 2700.0
 CENTRE = (PITCH_LENGTH / 2, PITCH_WIDTH / 2)
 
 Vec = tuple[float, float]
+
+# Roles whose players move with the defensive line (SimStyle.line_height).
+_DEFENCE_ROLES = frozenset({"LB", "LCB", "RCB", "RB", "CB", "LWB", "RWB"})
+
+
+class _Stop(Exception):
+    """Ends a rollout early; ``terminal`` says why (goal, shot, turnover, restart:<kind>, horizon)."""
+
+    def __init__(self, terminal: str) -> None:
+        super().__init__(terminal)
+        self.terminal = terminal
 
 
 @dataclass
@@ -80,6 +97,11 @@ class MatchSimulator:
         seed: int = 7,
         meta: MatchMeta | None = None,
         storyline: Storyline | None = None,
+        *,
+        styles: dict[str, SimStyle] | None = None,
+        intent: IntentController | None = None,
+        frame_dt: float = 1.0,
+        id_prefix: str = "",
     ) -> None:
         self.seed = seed
         self.rng = random.Random(seed)
@@ -92,8 +114,27 @@ class MatchSimulator:
         self._wander = {pid: (self.rng.uniform(0, 2 * math.pi), self.rng.uniform(25, 60))
                         for pid in self.meta.players}
         self._pending_corrections: list[tuple[float, Event, str]] = []
+        # Playing style per team, an optional tactic intent and fork settings. All of
+        # these are inert by default, so run() output is identical to a plain simulator.
+        self._styles = dict(styles) if styles else {}
+        self._intent = intent
+        self._frame_dt = frame_dt  # seconds between tracking frames (1.0 = the 1 Hz match feed)
+        self._id_prefix = id_prefix
+        self._stop_at: float | None = None  # rollout horizon (elapsed seconds); None outside rollouts
+        self._pending_terminal: str | None = None  # set once a shot is taken in a rollout
+        self._counter_until: dict[str, float] = {}  # team -> end of its counter-attack window
+        self._last_frame_t: float | None = None
+        self._team_by_player = {
+            pid: team.team_id for team in (self.meta.home, self.meta.away) for pid in team.starting_xi + team.bench
+        }
 
     # ------------------------------------------------------------------ setup
+
+    def _style(self, team_id: str) -> SimStyle:
+        style = self._styles.get(team_id, NEUTRAL)
+        if self._intent is not None:
+            style = self._intent.adjust_style(team_id, style)
+        return style
 
     def _team_ids(self) -> tuple[str, str]:
         return self.meta.home.team_id, self.meta.away.team_id
@@ -105,7 +146,7 @@ class MatchSimulator:
         return self.meta.opponent(team_id).team_id
 
     def _team_of(self, player_id: str) -> str:
-        return player_id.split("-")[0]
+        return self._team_by_player.get(player_id) or player_id.split("-")[0]
 
     def _setup(self) -> None:
         s = self.s
@@ -121,12 +162,15 @@ class MatchSimulator:
         right = self._attacks_right(team)
         ax, ay = ANCHORS[self.s.roles[pid]]
         bx, by = to_relative(*self.s.ball, right)
+        style = self._style(team)
         if self.s.roles[pid] == "GK":
             x = ax + max(0.0, (bx - 35) * 0.12)
             y = 34 + (by - 34) * 0.15
         else:
-            shift = (bx - 45) * 0.55 + 5 if in_possession else (bx - 52.5) * 0.5 - 5
-            width = 1.0 if in_possession else 0.78
+            shift = (bx - 45) * 0.55 + 5 if in_possession else (bx - 52.5) * 0.5 - 5 + style.block_height
+            width = 1.0 * style.width_in_poss if in_possession else 0.78 * style.compactness_out
+            if self.s.roles[pid] in _DEFENCE_ROLES:
+                shift += style.line_height
             x = ax + shift
             y = 34 + (ay - 34) * width + (by - 34) * 0.3
             phase, period = self._wander[pid]
@@ -134,7 +178,10 @@ class MatchSimulator:
             y += 2.5 * math.cos(self.s.elapsed / (period * 0.8) + phase)
         x = min(max(x, 1.0), PITCH_LENGTH - 1)
         y = min(max(y, 1.0), PITCH_WIDTH - 1)
-        return to_absolute(x, y, right)
+        point = to_absolute(x, y, right)
+        if self._intent is not None:
+            point = self._intent.override(pid, self.s, point) or point
+        return point
 
     def _kickoff_positions(self) -> dict[str, Vec]:
         saved_ball, self.s.ball = self.s.ball, CENTRE
@@ -160,7 +207,7 @@ class MatchSimulator:
         start = kw.pop("start", None)
         end = kw.pop("end", None)
         ev = Event(
-            event_id=f"{self.meta.match_id}-e{self._seq:05d}",
+            event_id=f"{self._id_prefix}{self.meta.match_id}-e{self._seq:05d}",
             match_id=self.meta.match_id,
             sequence=self._seq,
             period=self.s.period,
@@ -178,13 +225,15 @@ class MatchSimulator:
 
     def _advance(self, dt: float, ball_to: Vec | None = None, chasers: tuple[str, ...] = ()) -> None:
         """Advance time by dt seconds, moving the ball linearly to ball_to and
-        emitting 1 Hz tracking frames."""
+        emitting tracking frames (1 Hz, or every ``frame_dt`` seconds in a fork)."""
         s = self.s
         start_elapsed = s.elapsed
         ball_from = s.ball
         target_ball = ball_to or s.ball
         end_elapsed = start_elapsed + dt
         while s.next_frame <= end_elapsed:
+            if self._stop_at is not None and s.next_frame > self._stop_at + 1e-9:
+                raise _Stop(self._pending_terminal or "horizon")
             frac = 1.0 if dt == 0 else (s.next_frame - start_elapsed) / dt
             frac = min(max(frac, 0.0), 1.0)
             s.ball = (
@@ -195,7 +244,7 @@ class MatchSimulator:
             s.elapsed = s.next_frame
             self._move_players(chasers)
             self._frame()
-            s.next_frame += 1.0
+            s.next_frame = s.next_frame + 1.0 if self._frame_dt == 1.0 else round(s.next_frame + self._frame_dt, 6)
         s.clock += end_elapsed - s.elapsed
         s.elapsed = end_elapsed
         s.ball = target_ball
@@ -204,6 +253,7 @@ class MatchSimulator:
     def _move_players(self, chasers: tuple[str, ...]) -> None:
         s = self.s
         new_positions: dict[str, Vec] = {}
+        smooth = self._frame_dt != 1.0
         for team, pids in s.on_pitch.items():
             in_poss = team == s.possession
             for pid in pids:
@@ -218,6 +268,11 @@ class MatchSimulator:
                 else:
                     tx, ty = self._anchor_abs(pid, in_poss)
                     cap, lag = top * 0.6, 0.35
+                    if self._intent is not None and self._intent.is_sprinting(pid, s.elapsed):
+                        cap, lag = top * 0.95, 0.6  # a directed run
+                if smooth:
+                    # Per-frame limits scale with the frame interval; lag compounds per second.
+                    cap, lag = cap * self._frame_dt, 1 - (1 - lag) ** self._frame_dt
                 dx, dy = tx - px, ty - py
                 d = math.hypot(dx, dy)
                 step = min(d * lag, cap)
@@ -235,11 +290,17 @@ class MatchSimulator:
         entities = [EntityPosition(entity_id="ball", x=round(s.ball[0], 2), y=round(s.ball[1], 2), speed=0.0)]
         prev = self.tracking[-1] if self.tracking else None
         prev_pos = {e.entity_id: (e.x, e.y) for e in prev.entities} if prev and prev.period == s.period else {}
+        # Speed is metres per second whatever the frame interval; the first frame of a
+        # fork may follow a longer gap than frame_dt.
+        gap = self._frame_dt
+        if self._frame_dt != 1.0 and self._last_frame_t is not None:
+            gap = max(s.elapsed - self._last_frame_t, self._frame_dt)
+        self._last_frame_t = s.elapsed
         for pid, (x, y) in s.positions.items():
-            speed = distance((x, y), prev_pos[pid]) if pid in prev_pos else 0.0
+            speed = distance((x, y), prev_pos[pid]) / gap if pid in prev_pos else 0.0
             entities.append(EntityPosition(entity_id=pid, x=round(x, 2), y=round(y, 2), speed=round(speed, 2)))
         if "ball" in prev_pos:
-            entities[0] = entities[0].model_copy(update={"speed": round(distance(s.ball, prev_pos["ball"]), 2)})
+            entities[0] = entities[0].model_copy(update={"speed": round(distance(s.ball, prev_pos["ball"]) / gap, 2)})
         self.tracking.append(
             TrackingFrame(
                 match_id=self.meta.match_id,
@@ -299,6 +360,16 @@ class MatchSimulator:
             start=self.s.ball,
             attrs={"reason": reason},
         )
+        if reason in ("tackle", "interception"):
+            style = self._style(team)
+            if style.counter_boost > 0:
+                self._counter_until[team] = self.s.elapsed + style.counter_window_s
+        self._rollout_end("turnover")
+
+    def _rollout_end(self, terminal: str) -> None:
+        """Ends a rollout at a natural stopping point; a no-op in a full match."""
+        if self._stop_at is not None:
+            raise _Stop(terminal)
 
     def _player_by_role(self, team: str, roles: tuple[str, ...]) -> str:
         for pid in self.s.on_pitch[team]:
@@ -316,8 +387,9 @@ class MatchSimulator:
         bx, by = self._rel(team, s.ball)
 
         presser, pd = self._nearest(opp, s.ball)
+        press = self._style(opp).press_intensity
         pressured = False
-        if pd < 6 and self.rng.random() < 0.8:
+        if pd < 6 * press and self.rng.random() < 0.8 * press:
             pressured = True
             self._emit(
                 EventType.PRESSURE,
@@ -332,7 +404,7 @@ class MatchSimulator:
             if roll < 0.105:
                 self._foul(presser, carrier)
                 return
-            if roll < 0.105 + max(0.04, 0.1 - 0.05 * dom):
+            if roll < 0.105 + max(0.04, 0.1 - 0.05 * dom) * press**0.5:
                 self._emit(
                     EventType.TACKLE,
                     team_id=opp,
@@ -345,26 +417,66 @@ class MatchSimulator:
                 self._advance(1.5)
                 return
 
+        if self._intent is not None and self._follow_ball_plan(team, carrier, pressured, (bx, by)):
+            return
+
+        style = self._style(team)
         goal_dist, angle = goal_distance_and_angle(bx, by)
         if goal_dist < 30 and angle > 0.12:
             in_box = bx >= PITCH_LENGTH - 16.5 and abs(by - PITCH_WIDTH / 2) <= 20.16
             p_shot = (0.3 + 0.5 * ((20 - min(goal_dist, 20)) / 20) ** 2 if in_box else 0.09) * (1 + 0.5 * dom)
-            if self.rng.random() < p_shot:
+            if self.rng.random() < p_shot * style.shot_appetite:
                 self._shot(carrier, (bx, by))
                 return
 
-        if bx > 75 and abs(by - PITCH_WIDTH / 2) > 16 and self.rng.random() < 0.3:
+        if bx > 75 and abs(by - PITCH_WIDTH / 2) > 16 and self.rng.random() < 0.3 * style.crossing:
             self._cross(carrier, pressured)
-        elif self.rng.random() < (0.3 if bx > 70 else 0.16) and bx < 95:
+        elif self.rng.random() < (0.3 if bx > 70 else 0.16) * style.dribbling and bx < 95:
             self._carry(carrier, pressured)
         else:
             self._pass(carrier, pressured)
+
+    def _follow_ball_plan(self, team: str, carrier: str, pressured: bool, rel: Vec) -> bool:
+        """Carry out the active ball-plan step of a tactic intent. Returns True when it acted. The step
+        stays active while the action runs (pass_bias reads it) and is consumed afterwards."""
+        assert self._intent is not None
+        step = self._intent.active_step(team, carrier)
+        if step is None:
+            return False
+        action = str(step.action)
+        bx, by = rel
+        if action == "shoot":
+            goal_dist, angle = goal_distance_and_angle(bx, by)
+            if goal_dist < 32 and angle > 0.1:
+                self._shot(carrier, (bx, by))
+            elif bx < 95:
+                self._carry(carrier, pressured)  # work the ball into range first
+                return True
+            else:
+                return False
+        elif action == "cross":
+            if bx <= 60:
+                self._carry(carrier, pressured)
+                return True
+            self._cross(carrier, pressured)
+        elif action == "carry":
+            self._carry(carrier, pressured)
+        elif action in ("long_ball", "switch", "cutback"):
+            self._pass(carrier, pressured, plan=action)
+        else:
+            self._pass(carrier, pressured)
+        self._intent.consume()
+        return True
 
     def _pass_candidates(self, team: str, carrier: str) -> list[tuple[str, float, float, int, Vec]]:
         """Return (receiver, weight, distance, lane opponents, rel position)."""
         opp = self._opp(team)
         b_abs = self.s.ball
         bx, _ = self._rel(team, b_abs)
+        style = self._style(team)
+        verticality = style.verticality
+        if self.s.elapsed < self._counter_until.get(team, -1.0):
+            verticality += style.counter_boost  # quick break after a regain
         out = []
         for pid in self.s.on_pitch[team]:
             if pid == carrier:
@@ -382,7 +494,7 @@ class MatchSimulator:
             position = self.meta.players[pid].position
             # Recycle possession through defenders and midfielders; only
             # reward forward passes strongly once the move is building.
-            fwd_weight = 0.035 if bx < 70 else 0.012
+            fwd_weight = (0.035 if bx < 70 else 0.012) * verticality
             score = (
                 fwd_weight * max(-25.0, min(forward, 35.0))
                 - 0.07 * max(0.0, d - 12)
@@ -393,29 +505,37 @@ class MatchSimulator:
                 - (0.6 if position == Position.FWD and rx > 85 else 0.0)
                 - (1.5 if self.s.roles[pid] == "GK" and bx > 30 else 0.0)
             )
+            if self._intent is not None:
+                score += self._intent.pass_bias(team, carrier, pid, r_abs)
             out.append((pid, math.exp(score * 1.1), d, lane, (rx, ry)))
         return out
 
     def _long_ball_chance(self, bx: float, pressured: bool, set_piece: str | None) -> float:
         """How often a long ball is played instead of a pass to feet."""
+        directness = self._style(self.s.possession).directness
         if set_piece == "goal_kick":
-            return 0.5
+            return 0.5 * directness
         if set_piece == "free_kick":
-            return 0.5 if bx < 60 else 0.3
+            return (0.5 if bx < 60 else 0.3) * directness
         if bx < 35:
-            return 0.3 if pressured else 0.07
-        return 0.08 if pressured else 0.04
+            return (0.3 if pressured else 0.07) * directness
+        return (0.08 if pressured else 0.04) * directness
 
-    def _pass(self, carrier: str, pressured: bool, set_piece: str | None = None) -> None:
+    def _pass(self, carrier: str, pressured: bool, set_piece: str | None = None, plan: str | None = None) -> None:
+        """``plan`` (long_ball, switch, cutback) is a ball-plan step from a tactic intent."""
         s = self.s
         team = s.possession
         opp = self._opp(team)
         cands = self._pass_candidates(team, carrier)
         if not cands:
             return
-        bx, _ = self._rel(team, s.ball)
+        bx, by = self._rel(team, s.ball)
         long_cands = [c for c in cands if c[2] > 30 and c[4][0] > bx - 5]
-        if long_cands and self.rng.random() < self._long_ball_chance(bx, pressured, set_piece):
+        if plan == "long_ball":
+            cands = long_cands or cands
+        elif plan == "switch":
+            cands = [c for c in cands if abs(c[4][1] - by) > 22] or cands
+        elif long_cands and self.rng.random() < self._long_ball_chance(bx, pressured, set_piece):
             cands = long_cands
         receiver, _, d, lane, (rx, ry) = self.rng.choices(cands, weights=[c[1] for c in cands])[0]
         start = s.ball
@@ -451,6 +571,8 @@ class MatchSimulator:
         }
         if set_piece:
             attrs["set_piece"] = set_piece
+        if plan:
+            attrs["plan"] = plan
         if self.rng.random() < p:
             end = (target[0] + self.rng.gauss(0, 0.6), target[1] + self.rng.gauss(0, 0.6))
             self._emit(
@@ -466,7 +588,8 @@ class MatchSimulator:
             s.carrier = receiver
             for _ in range(2):
                 self._support_run(team, receiver)
-            self._advance(travel + self.rng.uniform(1.0, 2.4), ball_to=end, chasers=(receiver,))
+            self._advance(travel + self.rng.uniform(1.0, 2.4) / self._style(team).tempo, ball_to=end,
+                          chasers=(receiver,))
             return
 
         frac = self.rng.uniform(0.55, 1.15)
@@ -525,10 +648,15 @@ class MatchSimulator:
         runners = [p for p in s.on_pitch[team] if p != receiver and s.roles[p] != "GK" and p not in s.targets]
         if not runners:
             return
-        runner = self.rng.choice(runners)
-        rx, ry = self._rel(team, s.positions[runner])
-        run_to = self._abs(team, (min(rx + self.rng.uniform(6, 20), PITCH_LENGTH - 4),
-                                  min(max(ry + self.rng.gauss(0, 8), 2), PITCH_WIDTH - 2)))
+        directed = self._intent.directed_run(team, runners, s) if self._intent is not None else None
+        if directed is not None:
+            # A run the tactic asks for goes first; no random draw is spent on it.
+            runner, run_to = directed
+        else:
+            runner = self.rng.choice(runners)
+            rx, ry = self._rel(team, s.positions[runner])
+            run_to = self._abs(team, (min(rx + self.rng.uniform(6, 20), PITCH_LENGTH - 4),
+                                      min(max(ry + self.rng.gauss(0, 8), 2), PITCH_WIDTH - 2)))
         s.targets[runner] = run_to
         marker, _ = self._nearest(self._opp(team), run_to)
         if s.roles.get(marker) != "GK" and marker not in s.targets:
@@ -666,24 +794,35 @@ class MatchSimulator:
             attrs=attrs,
         )
         travel = dist_goal / (speed / 3.6)
+        if self._stop_at is not None:
+            # A rollout ends with the first shot; frames still run until the ball is dealt with.
+            self._pending_terminal = "goal" if outcome == Outcome.GOAL else "shot"
         if outcome == Outcome.BLOCKED:
             blocker, _ = self._nearest(opp, start)
             block_pt = (start[0] + (end[0] - start[0]) * 0.15, start[1] + (end[1] - start[1]) * 0.15)
             self._advance(0.4, ball_to=block_pt)
+            self._rollout_end("shot")
             if self.rng.random() < 0.5:
                 self._corner(team)
             else:
                 self._change_possession(opp, blocker, "blocked_shot")
                 self._advance(1.0)
             return
-        self._advance(travel, ball_to=end)
+        try:
+            self._advance(travel, ball_to=end)
+        except _Stop:
+            # The horizon fell mid-flight: a rollout still records the save or goal.
+            if outcome not in (Outcome.GOAL, Outcome.SAVED):
+                raise
         if outcome == Outcome.OFF_TARGET:
+            self._rollout_end("shot")
             self._goal_kick(opp)
             return
         gk = self._player_by_role(opp, ("GK",))
         if outcome == Outcome.SAVED:
             self._emit(EventType.SAVE, team_id=opp, player_id=gk, related_player_id=shooter, start=end,
                        outcome=Outcome.SUCCESS, attrs={"xg_faced": xg, "shot_event_id": shot.event_id})
+            self._rollout_end("shot")
             if self.rng.random() < 0.38:
                 self._corner(team)
             else:
@@ -709,6 +848,7 @@ class MatchSimulator:
                 "away_score": s.score[self.meta.away.team_id],
             },
         )
+        self._rollout_end("goal")
         if credited and credited != shooter:
             delay = self.rng.uniform(40, 80)
             self._pending_corrections.append((s.elapsed + delay, shot, shooter))
@@ -742,6 +882,7 @@ class MatchSimulator:
                 s.positions.pop(offender, None)
                 if s.carrier == offender:
                     s.carrier = ""
+        self._rollout_end("restart:foul")
         self._advance(self.rng.uniform(20, 40) + (40 if card else 0), ball_to=spot)
         self._free_kick(vic_team, victim if victim in s.on_pitch[vic_team] else self._nearest(vic_team, spot)[0])
 
@@ -759,6 +900,7 @@ class MatchSimulator:
             self._pass(taker, False, set_piece="free_kick")
 
     def _throw_in(self, team: str, spot: Vec) -> None:
+        self._rollout_end("restart:throw_in")
         s = self.s
         s.ball = (min(max(spot[0], 1.0), PITCH_LENGTH - 1), spot[1])
         taker, _ = self._nearest(team, s.ball)
@@ -768,6 +910,7 @@ class MatchSimulator:
         self._pass(taker, False, set_piece="throw_in")
 
     def _goal_kick(self, team: str) -> None:
+        self._rollout_end("restart:goal_kick")
         s = self.s
         gk = self._player_by_role(team, ("GK",))
         spot = self._abs(team, (5.5, 34 + self.rng.choice([-9, 9])))
@@ -779,6 +922,7 @@ class MatchSimulator:
         self._pass(gk, False, set_piece="goal_kick")
 
     def _corner(self, team: str) -> None:
+        self._rollout_end("restart:corner")
         s = self.s
         opp = self._opp(team)
         flag = self._abs(team, (PITCH_LENGTH, self.rng.choice([0.0, PITCH_WIDTH])))
@@ -927,12 +1071,21 @@ class MatchSimulator:
             out.append(_Scheduled(beat=beat, period=period, clock=clock))
         return out
 
-    def _play_period(self, period: int, kickoff_team: str, end_clock: float, schedule: list[_Scheduled]) -> None:
+    def _play_period(
+        self,
+        period: int,
+        kickoff_team: str,
+        end_clock: float,
+        schedule: list[_Scheduled],
+        pause_at: float | None = None,
+    ) -> None:
         s = self.s
         s.period = period
         s.clock = HALF_LENGTH * (period - 1)
         self._kickoff(kickoff_team)
         while s.clock < end_clock:
+            if pause_at is not None and s.elapsed >= pause_at:
+                return  # stopped at a clean step boundary, ready to be snapshotted
             due = [b for b in schedule if b.period == period and b.clock <= s.clock]
             if due:
                 item = due[0]
@@ -945,6 +1098,45 @@ class MatchSimulator:
         self._emit(EventType.HALF_TIME if period == 1 else EventType.FULL_TIME,
                    attrs={"home_score": s.score[self.meta.home.team_id],
                           "away_score": s.score[self.meta.away.team_id]})
+
+    def run_until(self, elapsed: float) -> None:
+        """Play the first half up to the first step boundary at or after ``elapsed`` seconds, then stop there
+        (a state that can be snapshotted and resumed). The match is not finished: use run() for that."""
+        self._setup()
+        schedule = self._schedule()
+        self._play_period(1, self.meta.home.team_id, HALF_LENGTH, schedule, pause_at=elapsed)
+
+    # ---------------------------------------------------------------- forking
+
+    def snapshot(self) -> SimSnapshot:
+        """Freeze the simulator at a step boundary so it can be resumed or forked (see simulator/fork.py)."""
+        from matchlens.simulator.fork import take_snapshot
+
+        return take_snapshot(self)
+
+    @classmethod
+    def resume(
+        cls,
+        snap: SimSnapshot,
+        *,
+        seed: int | None = None,
+        styles: dict[str, SimStyle] | None = None,
+        intent: IntentController | None = None,
+        frame_dt: float = 1.0,
+        id_prefix: str = "fork-",
+    ) -> MatchSimulator:
+        """A simulator that continues from a snapshot. seed=None restores the random stream exactly;
+        otherwise a fresh Random(seed) drives the continuation."""
+        from matchlens.simulator.fork import restore
+
+        return restore(snap, seed=seed, styles=styles, intent=intent, frame_dt=frame_dt, id_prefix=id_prefix)
+
+    def rollout(self, horizon_s: float) -> RolloutTrace:
+        """Play on for up to ``horizon_s`` seconds, stopping early at the first shot, goal, turnover or
+        dead ball. Consumes this simulator: fork again from a snapshot for another rollout."""
+        from matchlens.simulator.fork import run_rollout
+
+        return run_rollout(self, horizon_s)
 
     def run(self) -> SyntheticMatch:
         self._setup()

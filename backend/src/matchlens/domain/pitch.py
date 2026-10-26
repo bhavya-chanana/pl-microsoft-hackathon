@@ -14,6 +14,8 @@ GOAL_HALF_WIDTH = 3.66
 ANCHORS: dict[str, tuple[float, float]] = {
     "GK": (5, 34),
     "LB": (26, 58),
+    "LWB": (34, 60),
+    "RWB": (34, 8),
     "LCB": (20, 43),
     "RCB": (20, 25),
     "RB": (26, 10),
@@ -23,6 +25,8 @@ ANCHORS: dict[str, tuple[float, float]] = {
     "RCM": (42, 22),
     "LDM": (35, 42),
     "RDM": (35, 26),
+    "LM": (46, 58),
+    "RM": (46, 10),
     "LAM": (58, 54),
     "CAM": (58, 34),
     "RAM": (58, 14),
@@ -30,6 +34,8 @@ ANCHORS: dict[str, tuple[float, float]] = {
     "LW": (66, 58),
     "RW": (66, 10),
     "ST": (72, 34),
+    "LST": (72, 42),  # split strikers in a front two
+    "RST": (72, 26),
 }
 
 
