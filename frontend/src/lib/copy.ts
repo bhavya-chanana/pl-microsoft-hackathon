@@ -678,6 +678,8 @@ export const copy = {
       recommends: "Recommended",
       cited: "Based on",
       none: "No single idea stands out.",
+      noClearWinner: "No clear winner",
+      withinNoise: "Every idea lands inside the baseline's range, so the simulation cannot tell them apart. Treat these as options to weigh, not a recommendation.",
       show: "Show it",
     },
     events: {

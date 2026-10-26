@@ -70,8 +70,18 @@ function SituationBar({ board, teams }: { board: Pick<TacticsBoard, "situation">
   );
 }
 
+/** True when the recommended idea's shot and concede ranges overlap the baseline's: no real difference to act on. */
+function withinNoise(board: TacticsBoard): boolean {
+  const base = board.baseline;
+  const pick = board.tactics.find((x) => x.tactic_id === board.verdict?.recommended_tactic_id)?.outcome;
+  if (!base || !pick) return false;
+  const overlaps = (a: { low: number; high: number }, b: { low: number; high: number }) => a.low <= b.high && b.low <= a.high;
+  return overlaps(pick.p_shot, base.p_shot) && overlaps(pick.p_concede_shot, base.p_concede_shot);
+}
+
 function VerdictPanel({ board, titleOf, onShow }: { board: TacticsBoard; titleOf: (id: string) => string; onShow: (id: string) => void }) {
   const v = board.verdict;
+  const noise = v ? withinNoise(board) : false;
   if (!v) {
     return board.status === "failed" ? null : (
       <section aria-label={t.verdict.heading} className="flex flex-col gap-2 rounded-lg border bg-card p-4 shadow-raised">
@@ -85,12 +95,12 @@ function VerdictPanel({ board, titleOf, onShow }: { board: TacticsBoard; titleOf
     <section aria-labelledby="verdict-heading" className="flex flex-col gap-3 rounded-lg border border-verified/40 bg-card p-4 shadow-raised">
       <div className="flex flex-wrap items-center gap-2">
         <h2 id="verdict-heading" className="font-display text-xl font-semibold">
-          {t.verdict.heading}: {v.headline}
+          {t.verdict.heading}: {noise ? t.verdict.noClearWinner : v.headline}
         </h2>
       </div>
-      <p className="max-w-prose text-sm">{v.text}</p>
+      <p className="max-w-prose text-sm">{noise ? t.verdict.withinNoise : v.text}</p>
       <div className="flex flex-wrap items-center gap-2">
-        {v.recommended_tactic_id ? (
+        {v.recommended_tactic_id && !noise ? (
           <Button variant="secondary" className="h-11 gap-2 px-4" onClick={() => onShow(v.recommended_tactic_id!)}>
             <Sparkles aria-hidden />
             {t.verdict.show}: {titleOf(v.recommended_tactic_id)}
@@ -191,7 +201,7 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
     return [...tactics].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
   }, [tactics, done]);
 
-  const recommended = board?.verdict?.recommended_tactic_id ?? null;
+  const recommended = board?.verdict && !withinNoise(board) ? (board.verdict.recommended_tactic_id ?? null) : null;
   const firstReady = ordered.find((x) => x.status === "ready")?.tactic_id ?? null;
   const validPick = pickedBranch === BASELINE_ID ? Boolean(board?.baseline) : pickedBranch && byId.get(pickedBranch)?.status === "ready";
   const activeId = validPick ? pickedBranch : recommended && byId.get(recommended)?.status === "ready" ? recommended : firstReady;
