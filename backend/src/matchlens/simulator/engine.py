@@ -58,7 +58,7 @@ _DEFENCE_ROLES = frozenset({"LB", "LCB", "RCB", "RB", "CB", "LWB", "RWB"})
 
 
 class _Stop(Exception):
-    """Ends a rollout early; ``terminal`` says why (goal, shot, turnover, restart:<kind>, horizon)."""
+    """Ends a rollout early; ``terminal`` says why (goal, shot, turnover, restart:<kind>:<awarded team>, horizon)."""
 
     def __init__(self, terminal: str) -> None:
         super().__init__(terminal)
@@ -882,7 +882,7 @@ class MatchSimulator:
                 s.positions.pop(offender, None)
                 if s.carrier == offender:
                     s.carrier = ""
-        self._rollout_end("restart:foul")
+        self._rollout_end(f"restart:foul:{vic_team}")
         self._advance(self.rng.uniform(20, 40) + (40 if card else 0), ball_to=spot)
         self._free_kick(vic_team, victim if victim in s.on_pitch[vic_team] else self._nearest(vic_team, spot)[0])
 
@@ -900,7 +900,7 @@ class MatchSimulator:
             self._pass(taker, False, set_piece="free_kick")
 
     def _throw_in(self, team: str, spot: Vec) -> None:
-        self._rollout_end("restart:throw_in")
+        self._rollout_end(f"restart:throw_in:{team}")
         s = self.s
         s.ball = (min(max(spot[0], 1.0), PITCH_LENGTH - 1), spot[1])
         taker, _ = self._nearest(team, s.ball)
@@ -910,7 +910,7 @@ class MatchSimulator:
         self._pass(taker, False, set_piece="throw_in")
 
     def _goal_kick(self, team: str) -> None:
-        self._rollout_end("restart:goal_kick")
+        self._rollout_end(f"restart:goal_kick:{team}")
         s = self.s
         gk = self._player_by_role(team, ("GK",))
         spot = self._abs(team, (5.5, 34 + self.rng.choice([-9, 9])))
@@ -922,7 +922,7 @@ class MatchSimulator:
         self._pass(gk, False, set_piece="goal_kick")
 
     def _corner(self, team: str) -> None:
-        self._rollout_end("restart:corner")
+        self._rollout_end(f"restart:corner:{team}")
         s = self.s
         opp = self._opp(team)
         flag = self._abs(team, (PITCH_LENGTH, self.rng.choice([0.0, PITCH_WIDTH])))

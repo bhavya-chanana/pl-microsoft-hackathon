@@ -13,7 +13,9 @@ from matchlens.api import tactics_routes
 from matchlens.ingest.adapters import ReplayControl, SyntheticReplayAdapter
 from matchlens.runtime.manager import manager
 from matchlens.runtime.session import MatchSession
-from matchlens.tactics.board import BoardService, Source, situation_from_session
+from matchlens.simulator.fork import RolloutTrace
+from matchlens.tactics import evaluate, rollout
+from matchlens.tactics.board import BoardRequest, BoardService, Source, situation_from_session, terminal_of
 
 AT = 3780.0  # the 64th minute of the second half
 
@@ -177,5 +179,114 @@ def test_lru(session, monkeypatch):
         ids = [(await svc.create(session, BoardRequest(**body(session)))).board_id for _ in range(3)]
         assert svc.get(ids[0]) is None and svc.get(ids[1]) and svc.get(ids[2])
         await svc.close()
+
+    asyncio.run(main())
+
+
+# ------------------------------------------------------------- review fixes
+
+
+def test_restart_to_the_opponent_is_a_turnover(demo_match, session):
+    meta = demo_match.meta
+    home, away = meta.home.team_id, meta.away.team_id
+    for kind in ("throw_in", "goal_kick", "corner", "foul"):
+        lost = RolloutTrace(frames=[], events=[], terminal=f"restart:{kind}:{away}", start_possession=home)
+        assert evaluate.facts(lost, home, meta).lost_ball
+        assert terminal_of(lost, home, meta) == "turnover"
+        kept = RolloutTrace(frames=[], events=[], terminal=f"restart:{kind}:{home}", start_possession=home)
+        assert not evaluate.facts(kept, home, meta).lost_ball
+    # the other side's view: it started without the ball and the restart is its own, which is a regain
+    regain = RolloutTrace(frames=[], events=[], terminal=f"restart:throw_in:{away}", start_possession=home)
+    assert not evaluate.facts(regain, away, meta).lost_ball
+    assert terminal_of(regain, away, meta) == "turnover"
+
+
+def test_rollouts_record_start_possession_and_restart_team(session):
+    sit, snap = situation_from_session(session, Source(kind="elapsed", elapsed=AT), session.meta.home.team_id)
+    traces = rollout.run_monte_carlo(snap, None, None, k=40, base_seed="restart", use_cache=False)
+    assert {t.start_possession for t in traces} == {sit.possession_team_id}
+    restarts = [t for t in traces if t.terminal.startswith("restart:")]
+    assert restarts and all(evaluate.restart_awarded_to(t) in (session.meta.home.team_id, session.meta.away.team_id)
+                            for t in restarts)
+    for t in restarts:
+        theirs = evaluate.restart_awarded_to(t) != t.start_possession
+        assert evaluate.facts(t, t.start_possession, session.meta).lost_ball is theirs
+
+
+def test_cancelled_rollouts_stop(session):
+    import threading
+
+    _, snap = situation_from_session(session, Source(kind="elapsed", elapsed=AT), session.meta.home.team_id)
+    stop = threading.Event()
+    stop.set()
+    with pytest.raises(rollout.RolloutCancelled):
+        rollout.run_monte_carlo(snap, None, None, k=8, base_seed="cancel", use_cache=False, cancel=stop)
+
+
+def test_replays_are_cached_per_board(client, session, monkeypatch):
+    bid = client.post("/api/tactics/boards", json=body(session)).json()["board_id"]
+    board, _ = wait_done(client, bid)
+    tid = board["tactics"][0]["tactic_id"]
+    calls = []
+    real = rollout.run_monte_carlo_async
+
+    async def counting(*a, **kw):
+        calls.append(1)
+        return await real(*a, **kw)
+
+    monkeypatch.setattr(rollout, "run_monte_carlo_async", counting)
+    first = client.get(f"/api/tactics/boards/{bid}/rollouts/{tid}", params={"variant": "best"}).json()
+    n = len(calls)
+    assert n == 1
+    for variant in ("best", "typical", "worst"):  # all three were picked together
+        again = client.get(f"/api/tactics/boards/{bid}/rollouts/{tid}", params={"variant": variant}).json()
+        assert again["variant"] == variant
+    assert len(calls) == n
+    assert client.get(f"/api/tactics/boards/{bid}/rollouts/{tid}", params={"variant": "best"}).json() == first
+
+
+def test_dropped_tactic_is_not_on_the_board(client, session):
+    bid = client.post("/api/tactics/boards", json=body(session)).json()["board_id"]
+    wait_done(client, bid)
+    r = client.get(f"/api/tactics/boards/{bid}/rollouts/t-00000000")
+    assert r.status_code == 404 and "not on this board" in r.text
+
+
+def test_simulate_on_a_board_does_not_change_its_cards(client, session):
+    bid = client.post("/api/tactics/boards", json=body(session)).json()["board_id"]
+    board, _ = wait_done(client, bid)
+    intent = dict(board["tactics"][0]["intent"], title="My own idea", rest_defence=3)
+    r = client.post("/api/tactics/simulate", json={"intent": intent, "source": {"kind": "elapsed", "elapsed": AT},
+                                                   "horizon_s": 10, "k": 6, "board_id": bid})
+    assert r.status_code == 200 and r.json()["status"] == "ready"
+    after = client.get(f"/api/tactics/boards/{bid}").json()
+    assert [t["tactic_id"] for t in after["tactics"]] == [t["tactic_id"] for t in board["tactics"]]
+    assert after["verdict"] == board["verdict"]
+    own = client.get(f"/api/tactics/boards/{bid}/rollouts/{r.json()['tactic_id']}")  # but it can be replayed
+    assert own.status_code == 200
+    assert client.post("/api/tactics/simulate", json={"intent": intent, "source": {"kind": "elapsed", "elapsed": AT},
+                                                      "board_id": "b-nope"}).status_code == 404
+
+
+def test_invalid_requests_do_not_use_the_quota(client, session, monkeypatch):
+    monkeypatch.setenv("MATCHLENS_TACTICS_PER_MINUTE", "1")
+    tactics_routes.reset_meter()
+    assert client.post("/api/tactics/boards", json=body(session, team_id="ZZZ")).status_code == 422
+    assert client.post("/api/tactics/boards", json=body(session, source={"kind": "moment", "insight_id": "x"})
+                       ).status_code == 404
+    assert client.post("/api/tactics/boards", json=body(session)).status_code == 202
+
+
+def test_a_cancelled_board_stops_its_simulations(session, monkeypatch):
+    monkeypatch.setenv("MATCHLENS_TACTICS_K", "8")
+    import asyncio
+
+    async def main():
+        svc = BoardService(build_clients())
+        board = await svc.create(session, BoardRequest(**body(session)))
+        rec = svc._boards[board.board_id]
+        await svc.close()
+        assert rec.cancel.is_set()
+        await asyncio.sleep(0.2)
 
     asyncio.run(main())

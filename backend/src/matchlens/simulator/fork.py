@@ -71,11 +71,12 @@ class RolloutTrace:
 
     frames: list[TrackingFrame]
     events: list[Event]
-    # goal | shot | turnover | restart:<kind> | horizon
+    # goal | shot | turnover | restart:<kind>:<team the restart is awarded to> | horizon
     terminal: str
     end_elapsed: float = 0.0
     score: dict[str, int] = field(default_factory=dict)
-    possession: str = ""
+    possession: str = ""  # at the end
+    start_possession: str = ""  # at the frozen moment
 
 
 # --------------------------------------------------------------------- snapshot
@@ -137,6 +138,7 @@ def run_rollout(sim: MatchSimulator, horizon_s: float) -> RolloutTrace:
     from matchlens.simulator.engine import _Stop
 
     s = sim.s
+    start_possession = s.possession
     sim._stop_at = s.elapsed + horizon_s
     sim._pending_terminal = None
     n_frames, n_events = len(sim.tracking), len(sim.events)
@@ -158,6 +160,7 @@ def run_rollout(sim: MatchSimulator, horizon_s: float) -> RolloutTrace:
         end_elapsed=s.elapsed,
         score=dict(s.score),
         possession=s.possession,
+        start_possession=start_possession,
     )
 
 

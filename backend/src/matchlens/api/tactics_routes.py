@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from matchlens.runtime.manager import manager
 from matchlens.runtime.session import MatchSession
-from matchlens.tactics.board import BoardRequest, BoardService, Source
+from matchlens.tactics.board import BadRequest, BoardNotFound, BoardRequest, BoardService, NotReady, Source
 from matchlens.tactics.intent import TacticIntent
 from matchlens.tactics.models import RolloutView, TacticResult, TacticsBoard
 
@@ -69,12 +69,11 @@ class SimulateRequest(BaseModel):
 @router.post("/boards", status_code=202)
 async def create_board(req: BoardRequest) -> JSONResponse:
     session = _session()
-    _meter()
     try:
-        board = await service.create(session, req)
-    except LookupError as exc:
+        board = await service.create(session, req, admit=_meter)
+    except BoardNotFound as exc:
         raise HTTPException(404, str(exc)) from exc
-    except ValueError as exc:
+    except BadRequest as exc:
         raise HTTPException(422, str(exc)) from exc
     return JSONResponse({"board_id": board.board_id, "situation": board.situation.model_dump(mode="json")},
                         status_code=202)
@@ -93,19 +92,19 @@ async def get_rollout(board_id: str, tactic_id: str,
                       variant: Literal["typical", "best", "worst"] = Query(default="typical")) -> RolloutView:
     try:
         return await service.rollout_view(board_id, tactic_id, variant)
-    except LookupError as exc:
+    except BoardNotFound as exc:
         raise HTTPException(404, str(exc)) from exc
-    except PermissionError as exc:
+    except NotReady as exc:
         raise HTTPException(409, str(exc)) from exc
 
 
 @router.post("/simulate", response_model=TacticResult)
 async def simulate(req: SimulateRequest) -> TacticResult:
     session = _session()
-    _meter()
     try:
-        return await service.simulate(session, req.intent, req.source, req.horizon_s, req.k, req.board_id)
-    except LookupError as exc:
+        return await service.simulate(session, req.intent, req.source, req.horizon_s, req.k, req.board_id,
+                                      admit=_meter)
+    except BoardNotFound as exc:
         raise HTTPException(404, str(exc)) from exc
-    except ValueError as exc:
+    except BadRequest as exc:
         raise HTTPException(422, str(exc)) from exc

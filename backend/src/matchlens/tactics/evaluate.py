@@ -28,7 +28,7 @@ from matchlens.domain.models import PITCH_LENGTH, EventType, MatchMeta
 from matchlens.domain.pitch import to_relative
 from matchlens.simulator.fork import RolloutTrace
 from matchlens.tactics.models import Interval, OutcomeStats, TacticResult
-from matchlens.tacticsml.contract import TacticalModel, from_tracking
+from matchlens.tacticsml.contract import TacticalModel, TFrame, from_tracking
 
 Risk = Literal["safe", "balanced", "bold"]
 
@@ -69,7 +69,24 @@ class TraceFacts:
     first_shot_s: float | None
 
 
+def restart_awarded_to(trace: RolloutTrace) -> str | None:
+    """The team a rollout's ending restart (throw-in, goal kick, corner, free kick) is awarded to, if any."""
+    parts = trace.terminal.split(":")
+    return parts[2] if len(parts) == 3 and parts[0] == "restart" else None
+
+
+def possession_changed(trace: RolloutTrace, started: str) -> bool:
+    """True when the side with the ball at the start no longer has it at the end: a tackle, an interception or a
+    restart awarded to the other side (the ball ran out, or a foul)."""
+    if trace.terminal == "turnover":
+        return True
+    awarded = restart_awarded_to(trace)
+    return awarded is not None and awarded != started
+
+
 def _start_possession(trace: RolloutTrace, team_id: str, meta: MatchMeta) -> str:
+    if trace.start_possession:
+        return trace.start_possession
     if trace.terminal == "turnover":
         return meta.opponent(trace.possession).team_id if trace.possession else team_id
     return trace.possession or team_id
@@ -100,7 +117,7 @@ def facts(trace: RolloutTrace, team_id: str, meta: MatchMeta) -> TraceFacts:
         xg=xg,
         goal=goal,
         box_entry=_ball_in_box(trace, team_id == meta.home.team_id),
-        lost_ball=started == team_id and trace.terminal == "turnover",
+        lost_ball=started == team_id and possession_changed(trace, started),
         concede_shot=conceded,
         first_shot_s=(min(e.elapsed for e in shots) - start_t) if shots else None,
     )
@@ -109,19 +126,15 @@ def facts(trace: RolloutTrace, team_id: str, meta: MatchMeta) -> TraceFacts:
 # --------------------------------------------------------------------- summarise
 
 
-def _team_value(evaluator: TacticalModel, trace: RolloutTrace, team_id: str, meta: MatchMeta,
-                started: str) -> tuple[float, float] | None:
-    """(first, last) evaluator value of a trace from the coached team's side, or None without frames."""
+def _value_frames(trace: RolloutTrace, meta: MatchMeta, started: str) -> tuple[TFrame, TFrame, str] | None:
+    """(first, last, possession at the end) model frames of a trace, or None without frames. Both are built from
+    two tracking frames so they carry velocities; a restart's awarded team has the ball at the end."""
     if not trace.frames:
         return None
-    last = trace.frames[-1]
-    end_poss = trace.possession or started
-    f0 = from_tracking(trace.frames[:1], meta, started)
-    f1 = from_tracking(trace.frames[-2:] if len(trace.frames) > 1 else [last], meta, end_poss)
-    s0, s1 = evaluator.score_batch([f0, f1])
-    v0 = s0.value if started == team_id else -s0.value
-    v1 = s1.value if end_poss == team_id else -s1.value
-    return v0, v1
+    end_poss = restart_awarded_to(trace) or trace.possession or started
+    f0 = from_tracking(trace.frames[:2], meta, started)
+    f1 = from_tracking(trace.frames[-2:], meta, end_poss)
+    return f0, f1, end_poss
 
 
 def summarise(traces: list[RolloutTrace], team_id: str, evaluator: TacticalModel, meta: MatchMeta) -> OutcomeStats:
@@ -129,11 +142,17 @@ def summarise(traces: list[RolloutTrace], team_id: str, evaluator: TacticalModel
     n = len(traces)
     fs = [facts(t, team_id, meta) for t in traces]
     deltas: list[float] = []
+    pairs: list[tuple[TFrame, TFrame, str, str]] = []
     for t, f in zip(traces, fs, strict=True):
-        started = team_id if f.team_had_ball else meta.opponent(team_id).team_id
-        pair = _team_value(evaluator, t, team_id, meta, started)
-        if pair is not None:
-            deltas.append(pair[1] - pair[0])
+        started = t.start_possession or (team_id if f.team_had_ball else meta.opponent(team_id).team_id)
+        built = _value_frames(t, meta, started)
+        if built is not None:
+            pairs.append((*built[:2], started, built[2]))
+    scores = evaluator.score_batch([x for p in pairs for x in p[:2]]) if pairs else []
+    for i, (_, _, started, end_poss) in enumerate(pairs):
+        s0, s1 = scores[2 * i], scores[2 * i + 1]
+        deltas.append((s1.value if end_poss == team_id else -s1.value)
+                      - (s0.value if started == team_id else -s0.value))
     horizon = max((t.frames[-1].elapsed - t.frames[0].elapsed for t in traces if t.frames), default=0.0)
     shot_times = [f.first_shot_s for f in fs if f.first_shot_s is not None]
     return OutcomeStats(

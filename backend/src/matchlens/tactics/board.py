@@ -24,8 +24,10 @@ import inspect
 import logging
 import os
 import secrets
+import threading
 import time
 from collections import Counter, OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -67,6 +69,8 @@ IDEATE_SHARE = 0.6  # persona calls get this share of the deadline
 PIPELINE_SHARE = 0.7  # simulation stops here; the rest of the deadline is for the verdict
 IDEATE_N = 10  # personas may land more ideas than the board shows; select_diverse picks the n
 MAX_RECIPE_CARDS = 3
+MAX_CANDIDATES = 24  # ideas simulated per board
+MAX_USER_TACTICS = 8  # hand-written tactics a board keeps for replay
 PAIRED_ID = rollout.BASELINE_ID  # the seed key shared by the baseline and every tactic of a board
 SET_PIECE_WINDOW_S = 3.0
 TRANSITION_WINDOW_S = 5.0
@@ -78,6 +82,18 @@ _POSSESSION_TYPES = frozenset({
 _SET_PIECES = frozenset({EventType.CORNER, EventType.FREE_KICK, EventType.THROW_IN, EventType.GOAL_KICK})
 _BOX_X = 105.0 - 16.5
 _BOX_Y = (34.0 - 20.16, 34.0 + 20.16)
+
+class BoardNotFound(Exception):
+    """The board, the tactic on it, or the moment asked for does not exist (404)."""
+
+
+class BadRequest(Exception):
+    """The request names something that cannot be built, e.g. an unknown team (422)."""
+
+
+class NotReady(Exception):
+    """The tactic is on the board but has not been simulated yet (409)."""
+
 
 Risk = Literal["safe", "balanced", "bold"]
 Variant = Literal["typical", "best", "worst"]
@@ -134,19 +150,19 @@ def _frame_for(session: Any, source: Source) -> TrackingFrame:
             return TrackingFrame.model_validate(session.last_frame)
         frame = engine.frame_near(engine.c.elapsed)
         if frame is None:
-            raise LookupError("no tracking frame has arrived yet")
+            raise BoardNotFound("no tracking frame has arrived yet")
         return frame
     if source.kind == "moment":
         signal = next((s for s in engine.signals() if s.signal_id == source.insight_id), None)
         if signal is None:
-            raise LookupError("unknown moment")
+            raise BoardNotFound("unknown moment")
         at = signal.elapsed
     else:
         assert source.elapsed is not None
         at = source.elapsed
     near = engine.frames_between(at - 3.0, at + 3.0)
     if not near:
-        raise LookupError("no tracking frame near that time")
+        raise BoardNotFound("no tracking frame near that time")
     return min(near, key=lambda f: (abs(f.elapsed - at), f.elapsed))
 
 
@@ -168,7 +184,8 @@ def terminal_of(trace: RolloutTrace, team_id: str, meta: MatchMeta) -> str:
         return "goal"
     if f.shots:
         return "shot"
-    if f.lost_ball or trace.terminal == "turnover":
+    started = trace.start_possession or (team_id if f.team_had_ball else meta.opponent(team_id).team_id)
+    if f.lost_ball or evaluate.possession_changed(trace, started):  # lost, or won back
         return "turnover"
     if f.box_entry:
         return "box_entry"
@@ -194,12 +211,12 @@ def situation_from_session(
     """Freeze a moment of ``session`` into a ``Situation`` (what the UI and the tactician see) and a
     ``SimSnapshot`` (what the simulator forks from). The session itself is only read.
 
-    Raises ``LookupError`` when the moment does not exist (404) and ``ValueError`` for a bad team (422).
+    Raises ``BoardNotFound`` when the moment does not exist (404) and ``BadRequest`` for a bad team (422).
     """
     meta: MatchMeta = session.meta
     engine = session.engine
     if coaching_team_id not in (meta.home.team_id, meta.away.team_id):
-        raise ValueError(f"unknown team {coaching_team_id}; use {meta.home.team_id} or {meta.away.team_id}")
+        raise BadRequest(f"unknown team {coaching_team_id}; use {meta.home.team_id} or {meta.away.team_id}")
     frame = _frame_for(session, source)
     t = frame.elapsed
     events = [e for e in engine.events(until=t) if e.type != EventType.CORRECTION]
@@ -348,6 +365,9 @@ class _Record:
     evaluator: Any
     results: dict[str, TacticResult] = field(default_factory=dict)  # arrival order
     intents: dict[str, TacticIntent] = field(default_factory=dict)
+    user: dict[str, TacticResult] = field(default_factory=dict)  # hand-written tactics: replayable, never ranked
+    views: dict[tuple[str, str], RolloutView] = field(default_factory=dict)  # (tactic_id, variant) -> picked replay
+    cancel: threading.Event = field(default_factory=threading.Event)
     errors: list[str] = field(default_factory=list)
     cite_keys: set[str] | None = None
     task: asyncio.Task[None] | None = None
@@ -374,14 +394,20 @@ class BoardService:
             c = self._clients = build_clients()
         return c
 
+    @staticmethod
+    def _stop(rec: _Record) -> None:
+        """Cancel a board: no further rollouts are scheduled and the running ones stop between simulations."""
+        rec.cancel.set()
+        if rec.task is not None:
+            rec.task.cancel()
+
     def set_clients(self, clients: Any) -> None:
         """Use the app's model clients (so the recorded-demo switch and labels are shared with the other agents)."""
         self._clients = clients
 
     async def close(self) -> None:
         for rec in list(self._boards.values()):
-            if rec.task is not None:
-                rec.task.cancel()
+            self._stop(rec)
         self._boards.clear()
 
     # ------------------------------------------------------------ public API
@@ -408,11 +434,17 @@ class BoardService:
             context[team.team_id] = ctx
         return styles, context
 
-    async def create(self, session: Any, request: BoardRequest) -> TacticsBoard:
-        """Freeze the moment and start the board. Returns at once with status ``thinking``."""
+    async def create(self, session: Any, request: BoardRequest,
+                     admit: Callable[[], None] | None = None) -> TacticsBoard:
+        """Freeze the moment and start the board. Returns at once with status ``thinking``.
+
+        ``admit`` is called once the request has proved valid and before any work starts (rate metering); it may
+        raise to refuse."""
         provider = self._provider(session)
         situation, snap = situation_from_session(session, request.source, request.team_id, provider)
         styles, context = self._provider_context(provider, session.meta)
+        if admit is not None:
+            admit()
         clients = self.clients()
         evaluator = get_tactical_model()
         board = TacticsBoard(
@@ -425,72 +457,84 @@ class BoardService:
         self._boards[board.board_id] = rec
         while len(self._boards) > self.max_boards:
             _, old = self._boards.popitem(last=False)
-            if old.task is not None:
-                old.task.cancel()
+            self._stop(old)
         rec.task = asyncio.create_task(self._run(rec), name=f"tactics:{board.board_id}")
         return board
 
     async def simulate(self, session: Any, intent: TacticIntent, source: Source | None, horizon_s: float = 10.0,
-                       k: int | None = None, board_id: str | None = None) -> TacticResult:
-        """Try one hand-written tactic. With ``board_id`` it runs on that board's frozen moment and joins the
-        board (so its rollouts can be replayed); otherwise ``source`` is frozen just for this call."""
+                       k: int | None = None, board_id: str | None = None,
+                       admit: Callable[[], None] | None = None) -> TacticResult:
+        """Try one hand-written tactic. With ``board_id`` it runs on that board's frozen moment and is kept beside
+        the board (replayable, never ranked among its cards); otherwise ``source`` is frozen just for this call."""
         if board_id is not None:
             rec = self._boards.get(board_id)
             if rec is None:
-                raise LookupError("unknown board")
+                raise BoardNotFound("unknown board")
             self._boards.move_to_end(board_id)
+            if admit is not None:
+                admit()
             result = await self._evaluate_custom(rec.snap, rec.board.situation, rec.meta, rec.styles, rec.base_seed,
                                                  intent, rec.board.horizon_s, rec.k, rec.board.risk, rec.evaluator,
-                                                 rec.board.baseline, rec.cite_keys)
-            if result.status == "ready":
-                rec.results[result.tactic_id] = result
+                                                 rec.board.baseline, rec.cite_keys, None)
+            if result.status == "ready" and (result.tactic_id in rec.user or len(rec.user) < MAX_USER_TACTICS):
+                rec.user[result.tactic_id] = result.model_copy(update={"persona": "custom"})
                 rec.intents[result.tactic_id] = intent
-                self._publish(rec)
             return result
         if source is None:
-            raise ValueError("give a source or a board_id")
+            raise BadRequest("give a source or a board_id")
         provider = self._provider(session)
         situation, snap = situation_from_session(session, source, intent.team_id, provider)
         styles, _ = self._provider_context(provider, session.meta)
+        if admit is not None:
+            admit()
         return await self._evaluate_custom(snap, situation, session.meta, styles, rollout.snapshot_digest(snap),
                                            intent, horizon_s, k or default_k(), "balanced", get_tactical_model(),
-                                           None, None)
+                                           None, None, None)
 
     async def rollout_view(self, board_id: str, tactic_id: str, variant: Variant = "typical") -> RolloutView:
-        """Replay one rollout of a tactic (``baseline`` for the do-nothing branch) at 5 Hz."""
+        """Replay one rollout of a tactic (``baseline`` for the do-nothing branch) at 5 Hz. Picked replays are kept
+        on the board, so asking again costs nothing."""
         rec = self._boards.get(board_id)
         if rec is None:
-            raise LookupError("unknown board")
+            raise BoardNotFound("unknown board")
         self._boards.move_to_end(board_id)
+        cached = rec.views.get((tactic_id, variant))
+        if cached is not None:
+            return cached
         if tactic_id == rollout.BASELINE_ID:
             intent = None
         else:
+            res = rec.results.get(tactic_id) or rec.user.get(tactic_id)
             intent = rec.intents.get(tactic_id)
-            if intent is None:
-                raise LookupError("unknown tactic")
-            res = rec.results.get(tactic_id)
-            if res is None or res.outcome is None:
-                raise PermissionError("that tactic has not been simulated yet")
+            if res is None or intent is None:
+                raise BoardNotFound("that tactic is not on this board")
+            if res.outcome is None:
+                raise NotReady("that tactic has not been simulated yet")
         team = rec.board.situation.coaching_team_id
-        traces = await rollout.run_monte_carlo_async(
-            rec.snap, intent, rec.styles, k=rec.k, horizon_s=rec.board.horizon_s, base_seed=rec.base_seed,
-            tactic_id=PAIRED_ID)
+        try:
+            traces = await rollout.run_monte_carlo_async(
+                rec.snap, intent, rec.styles, k=rec.k, horizon_s=rec.board.horizon_s, base_seed=rec.base_seed,
+                tactic_id=PAIRED_ID)
+        except rollout.RolloutCancelled as exc:  # pragma: no cover - not passed here; kept for safety
+            raise BoardNotFound("the board was closed") from exc
         pick = await asyncio.to_thread(evaluate.pick_variants, traces, team, rec.meta)
-        trace = pick[variant]
-        index = next(i for i, t in enumerate(traces) if t is trace)
-        drawings = (intent_drawings(intent, rec.snap, rec.meta) if intent is not None else []) + \
-            rollout_drawings(trace)
-        return RolloutView(tactic_id=tactic_id, variant=variant, seed=rollout.seed_for(rec.base_seed, PAIRED_ID, index),
-                           frames=trace.frames, events=trace.events, drawings=drawings,
-                           terminal=terminal_of(trace, team, rec.meta))
+        for name, trace in pick.items():  # one pass picks all three; keep them
+            index = next(i for i, t in enumerate(traces) if t is trace)
+            drawings = (intent_drawings(intent, rec.snap, rec.meta) if intent is not None else []) + \
+                rollout_drawings(trace)
+            rec.views[(tactic_id, name)] = RolloutView(
+                tactic_id=tactic_id, variant=name, seed=rollout.seed_for(rec.base_seed, PAIRED_ID, index),
+                frames=trace.frames, events=trace.events, drawings=drawings,
+                terminal=terminal_of(trace, team, rec.meta))
+        return rec.views[(tactic_id, variant)]
 
     # ------------------------------------------------------------ simulation helpers
 
     async def _summarise(self, snap: SimSnapshot, intent: TacticIntent | None, styles: dict[str, SimStyle],
                          base_seed: str, k: int, horizon_s: float, team: str, meta: MatchMeta,
-                         evaluator: Any) -> OutcomeStats:
+                         evaluator: Any, cancel: threading.Event | None = None) -> OutcomeStats:
         traces: list[RolloutTrace] = await rollout.run_monte_carlo_async(
-            snap, intent, styles, k=k, horizon_s=horizon_s, base_seed=base_seed, tactic_id=PAIRED_ID)
+            snap, intent, styles, k=k, horizon_s=horizon_s, base_seed=base_seed, tactic_id=PAIRED_ID, cancel=cancel)
 
         def reduce() -> OutcomeStats:
             stats = evaluate.summarise(traces, team, evaluator, meta)
@@ -502,7 +546,7 @@ class BoardService:
     async def _evaluate_custom(self, snap: SimSnapshot, situation: Situation, meta: MatchMeta,
                                styles: dict[str, SimStyle], base_seed: str, intent: TacticIntent, horizon_s: float,
                                k: int, risk: Risk, evaluator: Any, baseline: OutcomeStats | None,
-                               cite_keys: set[str] | None) -> TacticResult:
+                               cite_keys: set[str] | None, cancel: threading.Event | None) -> TacticResult:
         tid = rollout.tactic_id_of(intent)
         problems = check_intent(meta, situation, intent, horizon_s, cite_keys or set(playbook.PLAYBOOK_KEYS))
         if intent.team_id != situation.coaching_team_id and not problems:
@@ -512,8 +556,9 @@ class BoardService:
             return result.model_copy(update={"status": "rejected", "problems": problems})
         team = intent.team_id
         if baseline is None:
-            baseline = await self._summarise(snap, None, styles, base_seed, k, horizon_s, team, meta, evaluator)
-        outcome = await self._summarise(snap, intent, styles, base_seed, k, horizon_s, team, meta, evaluator)
+            baseline = await self._summarise(snap, None, styles, base_seed, k, horizon_s, team, meta, evaluator, cancel)
+        outcome = await self._summarise(snap, intent, styles, base_seed, k, horizon_s, team, meta, evaluator,
+                                        cancel)
         ranked = evaluate.rank([result.model_copy(update={"outcome": outcome, "status": "ready"})], baseline, risk)
         return ranked[0]
 
@@ -531,8 +576,10 @@ class BoardService:
         try:
             await asyncio.wait_for(self._pipeline(rec, deadline), timeout=deadline * PIPELINE_SHARE)
         except TimeoutError:
+            rec.cancel.set()  # in-flight simulations stop between rollouts; no new ones start
             rec.errors.append(f"deadline reached after {deadline * PIPELINE_SHARE:g}s; showing what was ready")
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, rollout.RolloutCancelled):
+            rec.cancel.set()
             raise
         except Exception as exc:  # noqa: BLE001 - a broken board must still finish
             log.exception("tactics board %s failed", rec.board.board_id)
@@ -545,6 +592,7 @@ class BoardService:
             log.exception("tactics board %s could not be concluded", rec.board.board_id)
             rec.errors.append(f"conclude: {type(exc).__name__}: {exc}")
             self._publish(rec, status="done" if rec.board.baseline else "failed")
+        rec.cancel.set()  # nothing more is scheduled for this board
         rec.finished = True
 
     async def _pipeline(self, rec: _Record, deadline: float) -> None:
@@ -555,7 +603,7 @@ class BoardService:
         tactician = _tactician()
 
         baseline = await self._summarise(rec.snap, None, rec.styles, rec.base_seed, rec.k, horizon, team, rec.meta,
-                                         rec.evaluator)
+                                         rec.evaluator, rec.cancel)
         self._publish(rec, baseline=baseline, status="evaluating")
         if tactician is not None:
             rec.cite_keys = set(tactician.context_keys(situation, rec.provider_context, baseline)) | set(
@@ -565,7 +613,7 @@ class BoardService:
 
         async def admit(persona: str, intent: TacticIntent) -> None:
             tid = rollout.tactic_id_of(intent)
-            if tid in rec.results:
+            if tid in rec.results or len(rec.results) >= MAX_CANDIDATES:
                 return
             rec.results[tid] = TacticResult(tactic_id=tid, persona=persona, intent=intent, status="thinking")
             rec.intents[tid] = intent
@@ -627,9 +675,9 @@ class BoardService:
                 result = result.model_copy(update={"status": "rejected", "problems": problems})
             else:
                 outcome = await self._summarise(rec.snap, intent, rec.styles, rec.base_seed, rec.k, board.horizon_s,
-                                                intent.team_id, rec.meta, rec.evaluator)
+                                                intent.team_id, rec.meta, rec.evaluator, rec.cancel)
                 result = result.model_copy(update={"outcome": outcome, "status": "ready"})
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, rollout.RolloutCancelled):
             raise
         except Exception as exc:  # noqa: BLE001 - one bad tactic must not stop the others
             log.warning("tactic %s could not be simulated", tid, exc_info=True)
@@ -659,6 +707,7 @@ class BoardService:
                 rec.errors.append(f"{r.intent.title}: rejected ({'; '.join(r.problems[:2])})")
         kept = {r.tactic_id for r in final}
         rec.results = {tid: r for tid, r in rec.results.items() if tid in kept}
+        rec.intents = {tid: i for tid, i in rec.intents.items() if tid in kept or tid in rec.user}
         for r in final:
             rec.results[r.tactic_id] = r
         self._publish(rec, status="evaluating")
@@ -670,7 +719,7 @@ class BoardService:
                 verdict = await asyncio.wait_for(
                     tactician.verdict(rec.clients, board.situation, final, baseline, rec.request.language,
                                       meta=rec.meta, prompt=rec.request.prompt, snapshot_digest=rec.base_seed,
-                                      timeout_s=max(2.0, remaining - 1.0), errors=rec.errors),
+                                      timeout_s=max(2.0, remaining - 1.0), errors=rec.errors, risk=board.risk),
                     timeout=max(2.0, remaining))
             except Exception as exc:  # noqa: BLE001 - includes the timeout
                 rec.errors.append(f"gaffer: {type(exc).__name__}")
@@ -685,7 +734,7 @@ class BoardService:
             try:
                 payload = tactician.verdict_payload(rec.board.situation, final, baseline, rec.request.language,
                                                     meta=rec.meta, prompt=rec.request.prompt,
-                                                    snapshot_digest=rec.base_seed)
+                                                    snapshot_digest=rec.base_seed, risk=rec.board.risk)
                 return Verdict(**tactician.offline_verdict(payload).model_dump())
             except Exception:  # noqa: BLE001
                 log.warning("tactician template verdict failed", exc_info=True)

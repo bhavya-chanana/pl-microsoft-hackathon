@@ -18,6 +18,13 @@ from matchlens.tactics.intent import TacticIntent
 
 CACHE_SIZE = 64
 BASELINE_ID = "baseline"
+MAX_PARALLEL = 2  # simulation threads at once, across all boards: a rollout run is pure CPU
+
+_slots = threading.BoundedSemaphore(MAX_PARALLEL)
+
+
+class RolloutCancelled(Exception):
+    """The board that asked for these rollouts was cancelled or ran out of time."""
 
 _cache: OrderedDict[tuple, list[RolloutTrace]] = OrderedDict()
 _lock = threading.Lock()
@@ -75,15 +82,14 @@ def run_monte_carlo(
     base_seed: str,
     tactic_id: str | None = None,
     use_cache: bool = True,
+    cancel: threading.Event | None = None,
 ) -> list[RolloutTrace]:
     """``k`` rollouts of ``horizon_s`` seconds from ``snap``; ``intent=None`` is the do-nothing baseline.
 
     Seed ``i`` is ``blake2b(base_seed|tactic_id|i)``. ``tactic_id`` defaults to ``baseline`` or a hash of the
-    intent. Results are cached (an LRU of 64 runs) and must be treated as read-only.
+    intent. Results are cached (an LRU of 64 runs) and must be treated as read-only. At most ``MAX_PARALLEL``
+    runs compute at once; ``cancel`` (when set) stops a run between rollouts with ``RolloutCancelled``.
     """
-    from matchlens.simulator.engine import MatchSimulator
-    from matchlens.simulator.intent_exec import IntentController
-
     tid = tactic_id or tactic_id_of(intent)
     key = (snapshot_digest(snap), intent_hash(intent), _styles_key(styles), base_seed, tid, k,
            round(horizon_s, 3), round(frame_dt, 3))
@@ -97,12 +103,8 @@ def run_monte_carlo(
     run_styles = apply_style_changes(styles, intent)
     attacking_right = {snap.meta.home.team_id: True, snap.meta.away.team_id: False}
     traces: list[RolloutTrace] = []
-    for i in range(k):
-        controller = (IntentController(intent, snap.meta, attacking_right, snap.elapsed)
-                      if intent is not None else None)
-        sim = MatchSimulator.resume(snap, seed=seed_for(base_seed, tid, i), styles=run_styles,
-                                    intent=controller, frame_dt=frame_dt, id_prefix=f"r{i}-")
-        traces.append(sim.rollout(horizon_s))
+    with _slots:
+        _simulate(snap, intent, run_styles, attacking_right, traces, k, horizon_s, frame_dt, base_seed, tid, cancel)
 
     if use_cache:
         with _lock:
@@ -110,6 +112,22 @@ def run_monte_carlo(
             while len(_cache) > CACHE_SIZE:
                 _cache.popitem(last=False)
     return traces
+
+
+def _simulate(snap: SimSnapshot, intent: TacticIntent | None, run_styles: dict[str, SimStyle],
+              attacking_right: dict[str, bool], traces: list[RolloutTrace], k: int, horizon_s: float,
+              frame_dt: float, base_seed: str, tid: str, cancel: threading.Event | None) -> None:
+    from matchlens.simulator.engine import MatchSimulator
+    from matchlens.simulator.intent_exec import IntentController
+
+    for i in range(k):
+        if cancel is not None and cancel.is_set():
+            raise RolloutCancelled()
+        controller = (IntentController(intent, snap.meta, attacking_right, snap.elapsed)
+                      if intent is not None else None)
+        sim = MatchSimulator.resume(snap, seed=seed_for(base_seed, tid, i), styles=run_styles,
+                                    intent=controller, frame_dt=frame_dt, id_prefix=f"r{i}-")
+        traces.append(sim.rollout(horizon_s))
 
 
 async def run_monte_carlo_async(
@@ -123,10 +141,12 @@ async def run_monte_carlo_async(
     base_seed: str,
     tactic_id: str | None = None,
     use_cache: bool = True,
+    cancel: threading.Event | None = None,
 ) -> list[RolloutTrace]:
     """``run_monte_carlo`` in a worker thread, so a board can evaluate several tactics without blocking the loop."""
     return await asyncio.to_thread(run_monte_carlo, snap, intent, styles, k=k, horizon_s=horizon_s,
-                                   frame_dt=frame_dt, base_seed=base_seed, tactic_id=tactic_id, use_cache=use_cache)
+                                   frame_dt=frame_dt, base_seed=base_seed, tactic_id=tactic_id, use_cache=use_cache,
+                                   cancel=cancel)
 
 
 def clear_cache() -> None:
