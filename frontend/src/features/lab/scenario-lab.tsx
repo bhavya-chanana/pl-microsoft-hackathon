@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { CheckCircle2, CircleDashed, Download, PenLine, Play, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDashed, Download, PenLine, Play, RotateCw, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -13,7 +13,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useScenarios, useScriptCheck } from "@/features/live/queries";
 import { ApiError, postJson } from "@/lib/api";
 import { Kickoff, type RosterTeam, type Scenarios, type ScriptCheck, Storyline } from "@/lib/contract";
-import { copy } from "@/lib/copy";
+import { copy, type DraftFailure } from "@/lib/copy";
 import { sideTone } from "@/lib/match";
 import { routes, serverRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,18 @@ const SPEEDS = [5, 15, 30, 60] as const;
 const MAX_PROMPT = 400;
 const FULL_TIME = 95;
 const Drafted = z.object({ storyline: Storyline });
+const Refusal = z.object({
+  reason: z.enum(["timeout", "no_answer", "unplayable"]).nullish(),
+  problems: z.array(z.string()).default([]),
+});
+
+type Refused = { reason: DraftFailure; problems: string[] };
+
+/** Why the draft endpoint gave no script: its `reason` and the last draft's problems, if it sent them. */
+function refusal(error: unknown): Refused {
+  const found = Refusal.safeParse(error instanceof ApiError ? error.detail : null);
+  return found.success ? { reason: found.data.reason ?? "other", problems: found.data.problems } : { reason: "other", problems: [] };
+}
 
 type Roster = Scenarios["roster"];
 
@@ -31,6 +43,33 @@ function nameOf(roster: Roster, playerId: string): string {
     if (p) return p.name;
   }
   return playerId;
+}
+
+function DraftRefused({ refused, retry }: { refused: Refused; retry: () => void }) {
+  const text = copy.lab.draftRefused[refused.reason];
+  const unplayable = refused.reason === "unplayable";
+  return (
+    <div role="alert" className="flex max-w-2xl flex-col items-start gap-2 rounded-lg border border-blocked/40 p-3 text-sm">
+      <p className="font-medium">{text.title}</p>
+      <p className="text-muted-foreground">{text.help}</p>
+      {refused.problems.length > 0 && (
+        <>
+          {!unplayable && <p className="font-medium">{copy.lab.firstDraftProblems}</p>}
+          <ul className="list-disc pl-5 text-muted-foreground">
+            {refused.problems.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        </>
+      )}
+      {!unplayable && (
+        <Button type="button" variant="outline" className="min-h-11 gap-2 px-4" onClick={retry}>
+          <RotateCw aria-hidden />
+          {copy.connection.retry}
+        </Button>
+      )}
+    </div>
+  );
 }
 
 function teamOf(roster: Roster, teamId: string): RosterTeam | null {
@@ -185,7 +224,7 @@ export function ScenarioLab() {
   const [speed, setSpeed] = useState<number>(15);
   const [prompt, setPrompt] = useState("");
   const [draft, setDraft] = useState<Storyline | null>(null);
-  const [problems, setProblems] = useState<string[]>([]);
+  const [refused, setRefused] = useState<Refused | null>(null);
   const roster = scenarios.data?.roster ?? null;
 
   const kickoff = useMutation({
@@ -201,15 +240,13 @@ export function ScenarioLab() {
   const write = useMutation({
     mutationFn: (text: string) => postJson("scenarios/draft", { prompt: text }, Drafted),
     onMutate: () => {
-      setProblems([]);
+      setRefused(null);
       setDraft(null);
     },
     onSuccess: (d) => setDraft(d.storyline),
     onError: (error) => {
       if (error instanceof ApiError && error.status === 503) return toast.error(copy.lab.draftOffline);
-      const found = error instanceof ApiError ? (error.detail as { problems?: unknown } | null)?.problems : null;
-      if (Array.isArray(found)) setProblems(found.map(String));
-      toast.error(copy.lab.draftFailed);
+      setRefused(refusal(error));
     },
   });
 
@@ -306,16 +343,7 @@ export function ScenarioLab() {
               </div>
             </form>
             {write.isPending && <Skeleton className="h-64 max-w-2xl" />}
-            {problems.length > 0 && (
-              <div role="alert" className="max-w-2xl rounded-lg border border-blocked/40 p-3 text-sm">
-                <p className="font-medium">{copy.lab.problems}</p>
-                <ul className="list-disc pl-5 text-muted-foreground">
-                  {problems.map((p) => (
-                    <li key={p}>{p}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {refused && <DraftRefused refused={refused} retry={() => write.mutate(prompt.trim())} />}
             {draft && roster && (
               <div className="max-w-2xl">
                 <StoryCard

@@ -1,10 +1,15 @@
 """Telestrator moments, Match Pulse, Ask the Pundit and Scenario Lab."""
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
+from agent_framework import BaseChatClient, ChatResponse, Message
+from fastapi import HTTPException
 
+from matchlens.agents import scenario
 from matchlens.agents.contracts import AgentClaim, FactCheckStatus, FanProfile, Language, Mode
+from matchlens.agents.llm import LlmSettings, ModelClients
 from matchlens.agents.pundit import ask, route
 from matchlens.domain.models import PITCH_LENGTH, PITCH_WIDTH, EventType
 from matchlens.interpret.moments import moment
@@ -162,3 +167,92 @@ def test_check_storyline_finds_unplayable_scripts():
     assert any("40' substitution" in p and "NBR-12" in p for p in problems)
     assert any("40' substitution" in p and "bench" in p for p in problems)
     assert any("50' goal" in p for p in problems)
+
+
+class DraftingClient(BaseChatClient):
+    """Answers scenario requests with the next scripted reply: a draft, an exception, or "slow"."""
+
+    def __init__(self, *replies) -> None:
+        super().__init__()
+        self.replies = list(replies)
+        self.calls = 0
+
+    async def _respond(self):
+        self.calls += 1
+        reply = self.replies.pop(0)
+        if reply == "slow":
+            await asyncio.sleep(1.0)
+        if isinstance(reply, Exception):
+            raise reply
+        return ChatResponse(messages=Message("assistant", [reply.model_dump_json()]))
+
+    def _inner_get_response(self, *, messages, stream, options, **kwargs):
+        return self._respond()
+
+
+def scenario_draft(scorer: str) -> scenario.ScenarioDraft:
+    return scenario.ScenarioDraft(title="Late winner", summary="Northbridge win it late.", phases=[], beats=[
+        scenario.BeatDraft(minute=85, type="goal", team_id="NBR", player_id=scorer, related_player_id=None)])
+
+
+GOOD, WRONG_TEAM = scenario_draft("NBR-10"), scenario_draft("HBC-09")
+
+
+def write(client, monkeypatch, timeout=5.0):
+    monkeypatch.setattr(scenario, "SCENARIO_TIMEOUT_S", timeout)
+    return run(scenario.write_storyline(team_for(client), default_match_meta(), "Northbridge win it late", "en"))
+
+
+def test_a_draft_the_simulator_cannot_play_gets_one_fix(monkeypatch):
+    client = DraftingClient(WRONG_TEAM, GOOD)
+    written = write(client, monkeypatch)
+    assert written.story is not None and written.failure is None and client.calls == 2
+
+    written = write(DraftingClient(WRONG_TEAM, WRONG_TEAM), monkeypatch)
+    assert written.story is None and written.failure == "unplayable"
+    assert any("85' goal" in p for p in written.problems)
+
+
+def test_a_slow_scenario_agent_is_reported_as_a_timeout(monkeypatch, caplog):
+    written = write(DraftingClient("slow"), monkeypatch, timeout=0.05)
+    assert written == scenario.Written(None, [], "timeout")
+    assert "agent scenario timed out after 0s" in caplog.text
+
+    # A fix turn that runs out of time still shows what was wrong with the first draft.
+    written = write(DraftingClient(WRONG_TEAM, "slow"), monkeypatch, timeout=0.05)
+    assert written.failure == "timeout" and any("85' goal" in p for p in written.problems)
+
+
+def test_a_failed_scenario_call_is_not_called_a_timeout(monkeypatch):
+    written = write(DraftingClient(RuntimeError("model unavailable")), monkeypatch)
+    assert written == scenario.Written(None, [], "no_answer")
+
+
+def test_the_scenario_agent_has_its_own_reasoning_effort(monkeypatch):
+    online = LlmSettings(endpoint="https://x", fast_model="gpt-5-mini", strong_model="gpt-5-mini", mode="online",
+                         strong_reasoning="high")
+    clients = ModelClients(fast=None, strong=None, settings=online)
+    assert clients.options(strong=True) == {"reasoning": {"effort": "high"}}
+    assert clients.scenario_options() == {"reasoning": {"effort": "medium"}}
+    monkeypatch.setenv("MATCHLENS_LLM", "offline")
+    monkeypatch.setenv("MATCHLENS_REASONING_SCENARIO", "low")
+    assert LlmSettings.from_env().scenario_reasoning == "low"
+    offline = ModelClients(fast=None, strong=None, settings=LlmSettings.from_env())
+    assert offline.scenario_options() == {}
+
+
+@pytest.mark.parametrize("failure,status", [("timeout", 504), ("no_answer", 502), ("unplayable", 422)])
+def test_draft_endpoint_says_why_there_is_no_script(monkeypatch, failure, status):
+    from matchlens.api import app
+
+    online = LlmSettings(endpoint="https://x", fast_model="m", strong_model="m", mode="online")
+    monkeypatch.setattr(app, "runtime", SimpleNamespace(team=None, clients=SimpleNamespace(settings=online)))
+
+    async def refused(*_):
+        return scenario.Written(None, ["85' goal: HBC-09 does not play for NBR"], failure)
+
+    monkeypatch.setattr(app, "write_storyline", refused)
+    with pytest.raises(HTTPException) as caught:
+        run(app.draft_scenario(app.ScenarioDraftRequest(prompt="Northbridge win it late")))
+    assert caught.value.status_code == status
+    assert caught.value.detail["reason"] == failure and caught.value.detail["problems"]

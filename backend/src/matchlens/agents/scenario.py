@@ -2,11 +2,13 @@
 
 The strong model writes a draft against the roster; ``check_storyline`` lists
 anything the simulator could not play, and the model gets one turn to fix it.
-A draft that still has problems is refused rather than played wrong.
+A draft that still has problems is refused rather than played wrong, and the
+refusal says why: the agent was too slow, did not answer, or could not fix it.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from pydantic import Field, ValidationError
@@ -18,6 +20,8 @@ from matchlens.simulator.storyline import Beat, Phase, Storyline
 
 SCENARIO_TIMEOUT_S = 45.0
 MAX_PROMPT = 400
+
+Failure = Literal["timeout", "no_answer", "unplayable"]
 
 
 class PhaseDraft(_Strict):
@@ -68,9 +72,18 @@ def to_storyline(draft: ScenarioDraft) -> tuple[Storyline | None, list[str]]:
     return story, []
 
 
-async def write_storyline(team: Any, meta: MatchMeta, prompt: str, language: str) -> tuple[Storyline | None, list[str]]:
-    """(storyline, problems). The storyline is None when the model failed or could not fix its draft."""
-    from matchlens.agents.pipeline import call_agent
+@dataclass(frozen=True)
+class Written:
+    """A checked storyline, or why there is none. ``problems`` are the last draft's, if there was one."""
+
+    story: Storyline | None
+    problems: list[str]
+    failure: Failure | None = None
+
+
+async def write_storyline(team: Any, meta: MatchMeta, prompt: str, language: str) -> Written:
+    """Draft a storyline and check it, with one turn to fix what the simulator could not play."""
+    from matchlens.agents.pipeline import call_agent, timed_out
 
     payload: dict[str, Any] = {"task": "scenario", "prompt": prompt.strip()[:MAX_PROMPT], "language": language,
                                "roster": roster(meta)}
@@ -80,10 +93,10 @@ async def write_storyline(team: Any, meta: MatchMeta, prompt: str, language: str
             payload["problems"] = problems
         draft, err = await call_agent(team.scenario, payload, ScenarioDraft, timeout=SCENARIO_TIMEOUT_S)
         if draft is None:
-            return None, [err or "the scenario agent did not answer"]
+            return Written(None, problems, "timeout" if timed_out(err) else "no_answer")
         story, problems = to_storyline(draft)
         if story is not None:
             problems = check_storyline(meta, story)
             if not problems:
-                return story, []
-    return None, problems
+                return Written(story, [])
+    return Written(None, problems, "unplayable")

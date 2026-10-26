@@ -98,7 +98,8 @@ class AgentTeam:
             recap=agent(strong, prompts.RECAP, "recap", "Half-time and full-time recaps", so),
             coach=agent(fast, prompts.COACH, "coach", "Ranked tactical briefs for the bench", fo),
             pundit=agent(fast, prompts.PUNDIT, "pundit", "Answers fans' questions about the match", fo),
-            scenario=agent(strong, prompts.SCENARIO, "scenario", "Writes match storylines for the simulator", so),
+            scenario=agent(strong, prompts.SCENARIO, "scenario", "Writes match storylines for the simulator",
+                           clients.scenario_options()),
             label=clients.label,
         )
 
@@ -115,10 +116,16 @@ async def call_agent(agent: Agent, payload: dict[str, Any], fmt: type[T],
             value = fmt.model_validate_json(response.text)
         return value, None
     except TimeoutError:
+        log.warning("agent %s timed out after %.0fs", agent.name, timeout)
         return None, f"{agent.name}: timeout after {timeout:.0f}s"
     except Exception as exc:  # noqa: BLE001 - every failure degrades to templates
         log.warning("agent %s failed: %s", agent.name, exc)
         return None, f"{agent.name}: {type(exc).__name__}"
+
+
+def timed_out(err: str | None) -> bool:
+    """Whether a ``call_agent`` error is a timeout rather than a failed call."""
+    return err is not None and ": timeout after " in err
 
 
 # ------------------------------------------------------------------ messages
