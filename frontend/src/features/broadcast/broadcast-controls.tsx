@@ -50,7 +50,7 @@ export function BroadcastControls() {
       )}
     >
       <Link
-        href={routes.matchCentre}
+        href={routes.live}
         className={cn(
           buttonVariants({ variant: "secondary" }),
           "min-h-11 gap-2 bg-graphic/80 px-3 text-graphic-foreground hover:bg-graphic",

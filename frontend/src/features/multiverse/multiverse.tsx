@@ -267,7 +267,7 @@ export function Multiverse() {
   };
 
   return (
-    <main className="mx-auto flex max-w-screen-2xl flex-col gap-4 py-4 lg:px-6 lg:py-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-4 py-4 lg:px-6 lg:py-6">
       <div className="flex flex-wrap items-end justify-between gap-3 px-4 lg:px-0">
         <div className="flex flex-col gap-1">
           <h1 className="font-display text-display font-semibold">{copy.multiverse.heading}</h1>
@@ -301,6 +301,6 @@ export function Multiverse() {
           />
         ))}
       </div>
-    </main>
+    </div>
   );
 }

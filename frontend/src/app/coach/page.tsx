@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 
-import { CoachRoom } from "@/features/coach/coach-room";
+import { CoachPage } from "@/features/coach/coach-page";
 import { copy } from "@/lib/copy";
 
 export const metadata: Metadata = { title: copy.nav.coach };
 
-export default function CoachPage() {
-  return <CoachRoom />;
+export default function Page() {
+  return <CoachPage />;
 }

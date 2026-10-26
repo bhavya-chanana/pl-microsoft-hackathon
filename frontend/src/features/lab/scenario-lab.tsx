@@ -193,7 +193,7 @@ export function ScenarioLab() {
       postJson("scenarios/kickoff", { preset_id: body.preset_id, storyline: body.storyline, speed }, Kickoff),
     onSuccess: (k) =>
       toast.success(copy.lab.kickedOff(k.title), {
-        action: { label: copy.lab.watchLive, onClick: () => window.location.assign(routes.matchCentre) },
+        action: { label: copy.lab.watchLive, onClick: () => window.location.assign(routes.live) },
       }),
     onError: () => toast.error(copy.lab.kickoffFailed),
   });
@@ -217,7 +217,7 @@ export function ScenarioLab() {
   const pendingKey = kickoff.isPending ? kickoff.variables?.key : null;
 
   return (
-    <main className="mx-auto flex max-w-screen-2xl flex-col gap-8 px-4 py-4 sm:px-6 lg:py-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-4 sm:px-6 lg:py-6">
       <div className="flex flex-col gap-1">
         <h1 className="font-display text-display font-semibold">{copy.lab.heading}</h1>
         <p className="max-w-prose text-sm text-muted-foreground">{copy.lab.intro}</p>
@@ -330,7 +330,7 @@ export function ScenarioLab() {
           </section>
         </div>
 
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-20 lg:self-start">
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-[calc(var(--stack-h)+1rem)] lg:self-start">
           <section aria-labelledby="check-heading" className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-raised">
             <div className="flex flex-col gap-0.5">
               <h2 id="check-heading" className="font-display text-xl font-semibold">
@@ -345,7 +345,7 @@ export function ScenarioLab() {
             ) : (
               <p className="text-sm text-muted-foreground">{copy.lab.noCheck}</p>
             )}
-            <Button variant="outline" className="h-11 gap-2 self-start px-4" nativeButton={false} render={<Link href={routes.matchCentre} />}>
+            <Button variant="outline" className="h-11 gap-2 self-start px-4" nativeButton={false} render={<Link href={routes.live} />}>
               <Play aria-hidden />
               {copy.lab.watchLive}
             </Button>
@@ -365,6 +365,6 @@ export function ScenarioLab() {
           </section>
         </aside>
       </div>
-    </main>
+    </div>
   );
 }

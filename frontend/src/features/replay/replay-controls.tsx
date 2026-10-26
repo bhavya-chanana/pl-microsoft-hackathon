@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { postJson } from "@/lib/api";
 import { ReplayStatus } from "@/lib/contract";
@@ -22,10 +23,12 @@ export function ReplayControls({ className }: { className?: string }) {
   const [speed, setSpeed] = useState<number>(15);
   const [start, setStart] = useState<number>(0);
   const [paused, setPaused] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const restart = useMutation({
     mutationFn: () => postJson("replay", { seed: 7, speed, start_minute: start }, Started),
     onSuccess: () => {
+      setConfirming(false);
       setPaused(false);
       toast.success(copy.replay.restarted);
     },
@@ -85,7 +88,7 @@ export function ReplayControls({ className }: { className?: string }) {
         </ToggleGroup>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Button className="h-11" onClick={() => restart.mutate()} disabled={restart.isPending}>
+        <Button variant="secondary" className="h-11 text-destructive" onClick={() => setConfirming(true)} disabled={restart.isPending}>
           <RotateCcw aria-hidden />
           {copy.replay.restart}
         </Button>
@@ -99,6 +102,22 @@ export function ReplayControls({ className }: { className?: string }) {
           {paused ? copy.replay.resume : copy.replay.pause}
         </Button>
       </div>
+      <Dialog open={confirming} onOpenChange={setConfirming}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{copy.replay.confirmTitle}</DialogTitle>
+            <DialogDescription>{copy.replay.confirmBody}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="secondary" className="h-11" onClick={() => setConfirming(false)}>
+              {copy.replay.cancel}
+            </Button>
+            <Button className="h-11" onClick={() => restart.mutate()} disabled={restart.isPending}>
+              {copy.replay.restart}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

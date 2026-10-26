@@ -1,0 +1,133 @@
+"use client";
+
+import { motion, useMotionTemplate, useScroll, useTransform } from "motion/react";
+
+import { Skeleton } from "@/components/ui/skeleton";
+import { useLive } from "@/features/live/live-store";
+import type { Team } from "@/lib/contract";
+import { cn } from "@/lib/utils";
+
+import { ConnectionPill } from "./connection-pill";
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase();
+}
+
+function Crest({ team, side, className }: { team: Team; side: "home" | "away"; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "grid shrink-0 place-items-center rounded-full font-display font-bold text-background",
+        side === "home" ? "bg-home" : "bg-away",
+        className,
+      )}
+    >
+      {initials(team.short_name || team.name)}
+    </span>
+  );
+}
+
+const collapseRange = () => (typeof window !== "undefined" && window.innerWidth < 768 ? 96 : 120);
+
+/**
+ * The match header on every primary page. On the Live page it opens as a hero scoreboard and
+ * collapses on scroll to a slim glass bar; elsewhere it starts collapsed. The page below reserves
+ * the hero height up front, so nothing jumps. Height is scroll-linked on a fixed element only.
+ */
+export function MatchHeader({ hero }: { hero: boolean }) {
+  const meta = useLive((s) => s.meta);
+  const state = useLive((s) => s.state);
+  const { scrollY } = useScroll();
+  const progress = useTransform(scrollY, (y) => (hero ? Math.min(1, Math.max(0, y / collapseRange())) : 1));
+  const height = useMotionTemplate`calc(var(--hdr-max) - (var(--hdr-max) - var(--hdr-min)) * ${progress})`;
+  const heroOpacity = useTransform(progress, [0, 0.6], [1, 0]);
+  const barOpacity = useTransform(progress, [0.4, 1], [0, 1]);
+
+  const home = meta?.home;
+  const away = meta?.away;
+  const hs = meta && state ? (state.score[meta.home.team_id] ?? 0) : null;
+  const as = meta && state ? (state.score[meta.away.team_id] ?? 0) : null;
+
+  return (
+    <motion.div
+      style={{ height }}
+      className="fixed inset-x-0 top-[var(--topbar-h)] z-40 overflow-hidden"
+      data-match-header
+    >
+      <motion.div
+        aria-hidden
+        style={{ opacity: barOpacity }}
+        className="glass absolute inset-0 border-x-0 border-t-0 shadow-none"
+      />
+      {/* Hero state */}
+      {hero && (
+        <motion.div
+          style={{ opacity: heroOpacity }}
+          className="pointer-events-none absolute inset-x-0 top-0 mx-auto flex max-w-7xl items-center justify-center px-4 pr-24 md:pr-4 h-[var(--hdr-max)]"
+          aria-label="Match score"
+        >
+          {meta && home && away && hs !== null && as !== null ? (
+            <div className="flex items-center gap-4 md:gap-10">
+              <div className="flex flex-col items-center gap-1 md:flex-row md:gap-3">
+                <Crest team={home} side="home" className="size-9 text-sm md:size-14 md:text-xl" />
+                <span className="max-w-24 truncate text-[13px] font-medium text-muted-foreground md:max-w-none md:text-base md:text-foreground">
+                  {home.name}
+                </span>
+              </div>
+              <div className="flex flex-col items-center">
+                <p className="font-display text-[56px] leading-[52px] font-bold tnum md:text-[72px] md:leading-[68px]">
+                  {hs}
+                  <span className="px-2 text-muted-foreground">-</span>
+                  {as}
+                </p>
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="font-display text-lg font-semibold tnum">{state?.minute_label}</span>
+                  <ConnectionPill className="pointer-events-auto" />
+                </div>
+              </div>
+              <div className="flex flex-col items-center gap-1 md:flex-row-reverse md:gap-3">
+                <Crest team={away} side="away" className="size-9 text-sm md:size-14 md:text-xl" />
+                <span className="max-w-24 truncate text-[13px] font-medium text-muted-foreground md:max-w-none md:text-base md:text-foreground">
+                  {away.name}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-8" aria-hidden>
+              <Skeleton className="size-12 rounded-full" />
+              <Skeleton className="h-14 w-40" />
+              <Skeleton className="size-12 rounded-full" />
+            </div>
+          )}
+        </motion.div>
+      )}
+      {/* Collapsed state */}
+      <motion.div
+        style={{ opacity: barOpacity }}
+        className="absolute inset-x-0 top-0 mx-auto flex h-[var(--hdr-min)] max-w-7xl items-center justify-center gap-3 px-4 pr-24 md:pr-4"
+      >
+        {meta && home && away && hs !== null && as !== null ? (
+          <>
+            <Crest team={home} side="home" className="size-6 text-[10px]" />
+            <span className="font-display text-xl font-bold tnum">
+              <span className="sr-only">{home.name} </span>
+              <span aria-hidden>{home.short_name}</span> {hs} - {as} <span aria-hidden>{away.short_name}</span>
+              <span className="sr-only"> {away.name}</span>
+            </span>
+            <Crest team={away} side="away" className="size-6 text-[10px]" />
+            <span className="font-display text-base font-semibold text-muted-foreground tnum">{state?.minute_label}</span>
+            <ConnectionPill className="hidden sm:flex" />
+          </>
+        ) : (
+          <Skeleton className="h-6 w-48" aria-hidden />
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}

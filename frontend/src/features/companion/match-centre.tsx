@@ -1,150 +1,55 @@
 "use client";
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Link from "next/link";
+
+import { buttonVariants } from "@/components/ui/button";
 import { BroadcastMonitor } from "@/features/broadcast/broadcast-monitor";
-import { FanPolls } from "@/features/fans/fan-polls";
-import { PlayerRatings } from "@/features/fans/player-ratings";
 import { MomentumBar } from "@/features/broadcast/momentum-bar";
-import { useLive } from "@/features/live/live-store";
-import { ProfilePanel } from "@/features/profile/profile-panel";
+import { FanPolls } from "@/features/fans/fan-polls";
 import { useProfile } from "@/features/profile/profile-store";
 import { PunditPanel } from "@/features/pundit/pundit-panel";
-import { PastMatches } from "@/features/replay/past-matches";
-import { ReplayControls } from "@/features/replay/replay-controls";
 import { MetricTile } from "@/features/stats/metric-tile";
 import { ShotMapPanel } from "@/features/stats/shot-map";
-import { PlayerCard, TeamComparison } from "@/features/stats/team-stats";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import { copy } from "@/lib/copy";
+import { routes } from "@/lib/routes";
+import { cn } from "@/lib/utils";
 
 import { CatchupDialog, RecapDialog } from "./catchup-dialog";
 import { InsightFeed } from "./insight-feed";
-import { MatchTimeline } from "./match-timeline";
 import { MatchPulse } from "./match-pulse";
 import { ListenToggle } from "./narration";
 
-function MatchHeading() {
-  const meta = useLive((s) => s.meta);
-  return (
-    <div className="flex flex-col gap-0.5">
-      <h1 className="font-display text-display font-semibold">
-        {meta ? `${meta.home.name} v ${meta.away.name}` : copy.nav.matchCentre}
-      </h1>
-      {meta && (
-        <p className="text-sm text-muted-foreground">
-          {meta.competition}, {meta.venue}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function StatsPanel() {
-  return (
-    <div className="flex flex-col gap-6">
-      <PlayerCard />
-      <TeamComparison />
-    </div>
-  );
-}
-
-const trigger = "h-11 flex-1 px-3 text-sm";
-
+/** The Live page: the pitch first, then flow, then what just happened. One document scroll. */
 export function MatchCentre() {
-  const wide = useMediaQuery("(min-width: 1024px)");
   const analyst = useProfile((s) => s.mode === "analyst");
   return (
-    <main className="mx-auto grid max-w-screen-2xl gap-6 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:py-6">
-      <div className="flex min-w-0 flex-col gap-4">
-        <MatchHeading />
+    <div className="mx-auto grid max-w-7xl items-start gap-6 px-4 py-6 md:px-6 lg:grid-cols-12 xl:px-8">
+      <div className="flex min-w-0 flex-col gap-4 lg:col-span-8">
+        <h1 className="sr-only">{copy.nav.live}</h1>
         <BroadcastMonitor interactive />
         <MomentumBar />
         <MatchPulse />
         <MetricTile />
-        <FanPolls />
         {analyst && <ShotMapPanel />}
-        {wide && (
-          <Tabs defaultValue="timeline" className="gap-4">
-            <TabsList className="h-11 w-full max-w-md">
-              <TabsTrigger value="timeline" className={trigger}>
-                {copy.tabs.timeline}
-              </TabsTrigger>
-              <TabsTrigger value="stats" className={trigger}>
-                {copy.tabs.stats}
-              </TabsTrigger>
-              <TabsTrigger value="ratings" className={trigger}>
-                {copy.tabs.ratings}
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="timeline">
-              <div aria-label={copy.timeline.heading} className="rounded-lg border bg-card px-4">
-                <MatchTimeline />
-              </div>
-            </TabsContent>
-            <TabsContent value="stats">
-              <StatsPanel />
-            </TabsContent>
-            <TabsContent value="ratings">
-              <PlayerRatings />
-            </TabsContent>
-          </Tabs>
-        )}
-        {wide && <ReplayControls className="max-w-xl" />}
-        {wide && <PastMatches className="max-w-xl" />}
       </div>
-      <aside
-        aria-label={copy.feed.heading}
-        className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:pr-1 lg:[scrollbar-gutter:stable]"
-      >
-        <div className="flex flex-col gap-4 rounded-lg border bg-card p-4 shadow-raised">
+      <div className="flex min-w-0 flex-col gap-4 lg:col-span-4">
+        <div className="flex flex-col gap-4 rounded-2xl border bg-card p-4 shadow-raised">
           <CatchupDialog />
           <PunditPanel />
           <RecapDialog />
           <ListenToggle />
         </div>
-        <ProfilePanel className="rounded-lg border bg-card p-4" />
-        {wide ? (
-          <section aria-labelledby="feed-heading" className="flex flex-col gap-3">
-            <h2 id="feed-heading" className="font-display text-lg font-semibold">
-              {copy.feed.heading}
-            </h2>
-            <div aria-labelledby="feed-heading" className="pb-4">
-              <InsightFeed />
-            </div>
-          </section>
-        ) : (
-          <Tabs defaultValue="feed" className="gap-4">
-            <TabsList className="h-11 w-full">
-              <TabsTrigger value="feed" className={trigger}>
-                {copy.tabs.feed}
-              </TabsTrigger>
-              <TabsTrigger value="timeline" className={trigger}>
-                {copy.tabs.timeline}
-              </TabsTrigger>
-              <TabsTrigger value="stats" className={trigger}>
-                {copy.tabs.stats}
-              </TabsTrigger>
-              <TabsTrigger value="ratings" className={trigger}>
-                {copy.tabs.ratings}
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="feed">
-              <InsightFeed />
-            </TabsContent>
-            <TabsContent value="timeline">
-              <MatchTimeline />
-            </TabsContent>
-            <TabsContent value="stats">
-              <StatsPanel />
-            </TabsContent>
-            <TabsContent value="ratings">
-              <PlayerRatings />
-            </TabsContent>
-          </Tabs>
-        )}
-        {!wide && <ReplayControls />}
-        {!wide && <PastMatches />}
-      </aside>
-    </main>
+        <FanPolls />
+        <section aria-labelledby="feed-heading" className="flex flex-col gap-3">
+          <h2 id="feed-heading" className="text-xl font-semibold">
+            {copy.feed.heading}
+          </h2>
+          <InsightFeed limit={4} />
+          <Link href={routes.moments} className={cn(buttonVariants({ variant: "secondary" }), "h-11 self-start px-4")}>
+            {copy.feed.seeAll}
+          </Link>
+        </section>
+      </div>
+    </div>
   );
 }

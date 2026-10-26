@@ -38,6 +38,8 @@ function FeedNotice() {
   }
   if (status !== "offline" && status !== "no_match") return null;
   const offline = status === "offline";
+  // Keep the last picture on screen; the header pill says we are reconnecting.
+  if (offline && hasMatch) return null;
   return (
     <div className="absolute inset-0 grid place-items-center bg-graphic/80 p-6 text-center text-graphic-foreground">
       <div className="flex max-w-sm flex-col items-center gap-3">

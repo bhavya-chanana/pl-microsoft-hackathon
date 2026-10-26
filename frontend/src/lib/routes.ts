@@ -1,12 +1,15 @@
 /** Every in-app path and server route in one place. */
 export const routes = {
-  matchCentre: "/",
-  broadcast: "/broadcast",
-  agents: "/agents",
+  live: "/",
+  moments: "/moments",
+  stats: "/stats",
   coach: "/coach",
-  multiverse: "/multiverse",
-  lab: "/lab",
-  tactics: "/tactics",
+  coachTactics: "/coach?tab=tactics",
+  explore: "/explore",
+  multiverse: "/explore/multiverse",
+  broadcast: "/explore/broadcast",
+  lab: "/explore/lab",
+  agents: "/agents",
 } as const;
 
 export const serverRoutes = {

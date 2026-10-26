@@ -26,7 +26,7 @@ export function FeedSkeleton() {
 }
 
 /** Personalised, fact-checked insight feed. Newest first. */
-export function InsightFeed() {
+export function InsightFeed({ limit }: { limit?: number }) {
   const profile = useFanProfile();
   const { language } = profile;
   const feed = useFeed(profile);
@@ -49,7 +49,7 @@ export function InsightFeed() {
   return (
     <ol className="flex flex-col gap-3" aria-label={copy.feed.heading}>
       <AnimatePresence initial={false}>
-        {feed.data.map((item) => (
+        {(limit ? feed.data.slice(0, limit) : feed.data).map((item) => (
           <li key={item.insight_id}>
             <InsightCard item={item} language={language} />
           </li>

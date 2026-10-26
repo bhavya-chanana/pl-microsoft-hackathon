@@ -237,7 +237,7 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
   const canCompare = Boolean(board?.baseline) && compareOptions.length > 1;
 
   return (
-    <main className="mx-auto flex max-w-screen-2xl flex-col gap-6 px-4 py-4 sm:px-6 lg:py-6">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-display text-display font-semibold">{t.heading}</h1>
@@ -249,7 +249,7 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
       <div className="grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <form
           aria-label={t.setup}
-          className="flex min-w-0 flex-col gap-6 self-start rounded-lg border bg-card p-4 shadow-raised lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto"
+          className="flex min-w-0 flex-col gap-6 self-start rounded-lg border bg-card p-4 shadow-raised "
           onSubmit={(e) => {
             e.preventDefault();
             if (canBuild) build();
@@ -301,7 +301,7 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
 
               <div className={cn("grid items-start gap-6", !comparing && "xl:grid-cols-[minmax(0,1fr)_24rem]")}>
                 {!comparing && (
-                  <div className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-20">
+                  <div className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-[calc(var(--stack-h)+1rem)]">
                     {board && active ? (
                       <>
                         <div className="rounded-lg border bg-card p-4 shadow-raised">
@@ -370,7 +370,7 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
           )}
         </div>
       </div>
-    </main>
+    </div>
   );
 }
 
