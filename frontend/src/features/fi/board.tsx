@@ -63,7 +63,7 @@ function MatchCard({ match, showScore }: { match: MatchListItem; showScore: bool
           <span className="shrink-0 tabular-nums text-muted-foreground">{scoreText}</span>
           <span className="truncate">{match.away.name}</span>
         </h2>
-        <p className="mt-1 text-xs text-muted-foreground">{match.venue}{live && " · watching 90 s behind the stadium"}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{match.venue}{live && ` · watching ${Math.round((match.viewingDelayMs ?? 90_000) / 1000)} s behind the stadium`}</p>
       </div>
       {match.status === "scheduled" ? (
         <span className="text-sm text-muted-foreground">Starts later</span>

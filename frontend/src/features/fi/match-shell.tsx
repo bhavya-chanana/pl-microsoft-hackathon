@@ -12,7 +12,6 @@ import { CLUB_COLORS } from "./clubs";
 import { useT } from "./i18n";
 import { ApiError, useMatchDetail, useMatchView } from "./api";
 import { formatClock } from "./time";
-import { cadence } from "./polling";
 import { usePlayback, type ViewMode } from "./stores";
 import type { MatchSummary } from "./types";
 import { useMatchParams } from "./use-match-params";
@@ -37,6 +36,12 @@ export function MatchShell({ children }: { children: ReactNode }) {
     return () => window.clearInterval(id);
   }, [tick]);
 
+  // Follow the server's live edge (and restarts) for real-time clips.
+  const syncLive = usePlayback((s) => s.syncLive);
+  useEffect(() => {
+    if (match?.serverClock && match.liveEdgeMs !== undefined) syncLive(match.liveEdgeMs, match.epoch ?? 0);
+  }, [match?.serverClock, match?.liveEdgeMs, match?.epoch, syncLive]);
+
   if (detail.isError) {
     if (detail.error instanceof ApiError && detail.error.status === 404) notFound();
     return <p role="alert" className="mx-auto max-w-md px-4 py-16 text-center text-sm text-muted-foreground">This match could not be loaded. {detail.error.message}</p>;
@@ -53,13 +58,13 @@ export function MatchShell({ children }: { children: ReactNode }) {
 
 function MatchBar({ matchId, match }: { matchId: string; match: MatchSummary }) {
   const pathname = usePathname();
-  const { playheadMs, mode, playing, speed, liveEdgeMs, durationMs } = usePlayback();
+  const { playheadMs, mode, playing, speed, liveEdgeMs, durationMs, delayMs } = usePlayback();
   const { setPlaying, setSpeed, goLive, seek, setMode } = usePlayback.getState();
   const score = useMatchView().data?.score ?? { home: 0, away: 0, provisional: false };
   const behind = mode === "live" ? Math.round((liveEdgeMs - playheadMs) / 1000) : 0;
-  const atLive = mode === "live" && behind <= cadence.viewingDelayMs / 1000 + 1;
+  const atLive = mode === "live" && behind <= delayMs / 1000 + 1;
   const onWatch = pathname.endsWith("/watch");
-  const max = mode === "live" ? Math.max(1, liveEdgeMs - cadence.viewingDelayMs) : durationMs;
+  const max = mode === "live" ? Math.max(1, liveEdgeMs - delayMs) : durationMs;
   const fullClock = formatClock(playheadMs);
   const tr = useT();
 
@@ -95,7 +100,7 @@ function MatchBar({ matchId, match }: { matchId: string; match: MatchSummary }) 
             <button type="button" onClick={goLive} className={cn("flex min-h-9 items-center gap-1.5 rounded-md px-2.5 font-medium",
               atLive ? "text-tally" : "bg-tally text-tally-foreground")}>
               <Radio aria-hidden className="size-4" />
-              {atLive ? `Live · ${cadence.viewingDelayMs / 1000}s delay` : `${behind - cadence.viewingDelayMs / 1000}s behind — go live`}
+              {atLive ? `Live · ${delayMs / 1000}s delay` : `${behind - delayMs / 1000}s behind — go live`}
             </button>
           ) : (
             <select aria-label="Review mode" value={mode} onChange={(e) => changeMode(e.target.value as ViewMode)}

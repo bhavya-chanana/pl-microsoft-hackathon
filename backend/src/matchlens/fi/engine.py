@@ -18,20 +18,21 @@ from .simulator import fnv
 
 Period = Literal["all", "h1", "h2"]
 HALF_MS = 45 * 60_000
-SNAPSHOT_LAG_MS = 20_000
-FULL_SNAPSHOT_MS = 30_000
+# Snapshot cadence (docs/POLLING.md). A match can override it with a "snapshot" block, e.g. a 30 s live clip.
+DEFAULT_TIMING = {"fullMs": 30_000, "lagMs": 20_000, "physicalMs": 15_000}
 PERSONAS = ("diehard", "casual", "tactical", "fantasy")
 DEFAULT_HEADLINE = {"goal": "Goal", "save": "Save", "yellow": "Yellow card", "red": "Red card", "sub": "Substitution",
                     "offside": "Offside", "press_win": "High regain", "sprint": "Top speed", "kickoff": "Kick-off",
-                    "half_time": "Half time", "full_time": "Full time", "var": "VAR review", "big_chance": "Big chance"}
+                    "half_time": "Half time", "full_time": "Full time", "var": "VAR review", "big_chance": "Big chance",
+                    "insight": "Live insight"}
 
 
-def snapshot_through(t: int) -> int:
-    return max(0, t - SNAPSHOT_LAG_MS) // FULL_SNAPSHOT_MS * FULL_SNAPSHOT_MS
+def snapshot_through(t: int, timing: dict = DEFAULT_TIMING) -> int:
+    return max(0, t - timing["lagMs"]) // timing["fullMs"] * timing["fullMs"]
 
 
-def physical_through(t: int) -> int:
-    return max(0, t - SNAPSHOT_LAG_MS // 2) // PHYSICAL_SNAPSHOT_MS * PHYSICAL_SNAPSHOT_MS
+def physical_through(t: int, timing: dict = DEFAULT_TIMING) -> int:
+    return max(0, t - timing["lagMs"] // 2) // timing["physicalMs"] * timing["physicalMs"]
 
 
 def bounds(through: int, period: Period) -> tuple[int, int]:
@@ -72,6 +73,9 @@ class Engine:
         rows = self.db.query("SELECT body FROM matches WHERE id = ?", (match_id,))
         return json.loads(rows[0]["body"]) if rows else None
 
+    def timing(self, match_id: str) -> dict:
+        return {**DEFAULT_TIMING, **((self.match(match_id) or {}).get("snapshot") or {})}
+
     def roster(self, match_id: str) -> list[dict]:
         return self._memo(("roster", match_id), lambda: [
             json.loads(r["body"]) for r in self.db.query("SELECT body FROM roster WHERE match_id = ?", (match_id,))])
@@ -82,14 +86,17 @@ class Engine:
 
     # --- Ledger ---------------------------------------------------------------------------------------------------
 
-    def events(self, match_id: str, t: int) -> list[dict]:
-        return self._memo(("events", match_id, t), lambda: self._events(match_id, t))
+    def events(self, match_id: str, t: int, known_by: int | None = None) -> list[dict]:
+        """Events up to ``t`` on the video. ``known_by`` (default ``t``) is how far knowledge may reach: a live viewer
+        behind the edge may see analysis that already exists about moments on screen; a replay uses the playhead."""
+        k = t if known_by is None else max(t, known_by)
+        return self._memo(("events", match_id, t, k), lambda: self._events(match_id, t, k))
 
-    def _events(self, match_id: str, t: int) -> list[dict]:
+    def _events(self, match_id: str, t: int, known_by: int) -> list[dict]:
         rows = self.db.query("SELECT * FROM event_revisions WHERE match_id = ? AND available_ms <= ? AND media_ms <= ? "
-                             "ORDER BY event_id, revision", (match_id, t, t))
+                             "ORDER BY event_id, revision", (match_id, known_by, t))
         commentary = {r["event_id"]: r for r in self.db.query(
-            "SELECT * FROM commentary WHERE match_id = ? AND available_ms <= ?", (match_id, t))}
+            "SELECT * FROM commentary WHERE match_id = ? AND available_ms <= ?", (match_id, known_by))}
         grouped: dict[str, list] = defaultdict(list)
         for r in rows:
             grouped[r["event_id"]].append(r)
@@ -101,6 +108,8 @@ class Engine:
             source = {"fusion": "fusion", "llm_vision": "llm_vision", "operator": "operator"}[first["source"]]
             if first["type"] == "sprint":
                 source = "vest"
+            elif first["type"] == "insight":
+                source = "model"
             elif first["type"] == "kickoff":
                 source = "ball"
             out.append({
@@ -111,13 +120,14 @@ class Engine:
                 "headline": c["headline"] if c else DEFAULT_HEADLINE.get(first["type"], first["type"].title()),
                 "copy": json.loads(c["copy"]) if c else None,
                 "analysis": "ready" if c else "pending",
+                "analysisModel": c["model"] if c else None,
                 **{k: body[k] for k in ("at", "xg", "fantasyPoints") if k in body},
             })
         return sorted(out, key=lambda e: e["atMs"])
 
-    def score(self, match_id: str, t: int) -> dict:
+    def score(self, match_id: str, t: int, known_by: int | None = None) -> dict:
         score = {"home": 0, "away": 0, "provisional": False}
-        for e in self.events(match_id, t):
+        for e in self.events(match_id, t, known_by):
             if e["type"] == "goal" and e["status"] != "overturned" and e["team"]:
                 score[e["team"]] += 1
                 score["provisional"] = score["provisional"] or e["status"] == "provisional"
@@ -207,10 +217,10 @@ class Engine:
         }
 
     def player_stats(self, match_id: str, player_id: str, playhead: int) -> dict[str, dict]:
-        return self.player_stats_at(match_id, player_id, snapshot_through(playhead), physical_through(playhead))
+        return self.player_stats_at(match_id, player_id, snapshot_through(playhead, self.timing(match_id)), physical_through(playhead, self.timing(match_id)))
 
     def fantasy_points(self, match_id: str, player_id: str, playhead: int) -> int:
-        through = snapshot_through(playhead)
+        through = snapshot_through(playhead, self.timing(match_id))
         minutes = self.player_stats(match_id, player_id, playhead)["minutes"]["value"] or 0
         pts = 0 if minutes == 0 else 2 if minutes >= 60 else 1
         for e in self.events(match_id, through):
@@ -219,7 +229,7 @@ class Engine:
         return pts
 
     def heatmap(self, match_id: str, player_id: str, playhead: int) -> list[list[float]]:
-        phys = physical_through(playhead)
+        phys = physical_through(playhead, self.timing(match_id))
         rows = self.db.query("SELECT x, y FROM vest_frames WHERE match_id = ? AND player_id = ? AND media_ms <= ? AND on_pitch = 1",
                              (match_id, player_id, phys))
         if not rows:
@@ -245,7 +255,7 @@ class Engine:
 
     def chips(self, match_id: str, playhead: int) -> dict[str, dict]:
         """Watch-page stat chips (whole match so far)."""
-        data = self.sections(match_id, snapshot_through(playhead), "all")
+        data = self.sections(match_id, snapshot_through(playhead, self.timing(match_id)), "all")
         row = lambda sec, label: next(r for s in data["sections"] if s["id"] == sec for r in s["rows"] if r["label"] == label)
         pick = lambda sec, label, source, unit=None: {"home": row(sec, label)["home"], "away": row(sec, label)["away"], "unit": unit, "source": source}
         return {

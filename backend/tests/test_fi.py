@@ -102,3 +102,30 @@ def test_ingest_is_idempotent_and_overturn_changes_the_score(client: TestClient)
     after = client.get("/api/fi/matches/nor-har-r1/view", params={"playhead_ms": 3_600_000}).json()
     assert before["score"]["home"] == 2 and after["score"]["home"] == 1
     assert next(e for e in after["events"] if e["id"] == "e20")["status"] == "overturned"
+
+
+def test_insight_guard_rejects_numbers_not_in_facts() -> None:
+    from matchlens.fi.insights import unsupported_numbers
+    facts = {"teams": {"White kits": {"width_m": 41.3, "fastest_kmh": 26.7, "players_tracked": 10}}}
+    ok = {"headline": "White stretch to 41.3 m", "copy": {"diehard": "26.7 km/h!", "casual": "Wide.", "tactical": "10 tracked.", "fantasy": "-"}}
+    bad = {"headline": "White stretch to 45 m", "copy": {"diehard": "30.2 km/h!", "casual": "", "tactical": "", "fantasy": ""}}
+    assert unsupported_numbers(ok, facts) == []
+    assert unsupported_numbers(bad, facts) == ["45", "30.2"]
+
+
+def test_importance_gate_only_fires_on_meaningful_change() -> None:
+    from matchlens.fi.insights import shape_reasons, sprint_reason
+    team = lambda w, d, burst=0: {"width_m": w, "depth_m": d, "players_above_20kmh": burst}
+    a = {"teams": {"RB Leipzig (white, home)": team(31.0, 22.0), "Bayern Munich (dark, away)": team(40.0, 40.0)},
+         "more_compact": "RB Leipzig (white, home)", "centroid_gap_along_pitch_m": 5.0}
+    assert shape_reasons(None, a)  # first read
+    assert shape_reasons(a, a) == []  # nothing changed
+    small = {**a, "teams": {**a["teams"], "RB Leipzig (white, home)": team(33.0, 23.0)}}
+    assert shape_reasons(a, small) == []  # under 20 %
+    wider = {**a, "teams": {**a["teams"], "RB Leipzig (white, home)": team(45.0, 22.0)}}
+    assert any("RB Leipzig width" in r for r in shape_reasons(a, wider))
+    flipped = {**a, "more_compact": "Bayern Munich (dark, away)"}
+    assert any("Bayern Munich are now the more compact" in r for r in shape_reasons(a, flipped))
+    assert sprint_reason(25.4, 0) == "fastest sprint of the match so far"
+    assert sprint_reason(25.4, 26.7) is None
+    assert sprint_reason(27.5, 30.0) is not None

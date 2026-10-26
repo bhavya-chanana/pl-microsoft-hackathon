@@ -23,6 +23,7 @@ from .engine import Engine, Period, physical_through, snapshot_through
 from .ingest import (DuplicateBatch, ingest_ball, ingest_commentary, ingest_operator, ingest_vest, ingest_vision,
                      set_clock_sync)
 from .models import BallBatch, ClockSync, CommentaryBatch, LoginRequest, OperatorBatch, Preferences, VestBatch, VisionBatch
+from .live import MATCH_ID as LIVE_MATCH_ID, LiveRunner
 from .simulator import ensure_seeded
 
 router = APIRouter(prefix="/api/fi", tags=["football-intelligence"])
@@ -37,6 +38,7 @@ class State:
         self.ready = threading.Event()
         self.error: str | None = None
         self.secret = ""
+        self.live: LiveRunner | None = None
 
     def start(self, path: str | None = None, seed: bool = True) -> None:
         self.db = Database(path or default_path())
@@ -49,6 +51,10 @@ class State:
         def run() -> None:
             try:
                 ensure_seeded(self.db)
+                clip = default_path().parent / "sportsmot" / "live_match.json"
+                if clip.exists():  # real-footage live match (scripts/sportsmot_to_live.py)
+                    self.live = LiveRunner(self.db, clip)
+                    self.live.start()
             except Exception as exc:  # surfaced through /api/fi/health
                 self.error = repr(exc)
             finally:
@@ -126,8 +132,16 @@ def _match_or_404(match_id: str) -> dict:
     return m
 
 
+def _live_fields(match_id: str) -> dict:
+    return state.live.live_fields() if state.live and match_id == LIVE_MATCH_ID else {}
+
+
 def _cutoff(match: dict, playhead_ms: int, mode: ViewMode) -> int:
     """The latest moment this request may see. Full review is only for finished matches."""
+    if state.live and match["id"] == LIVE_MATCH_ID:
+        if mode != "live":
+            raise HTTPException(400, "This match is live")
+        return max(0, min(playhead_ms, state.live.edge_ms))  # the server's live edge, not the client's
     if mode == "full_review":
         if match["status"] != "completed":
             raise HTTPException(400, "Full review is only available after full time")
@@ -147,17 +161,20 @@ def matches(user: User, spoilers: bool = False) -> list[dict]:
     out = []
     for m in engine().matches():
         score = None
-        if m["status"] == "live":
+        live = _live_fields(m["id"])
+        if live:
+            score = engine().score(m["id"], max(0, live["liveEdgeMs"] - m["viewingDelayMs"]))
+        elif m["status"] == "live":
             score = engine().score(m["id"], max(0, m.get("liveEdgeStartMs", 0) - VIEWING_DELAY_MS))
         elif m["status"] == "completed" and spoilers:
             score = engine().score(m["id"], m["durationMs"])
-        out.append({**m, "score": score})
+        out.append({**m, **live, "score": score})
     return out
 
 
 @router.get("/matches/{match_id}")
 def match_detail(match_id: str, user: User) -> dict:
-    return {**_match_or_404(match_id), "players": engine().public_roster(match_id)}
+    return {**_match_or_404(match_id), **_live_fields(match_id), "players": engine().public_roster(match_id)}
 
 
 @router.get("/matches/{match_id}/view")
@@ -165,20 +182,23 @@ def view(match_id: str, user: User, playhead_ms: int = Query(ge=0), mode: ViewMo
     m = _match_or_404(match_id)
     t = _cutoff(m, playhead_ms, mode)
     e = engine()
-    return {"matchId": match_id, "playheadMs": t, "score": e.score(match_id, t), "events": e.events(match_id, t),
-            "pulse": e.pulse(match_id, t), "chips": e.chips(match_id, t), "statsThroughMs": snapshot_through(t)}
+    # Live: analysis that already exists (by the server's edge) about moments on screen may be shown.
+    known = state.live.known_ms if state.live and match_id == LIVE_MATCH_ID else t
+    return {"matchId": match_id, "playheadMs": t, "score": e.score(match_id, t, known), "events": e.events(match_id, t, known),
+            "pulse": e.pulse(match_id, t), "chips": e.chips(match_id, t), "statsThroughMs": snapshot_through(t, e.timing(match_id))}
 
 
 @router.get("/matches/{match_id}/stats")
 def stats(match_id: str, user: User, playhead_ms: int = Query(ge=0), mode: ViewMode = "live", period: Period = "all") -> dict:
     m = _match_or_404(match_id)
     t = _cutoff(m, playhead_ms, mode)
-    through = snapshot_through(t) if mode != "full_review" else t
+    e = engine()
+    timing = e.timing(match_id)
+    through = snapshot_through(t, timing) if mode != "full_review" else t
     if period == "h2" and through <= 45 * 60_000:
         period = "all"
-    e = engine()
     data = e.sections(match_id, through, period)
-    return {"playheadMs": t, "throughMs": through, "physicalThroughMs": physical_through(t), "period": period,
+    return {"playheadMs": t, "throughMs": through, "physicalThroughMs": physical_through(t, timing), "period": period,
             "refreshedAt": datetime.now(timezone.utc).isoformat(), **data, "shots": e.shots(match_id, through, period),
             "players": e.player_rows(match_id, through, period, t)}
 
@@ -191,8 +211,8 @@ def player(match_id: str, player_id: str, user: User, playhead_ms: int = Query(g
     p = next((q for q in e.public_roster(match_id) if q["id"] == player_id), None)
     if not p:
         raise HTTPException(404, "Unknown player")
-    through = snapshot_through(t)
-    return {"player": p, "throughMs": through, "physicalThroughMs": physical_through(t),
+    through = snapshot_through(t, e.timing(match_id))
+    return {"player": p, "throughMs": through, "physicalThroughMs": physical_through(t, e.timing(match_id)),
             "refreshedAt": datetime.now(timezone.utc).isoformat(),
             "stats": e.player_stats(match_id, player_id, t), "heatmap": e.heatmap(match_id, player_id, t),
             "fantasy": e.fantasy_points(match_id, player_id, t),

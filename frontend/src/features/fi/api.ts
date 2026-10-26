@@ -53,7 +53,12 @@ export function useMatches() {
 }
 
 export function useMatchDetail(matchId: string) {
-  return useQuery({ queryKey: ["fi", "match", matchId], queryFn: () => fi<MatchDetail>(`matches/${matchId}`), staleTime: Infinity, enabled: !!matchId });
+  return useQuery({
+    queryKey: ["fi", "match", matchId], queryFn: () => fi<MatchDetail>(`matches/${matchId}`), enabled: !!matchId,
+    // Server-clock live matches report their live edge here; everything else is static.
+    staleTime: Infinity,
+    refetchInterval: (q) => (q.state.data?.serverClock ? 2_000 : false),
+  });
 }
 
 export function usePlayersById(matchId: string): Map<string, PublicPlayer> {
@@ -86,10 +91,12 @@ export function useMatchView() {
 /** Stats lag the video on purpose: they move one 30 s snapshot at a time and never pass the playhead. */
 export function useMatchStats(period: Period) {
   const { matchId, mode, playheadMs } = usePlayback();
-  const through = snapshotThrough(playheadMs);
+  const timing = useMatchDetail(matchId ?? "").data?.snapshot;
+  const through = snapshotThrough(playheadMs, timing);
+  const lag = timing?.lagMs ?? cadence.snapshotLagMs;
   const query = useQuery({
     queryKey: ["fi", "stats", matchId, mode, period, through],
-    queryFn: () => fi<MatchStats>(`matches/${matchId}/stats?playhead_ms=${through + cadence.snapshotLagMs}&mode=${mode}&period=${period}`),
+    queryFn: () => fi<MatchStats>(`matches/${matchId}/stats?playhead_ms=${through + lag}&mode=${mode}&period=${period}`),
     enabled: !!matchId,
     placeholderData: keepPreviousData,
     refetchInterval: cadence.statsRefreshMs,
@@ -100,10 +107,12 @@ export function useMatchStats(period: Period) {
 
 export function usePlayerDetail(playerId: string) {
   const { matchId, mode, playheadMs } = usePlayback();
-  const through = snapshotThrough(playheadMs);
+  const timing = useMatchDetail(matchId ?? "").data?.snapshot;
+  const through = snapshotThrough(playheadMs, timing);
+  const lag = timing?.lagMs ?? cadence.snapshotLagMs;
   const query = useQuery({
     queryKey: ["fi", "player", matchId, playerId, mode, through],
-    queryFn: () => fi<PlayerDetail>(`matches/${matchId}/players/${playerId}?playhead_ms=${through + cadence.snapshotLagMs}&mode=${mode}`),
+    queryFn: () => fi<PlayerDetail>(`matches/${matchId}/players/${playerId}?playhead_ms=${through + lag}&mode=${mode}`),
     enabled: !!matchId && !!playerId,
     placeholderData: keepPreviousData,
     refetchInterval: cadence.statsRefreshMs,

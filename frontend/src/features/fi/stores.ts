@@ -68,6 +68,12 @@ type PlaybackState = {
   playheadMs: number;
   liveEdgeMs: number;
   durationMs: number;
+  /** Viewing delay behind the live edge for this match. */
+  delayMs: number;
+  /** The backend owns the live edge (real-time clip); the client only interpolates between syncs. */
+  serverClock: boolean;
+  epoch: number;
+  syncLive: (edgeMs: number, epoch: number) => void;
   playing: boolean;
   speed: number;
   open: (match: MatchSummary, mode?: ViewMode) => void;
@@ -88,27 +94,33 @@ export const usePlayback = create<PlaybackState>()((set, get) => ({
   playheadMs: 0,
   liveEdgeMs: 0,
   durationMs: 0,
+  delayMs: cadence.viewingDelayMs,
+  serverClock: false,
+  epoch: 0,
   playing: true,
   speed: 1,
   open: (match, mode) => {
     const s = get();
     const nextMode: ViewMode = mode ?? (match.status === "live" ? "live" : "as_live");
-    if (s.matchId === match.id && (!mode || mode === s.mode)) return;
+    if (s.matchId === match.id && (!mode || mode === s.mode) && (match.epoch ?? 0) === s.epoch) return;
+    const delayMs = match.viewingDelayMs ?? cadence.viewingDelayMs;
+    const clock = { delayMs, serverClock: !!match.serverClock, epoch: match.epoch ?? 0 };
     if (nextMode === "live") {
-      const edge = match.liveEdgeStartMs ?? 0;
-      set({ matchId: match.id, mode: "live", liveEdgeMs: edge, playheadMs: Math.max(0, edge - cadence.viewingDelayMs),
-        durationMs: match.durationMs, playing: true });
+      const edge = match.liveEdgeMs ?? match.liveEdgeStartMs ?? 0;
+      set({ matchId: match.id, mode: "live", liveEdgeMs: edge, playheadMs: Math.max(0, edge - delayMs),
+        durationMs: match.durationMs, playing: true, ...clock });
     } else {
       set({ matchId: match.id, mode: nextMode, liveEdgeMs: match.durationMs,
-        playheadMs: nextMode === "full_review" ? match.durationMs : 0, durationMs: match.durationMs, playing: nextMode === "as_live" });
+        playheadMs: nextMode === "full_review" ? match.durationMs : 0, durationMs: match.durationMs, playing: nextMode === "as_live", ...clock });
     }
   },
   tick: (dt) => {
     const s = get();
     const step = dt * s.speed;
     if (s.mode === "live") {
-      const edge = Math.min(s.durationMs + cadence.viewingDelayMs, s.liveEdgeMs + step);
-      const head = s.playing ? Math.min(edge - cadence.viewingDelayMs, s.playheadMs + step) : s.playheadMs;
+      // A server-clock match's edge moves in real time; demo speed only lets the viewer catch up.
+      const edge = Math.min(s.durationMs + s.delayMs, s.liveEdgeMs + (s.serverClock ? dt : step));
+      const head = s.playing ? Math.min(edge - s.delayMs, s.playheadMs + step) : s.playheadMs;
       set({ liveEdgeMs: edge, playheadMs: Math.min(head, s.durationMs) });
     } else if (s.playing) {
       const head = Math.min(s.durationMs, s.playheadMs + step);
@@ -117,12 +129,20 @@ export const usePlayback = create<PlaybackState>()((set, get) => ({
   },
   seek: (ms) => {
     const s = get();
-    const max = s.mode === "live" ? s.liveEdgeMs - cadence.viewingDelayMs : s.durationMs;
+    const max = s.mode === "live" ? s.liveEdgeMs - s.delayMs : s.durationMs;
     set({ playheadMs: Math.max(0, Math.min(max, ms)) });
   },
   setPlaying: (playing) => set({ playing }),
   setSpeed: (speed) => set({ speed }),
   setLayout: (layout) => set({ layout }),
   setMode: (mode) => set((s) => ({ mode, playheadMs: mode === "full_review" ? s.durationMs : s.playheadMs })),
-  goLive: () => set((s) => ({ playheadMs: Math.max(0, s.liveEdgeMs - cadence.viewingDelayMs), playing: true })),
+  goLive: () => set((s) => ({ playheadMs: Math.max(0, s.liveEdgeMs - s.delayMs), playing: true })),
+  syncLive: (edgeMs, epoch) => set((s) => {
+    if (!s.serverClock || s.mode !== "live") return s;
+    // The clip restarted on the server: start watching the new run from its beginning.
+    if (epoch !== s.epoch) return { epoch, liveEdgeMs: edgeMs, playheadMs: Math.max(0, edgeMs - s.delayMs), playing: true };
+    // Before the clip ends the edge keeps growing; afterwards it stays at durationMs while the delay plays out.
+    const edge = edgeMs >= s.durationMs ? Math.max(s.liveEdgeMs, edgeMs) : edgeMs;
+    return { liveEdgeMs: edge, playheadMs: Math.min(s.playheadMs, Math.max(0, edge - s.delayMs)) };
+  }),
 }));

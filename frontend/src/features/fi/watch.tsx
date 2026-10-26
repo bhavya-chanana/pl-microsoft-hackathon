@@ -78,6 +78,7 @@ function usePopup(): VisibleEvent | null {
  * the shared playhead (seek on drift, rate = demo speed) so popups and stats stay in step with the picture.
  */
 function MatchVideo({ matchId }: { matchId: string }) {
+  const credit = useMatchDetail(matchId).data?.serverClock ? "Footage: SportsMOT (CC BY-NC 4.0, research use)" : "Footage: SoccerNet (research use)";
   const ref = useRef<HTMLVideoElement>(null);
   const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
   const t = usePlayback((s) => s.playheadMs);
@@ -113,7 +114,7 @@ function MatchVideo({ matchId }: { matchId: string }) {
         </>
       )}
       {state === "ready" && (
-        <span className="absolute right-3 bottom-3 rounded bg-graphic/80 px-2 py-0.5 text-[11px] text-graphic-foreground">Footage: SoccerNet (research use)</span>
+        <span className="absolute right-3 bottom-3 rounded bg-graphic/80 px-2 py-0.5 text-[11px] text-graphic-foreground">{credit}</span>
       )}
     </>
   );
@@ -295,6 +296,11 @@ function FeedCard({ e, matchId }: { e: VisibleEvent; matchId: string }) {
         </button>
         <span aria-hidden>·</span>
         <span>{SOURCE_LABELS[e.source]}</span>
+        {e.analysisModel && e.analysisModel !== "template" && e.analysisModel !== "mock" && (
+          <span className="rounded bg-[color-mix(in_oklch,var(--persona)_18%,transparent)] px-1.5 py-0.5 font-medium text-foreground" title={`Written live by ${e.analysisModel}`}>
+            AI · {e.analysisModel.split(" · ")[0]}
+          </span>
+        )}
         {e.status !== "confirmed" && (
           <span className={cn("ml-auto rounded px-1.5 py-0.5 font-medium", e.status === "overturned" ? "bg-blocked/15 text-blocked" : "bg-rewritten/15 text-rewritten")}>
             {e.status === "overturned" ? "Overturned" : "Provisional"}

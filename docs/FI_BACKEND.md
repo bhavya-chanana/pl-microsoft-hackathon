@@ -45,6 +45,22 @@ browser ─► Next proxy /api/backend/fi/... ─► as-of reads (playhead-filte
 (repeats return `duplicate: true`). Set `MATCHLENS_INGEST_TOKEN` to require `X-Ingest-Token`.
 Shapes are in `fi/models.py`; real hardware posts exactly what the simulator posts.
 
+## Real-footage live match (SportsMOT)
+
+`smot-live` replays one SportsMOT football clip (CC BY-NC 4.0, research use) as a live match on the server clock.
+
+1. Stream one football clip from `MCG-NJU/SportsMOT` into `backend/.data/sportsmot/clip/` (frames, `gt/gt.txt`).
+2. `ffmpeg -framerate 25 -i <clip>/img1/%06d.jpg -c:v libx264 -pix_fmt yuv420p frontend/public/video/smot-live.mp4`
+3. `uv run --no-project --with numpy --with pillow python scripts/sportsmot_to_live.py <clip dir>` writes
+   `backend/.data/sportsmot/live_match.json`: pitch positions estimated from the boxes (homography on the halfway
+   line and centre circle, camera pan removed), teams from shirt colour, referees dropped.
+4. On startup `fi/live.py` posts those frames through vest ingest second by second, raises a sprint event the first
+   time a player passes 25.2 km/h, and restarts the clip 25 s after it has been watched. Reads are capped at the
+   server's live edge; the match uses an 8 s delay and 5 s stats snapshots.
+
+Positions and speeds are video estimates, not vest data. SportsMOT has no ball or event labels, so ball-derived stats
+(passes, shots, possession) stay at zero for this match. Team names are kit colours; no real club or player names.
+
 ## Known gaps
 
 - The server trusts the client's playhead for live matches (it caps at match length, not at the live edge).

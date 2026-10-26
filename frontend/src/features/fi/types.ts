@@ -20,7 +20,7 @@ export type Player = {
 
 export type EventType =
   | "kickoff" | "shot" | "save" | "goal" | "big_chance" | "foul" | "yellow" | "red"
-  | "sub" | "corner" | "offside" | "var" | "press_win" | "sprint" | "half_time" | "full_time";
+  | "sub" | "corner" | "offside" | "var" | "press_win" | "sprint" | "half_time" | "full_time" | "insight";
 
 export type Revision = { availableMs: number; status: EventStatus; note?: string };
 
@@ -54,7 +54,16 @@ export type MatchSummary = {
   /** For live matches: the live edge when the demo opened. */
   liveEdgeStartMs?: number;
   durationMs: number;
+  /** Server-driven live matches: the backend owns the live edge and restarts the clip (new epoch). */
+  serverClock?: boolean;
+  liveEdgeMs?: number;
+  epoch?: number;
+  viewingDelayMs?: number;
+  snapshot?: SnapshotTiming;
+  sourceNote?: string;
 };
+
+export type SnapshotTiming = { fullMs: number; lagMs: number; physicalMs: number };
 
 // --- API shapes (backend /api/fi) -----------------------------------------------------------------------------
 
@@ -69,6 +78,8 @@ export type VisibleEvent = Omit<MatchEvent, "copy"> & {
   note?: string | null;
   copy: Record<Persona, string> | null;
   analysis: "ready" | "pending";
+  /** Who wrote the analysis: a model deployment with its latency, or "template"/"mock". */
+  analysisModel?: string | null;
 };
 
 export type TeamStat = { home: number | null; away: number | null; unit?: string | null; source: Source };

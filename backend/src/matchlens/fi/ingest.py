@@ -12,7 +12,7 @@ from collections import defaultdict
 from .db import Database
 from .models import BallBatch, ClockSync, CommentaryBatch, EventRef, OperatorBatch, VestBatch, VisionBatch
 
-PHYSICAL_SNAPSHOT_MS = 15_000
+PHYSICAL_SNAPSHOT_MS = 5_000  # stored granularity; each match reads at its own cadence
 HSR_MPS = 5.5      # 19.8 km/h
 SPRINT_MPS = 7.0   # 25.2 km/h
 

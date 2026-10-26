@@ -38,8 +38,8 @@ export const PERSONAS: Record<Persona, PersonaConfig> = {
   diehard: {
     label: "Diehard fan",
     blurb: "Your club first: chances, concessions and why",
-    popupTypes: ["big_chance", "save", "yellow", "sub", "var"],
-    weights: { goal: 10, var: 9, big_chance: 7, save: 6, yellow: 5, sub: 4, press_win: 3 },
+    popupTypes: ["big_chance", "save", "yellow", "sub", "var", "insight", "sprint"],
+    weights: { goal: 10, var: 9, big_chance: 7, save: 6, insight: 5, yellow: 5, sub: 4, press_win: 3 },
     chips: ["shots", "bigChances", "possession"],
     statsOrder: ["shots", "bigChances", "xg", "possession", "highRegains", "corners", "fouls", "yellow", "distance", "passes", "ppda", "lineHeight", "sprints", "red"],
     playerHeadline: ["goals", "assists", "shots", "duelsWon", "distance"],
@@ -67,7 +67,7 @@ export const PERSONAS: Record<Persona, PersonaConfig> = {
   casual: {
     label: "Casual viewer",
     blurb: "Just the big moments, in plain words",
-    popupTypes: ["save", "big_chance"],
+    popupTypes: ["save", "big_chance", "insight"],
     weights: { goal: 10, red: 9, var: 8, save: 6, big_chance: 6, sprint: 4, yellow: 3 },
     chips: ["possession", "shots"],
     statsOrder: ["possession", "shots", "bigChances", "corners", "yellow", "red", "distance", "xg", "passes", "fouls", "highRegains", "sprints", "ppda", "lineHeight"],
@@ -96,8 +96,8 @@ export const PERSONAS: Record<Persona, PersonaConfig> = {
   tactical: {
     label: "Tactical",
     blurb: "Mechanisms, pressing and shape — with evidence",
-    popupTypes: ["press_win", "big_chance", "sub", "offside", "var"],
-    weights: { press_win: 9, big_chance: 8, goal: 8, sub: 7, offside: 6, shot: 5, var: 6 },
+    popupTypes: ["press_win", "big_chance", "sub", "offside", "var", "insight", "sprint"],
+    weights: { insight: 9, press_win: 9, big_chance: 8, goal: 8, sub: 7, offside: 6, shot: 5, var: 6 },
     chips: ["xg", "ppda", "lineHeight"],
     statsOrder: ["xg", "ppda", "highRegains", "lineHeight", "possession", "passes", "bigChances", "shots", "distance", "sprints", "corners", "fouls", "yellow", "red"],
     playerHeadline: ["progressivePasses", "passAccuracy", "recoveries", "xg", "highSpeedRun"],
@@ -125,7 +125,7 @@ export const PERSONAS: Record<Persona, PersonaConfig> = {
   fantasy: {
     label: "Fantasy manager",
     blurb: "Your players, their points, as they happen",
-    popupTypes: ["yellow", "save", "sub"],
+    popupTypes: ["yellow", "save", "sub", "sprint"],
     weights: { goal: 10, red: 9, yellow: 7, save: 6, sub: 6, big_chance: 5 },
     chips: ["xg", "shots"],
     statsOrder: ["xg", "shots", "bigChances", "yellow", "red", "possession", "corners", "passes", "distance", "sprints", "highRegains", "fouls", "ppda", "lineHeight"],

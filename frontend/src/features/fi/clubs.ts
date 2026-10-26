@@ -6,6 +6,9 @@ import type { Persona } from "./types";
  */
 export const CLUB_COLORS: Record<string, { deep: string; bright: string; ink: string }> = {
   NOR: { deep: "oklch(0.52 0.19 258)", bright: "oklch(0.72 0.14 250)", ink: "oklch(0.99 0 0)" },
+  // Real-footage clip: Leipzig in white (red trim), Bayern in their dark away kit.
+  RBL: { deep: "oklch(0.55 0.20 25)", bright: "oklch(0.92 0.01 250)", ink: "oklch(0.99 0 0)" },
+  FCB: { deep: "oklch(0.36 0.04 260)", bright: "oklch(0.74 0.05 260)", ink: "oklch(0.99 0 0)" },
   HAR: { deep: "oklch(0.58 0.16 55)", bright: "oklch(0.78 0.14 70)", ink: "oklch(0.99 0 0)" },
   WES: { deep: "oklch(0.45 0.15 12)", bright: "oklch(0.72 0.13 15)", ink: "oklch(0.99 0 0)" },
   KIN: { deep: "oklch(0.50 0.14 152)", bright: "oklch(0.78 0.15 150)", ink: "oklch(0.99 0 0)" },

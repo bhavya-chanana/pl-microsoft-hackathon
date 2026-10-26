@@ -1,4 +1,5 @@
 import { cadence } from "./polling";
+import type { SnapshotTiming } from "./types";
 
 export const formatClock = (ms: number) => {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -9,7 +10,8 @@ export const formatClock = (ms: number) => {
 };
 
 /** Latest stats snapshot boundary at or before the playhead (mirrors the backend). */
-export function snapshotThrough(t: number): number {
-  const safe = Math.max(0, t - cadence.snapshotLagMs);
-  return Math.floor(safe / cadence.fullSnapshotMs) * cadence.fullSnapshotMs;
+export function snapshotThrough(t: number, timing?: SnapshotTiming): number {
+  const lag = timing?.lagMs ?? cadence.snapshotLagMs;
+  const every = timing?.fullMs ?? cadence.fullSnapshotMs;
+  return Math.floor(Math.max(0, t - lag) / every) * every;
 }
