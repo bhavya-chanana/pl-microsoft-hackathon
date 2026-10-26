@@ -71,6 +71,11 @@ class Match(_Row):
     away_goals: int
     home_goals_ht: int | None = None
     away_goals_ht: int | None = None
+    # Knockout ties: home_goals/away_goals are always the 90-minute score.
+    home_goals_aet: int | None = None
+    away_goals_aet: int | None = None
+    home_pens: int | None = None
+    away_pens: int | None = None
     home_xg: float | None = None
     away_xg: float | None = None
     home_formation: str | None = None
@@ -120,7 +125,11 @@ class Shot(_Row):
 
 
 class MatchEvent(_Row):
-    """Non-shot timeline events: goals, cards, substitutions."""
+    """Non-shot timeline events: goals, cards, substitutions.
+
+    ``team_id`` is the team the event is credited to; for ``own_goal`` that is
+    the team that benefits (the one whose score goes up).
+    """
 
     event_id: str
     match_key: str

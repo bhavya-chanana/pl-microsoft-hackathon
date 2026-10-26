@@ -1,0 +1,30 @@
+{
+ "wikidata:Q900001": {
+  "kind": "club",
+  "entity_id": "wikidata:Q900001",
+  "title": "Rovermere F.C.",
+  "file": "rovermere",
+  "retrieved": "2026-10-01"
+ },
+ "wikidata:Q910001": {
+  "kind": "manager",
+  "entity_id": "wikidata:Q910001",
+  "title": "Alda Verrin",
+  "file": "verrin",
+  "retrieved": "2026-10-01"
+ },
+ "wikidata:Q920001": {
+  "kind": "player",
+  "entity_id": "wikidata:Q920001",
+  "title": "Dorian Falk",
+  "file": "falk",
+  "retrieved": "2026-10-01"
+ },
+ "wikidata:Q920002": {
+  "kind": "player",
+  "entity_id": "wikidata:Q920002",
+  "title": "Falk (disambiguation)",
+  "file": "dab",
+  "retrieved": "2026-10-01"
+ }
+}

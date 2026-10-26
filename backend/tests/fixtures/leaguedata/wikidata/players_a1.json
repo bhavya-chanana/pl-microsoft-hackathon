@@ -1,0 +1,65 @@
+{
+ "head": {
+  "vars": []
+ },
+ "results": {
+  "bindings": [
+   {
+    "club": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q900001"
+    },
+    "p": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q920001"
+    },
+    "pLabel": {
+     "type": "literal",
+     "value": "Dorian Falk"
+    },
+    "birth": {
+     "type": "literal",
+     "value": "1999-04-05T00:00:00Z"
+    },
+    "height": {
+     "type": "literal",
+     "value": "1.85"
+    },
+    "natLabel": {
+     "type": "literal",
+     "value": "Fictionland"
+    },
+    "sitelinks": {
+     "type": "literal",
+     "value": "40"
+    },
+    "article": {
+     "type": "uri",
+     "value": "https://en.wikipedia.org/wiki/Dorian_Falk"
+    }
+   },
+   {
+    "club": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q900001"
+    },
+    "p": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q920002"
+    },
+    "pLabel": {
+     "type": "literal",
+     "value": "Esme Lorne"
+    },
+    "height": {
+     "type": "literal",
+     "value": "178"
+    },
+    "sitelinks": {
+     "type": "literal",
+     "value": "12"
+    }
+   }
+  ]
+ }
+}
