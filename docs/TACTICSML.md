@@ -4,10 +4,9 @@ The learned model behind the Tactics Board. It scores a frozen moment of play (w
 the team shoot, score, concede, lose the ball) and proposes small repositionings of the players. This card
 says what the code does, what it was trained on, how it is evaluated and where it should not be trusted.
 
-> **No quality numbers are claimed here.** The results table in section 6 is empty on purpose. Fill it from
-> `backend/data/local/tacticsml/eval/report.json` after a real run (`npm run tacticsml:eval`), and say which
-> shards and checkpoints produced it. A run on simulator data checks the pipeline; it says nothing about real
-> football.
+> **Numbers in section 6 come from one recorded run** (2026-10-26) and nothing else. Re-run
+> `npm run tacticsml:eval` after retraining and replace them. A run on simulator data checks the pipeline; it
+> says nothing about real football.
 
 ## 1. What it is
 
@@ -173,20 +172,43 @@ two or more). A target with no data or fewer than 30 labelled samples is `NOT_EV
 Numbers come only from a real run. Copy them from `report.json`; leave a row empty if it was not evaluated.
 Record the checkpoints (`meta.members`), the shards (`meta.sources`) and the date next to the table.
 
-Run: _not yet recorded_
+Run: 2026-10-26. Three critics (`gat_seed0..2.pt`, 6 epochs each, about 8 minutes per seed on Apple MPS) and the
+cVAE (4 epochs), trained on the train splits of synthetic (20 matches), StatsBomb 360 (47), Sportec/IDSSE (7),
+SkillCorner (8) and Metrica (2). Scored on the held-out test splits below. Metrica is CC BY-NC, so these
+checkpoints are for non-commercial use.
 
 | Source | Situation | n | Receiver top-1 | Receiver top-3 | shot10 AUC | shot10 Brier | shot10 ECE | goal10 AUC | concede10 AUC | turn5 AUC | turn5 ECE |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| | | | | | | | | | | | |
+| SkillCorner | all | 2,962 | 0.535 | 0.847 | 0.889 | 0.0518 | 0.0142 | 0.764 | (too rare) | 0.771 | 0.0299 |
+| Sportec/IDSSE | all | 7,390 | 0.361 | 0.706 | 0.876 | 0.0385 | 0.0102 | 0.850 | 0.864 | 0.792 | 0.0482 |
+| StatsBomb 360 | all | 22,173 | n/a | n/a | 0.847 | 0.0394 | 0.0046 | 0.833 | 0.949 | 0.752 | 0.0064 |
+| StatsBomb 360 | corner | 56 | n/a | n/a | 0.509 | 0.2321 | 0.0821 | 0.782 | n/a | 0.461 | 0.0154 |
+| Real, pooled | all | 32,525 | 0.421 | 0.754 | 0.860 | 0.0403 | 0.0044 | 0.822 | 0.801 | 0.762 | 0.0112 |
+| Synthetic (pipeline check) | all | 18,407 | 0.339 | 0.665 | 0.880 | 0.0471 | 0.0070 | 0.951 | 0.727 | 0.727 | 0.0106 |
+
+Chance receiver top-3 is about 0.28. StatsBomb 360 has no receiver labels (anonymous freeze frames), so the
+pooled receiver figures come from SkillCorner and Sportec only. `concede10` positives are so rare (0.03 to 0.1%)
+that its AUC is noisy.
 
 | Check | Value |
 |---|---|
-| D2 equivariance error (ensemble, float32) | |
-| Spread-error Spearman, `shot10` | |
-| Learned vs baseline, `shot10` AUC (same sub-sample) | |
-| cVAE RMSE, no move / posterior / best-of-k (m) | |
-| cVAE share of proposals raising the target (model / random control), `attack/shot` | |
-| cVAE speed clamp and lock check | |
+| D2 equivariance error (ensemble, float32) | 1.2e-7 (float64 member: 2.2e-16) |
+| Spread-error Spearman, `shot10` | 0.85 to 0.89 on every source: higher spread, larger error |
+| Learned vs baseline, receiver top-3 (same sub-sample) | SkillCorner 0.853 vs 0.751, Sportec 0.781 vs 0.689 |
+| Learned vs baseline, `shot10` AUC (same sub-sample) | SkillCorner 0.889 vs 0.839, Sportec 0.883 vs 0.819, StatsBomb 360 0.814 vs 0.803 |
+| cVAE RMSE, no move / posterior / best-of-8 (m) | 7.29 / 6.10 / 6.05 |
+| cVAE share of proposals raising the target (model / random control), `attack/shot` | 0.58 / 0.46 |
+| cVAE speed clamp and lock check | respected |
+
+Plan targets, honestly:
+
+* **Open-play receiver top-3 >= 0.85: not met.** SkillCorner reaches 0.847, Sportec 0.706. No source flags open
+  play, so all moments count, set pieces included.
+* **Shot within 10 s, AUC >= 0.80 and ECE <= 0.03: met** on every real source (pooled 0.860 / 0.0044).
+* **D2 equivariance < 1e-5: met.**
+* **Corner receiver top-3 >= 0.70: not evaluated.** No real source has labelled corner receivers. TacticAI
+  reports 0.782 on 7,176 Liverpool corners with private tracking, so there is no like-for-like comparison yet.
+  The 56 StatsBomb 360 corners show the critic is weak on set pieces (shot10 AUC 0.51).
 
 ## 7. Limitations
 
