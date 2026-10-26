@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { Barlow_Condensed, IBM_Plex_Sans, Noto_Sans_Devanagari } from "next/font/google";
 
 import { AppHeader } from "@/components/shell/app-header";
@@ -47,7 +48,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     >
       <body className="min-h-dvh">
         <Providers>
-          <AppHeader />
+          <Suspense fallback={<div className="h-14 border-b" />}>
+            <AppHeader />
+          </Suspense>
           {children}
         </Providers>
       </body>

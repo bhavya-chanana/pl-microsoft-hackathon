@@ -20,7 +20,10 @@ export const PROXY_GET = [
   /^agents\/decisions$/,
   /^players\/[\w-]+$/,
   /^teams\/[\w-]+$/,
+  // Football Intelligence reads (all filtered by playhead on the server).
+  /^fi\/(health|auth\/me|matches)$/,
+  /^fi\/matches\/[\w-]+(\/(view|stats|players\/[\w-]+))?$/,
 ];
 
 /** Replay controls (demo only). */
-export const PROXY_POST = [/^replay$/, /^replay\/control$/];
+export const PROXY_POST = [/^replay$/, /^replay\/control$/, /^fi\/auth\/(login|logout)$/, /^fi\/me\/preferences$/];

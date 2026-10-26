@@ -30,3 +30,6 @@ backend/data/generated/
 
 # Partial writes of the recorded demo
 backend/demo/*.tmp
+
+# Football Intelligence local database and dev session secret
+backend/.data/

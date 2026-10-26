@@ -1,5 +1,7 @@
-import { MatchCentre } from "@/features/companion/match-centre";
+import { redirect } from "next/navigation";
+
+import { routes } from "@/lib/routes";
 
 export default function Home() {
-  return <MatchCentre />;
+  redirect(routes.matches);
 }

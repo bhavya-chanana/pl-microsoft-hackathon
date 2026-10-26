@@ -1,0 +1,1914 @@
+{
+ "note": "Fictional demo match. Clubs, players and commentary are invented; event timing follows one SoccerNet-v2 match.",
+ "teams": {
+  "home": {
+   "id": "home",
+   "name": "Northbridge FC",
+   "short": "NOR"
+  },
+  "away": {
+   "id": "away",
+   "name": "Harbour City",
+   "short": "HAR"
+  }
+ },
+ "players": [
+  {
+   "id": "h1",
+   "name": "Tomas Reyna",
+   "shirt": 1,
+   "team": "home",
+   "position": "GK",
+   "base": {
+    "x": 5,
+    "y": 50
+   },
+   "startsOn": true
+  },
+  {
+   "id": "h2",
+   "name": "Ilya Brandt",
+   "shirt": 2,
+   "team": "home",
+   "position": "DF",
+   "base": {
+    "x": 25,
+    "y": 15
+   },
+   "startsOn": true
+  },
+  {
+   "id": "h4",
+   "name": "Kofi Asante",
+   "shirt": 4,
+   "team": "home",
+   "position": "DF",
+   "base": {
+    "x": 20,
+    "y": 38
+   },
+   "startsOn": true
+  },
+  {
+   "id": "h5",
+   "name": "Daniel Moe",
+   "shirt": 5,
+   "team": "home",
+   "position": "DF",
+   "base": {
+    "x": 20,
+    "y": 62
+   },
+   "startsOn": true
+  },
+  {
+   "id": "h3",
+   "name": "Rui Calado",
+   "shirt": 3,
+   "team": "home",
+   "position": "DF",
+   "base": {
+    "x": 25,
+    "y": 85
+   },
+   "startsOn": true
+  },
+  {
+   "id": "h6",
+   "name": "Sami Okafor",
+   "shirt": 6,
+   "team": "home",
+   "position": "MF",
+   "base": {
+    "x": 40,
+    "y": 50
+   },
+   "startsOn": true
+  },
+  {
+   "id": "h8",
+   "name": "Leo Vance",
+   "shirt": 8,
+   "team": "home",
+   "position": "MF",
+   "base": {
+    "x": 52,
+    "y": 35
+   },
+   "startsOn": true,
+   "offAtMs": 4635000
+  },
+  {
+   "id": "h10",
+   "name": "Mateo Ferraz",
+   "shirt": 10,
+   "team": "home",
+   "position": "MF",
+   "base": {
+    "x": 58,
+    "y": 62
+   },
+   "startsOn": true
+  },
+  {
+   "id": "h7",
+   "name": "Jonah Pike",
+   "shirt": 7,
+   "team": "home",
+   "position": "FW",
+   "base": {
+    "x": 72,
+    "y": 18
+   },
+   "startsOn": true,
+   "offAtMs": 3563000
+  },
+  {
+   "id": "h9",
+   "name": "Ade Bello",
+   "shirt": 9,
+   "team": "home",
+   "position": "FW",
+   "base": {
+    "x": 80,
+    "y": 50
+   },
+   "startsOn": true
+  },
+  {
+   "id": "h11",
+   "name": "Nils Ekdahl",
+   "shirt": 11,
+   "team": "home",
+   "position": "FW",
+   "base": {
+    "x": 72,
+    "y": 82
+   },
+   "startsOn": true,
+   "offAtMs": 5247000
+  },
+  {
+   "id": "h14",
+   "name": "Theo Marsh",
+   "shirt": 14,
+   "team": "home",
+   "position": "MF",
+   "base": {
+    "x": 55,
+    "y": 50
+   },
+   "startsOn": false,
+   "onFromMs": 4635000
+  },
+  {
+   "id": "h19",
+   "name": "Yusuf Tan",
+   "shirt": 19,
+   "team": "home",
+   "position": "FW",
+   "base": {
+    "x": 74,
+    "y": 50
+   },
+   "startsOn": false,
+   "onFromMs": 3563000
+  },
+  {
+   "id": "h16",
+   "name": "Arlo Quinn",
+   "shirt": 16,
+   "team": "home",
+   "position": "FW",
+   "base": {
+    "x": 72,
+    "y": 82
+   },
+   "startsOn": false,
+   "onFromMs": 5247000
+  },
+  {
+   "id": "a1",
+   "name": "Piotr Lenz",
+   "shirt": 1,
+   "team": "away",
+   "position": "GK",
+   "base": {
+    "x": 5,
+    "y": 50
+   },
+   "startsOn": true
+  },
+  {
+   "id": "a2",
+   "name": "Owen Hale",
+   "shirt": 2,
+   "team": "away",
+   "position": "DF",
+   "base": {
+    "x": 24,
+    "y": 18
+   },
+   "startsOn": true
+  },
+  {
+   "id": "a5",
+   "name": "Marco Dini",
+   "shirt": 5,
+   "team": "away",
+   "position": "DF",
+   "base": {
+    "x": 18,
+    "y": 40
+   },
+   "startsOn": true
+  },
+  {
+   "id": "a6",
+   "name": "Emeka Obi",
+   "shirt": 6,
+   "team": "away",
+   "position": "DF",
+   "base": {
+    "x": 18,
+    "y": 60
+   },
+   "startsOn": true
+  },
+  {
+   "id": "a3",
+   "name": "Luis Prado",
+   "shirt": 3,
+   "team": "away",
+   "position": "DF",
+   "base": {
+    "x": 24,
+    "y": 82
+   },
+   "startsOn": true
+  },
+  {
+   "id": "a4",
+   "name": "Hugo Lindqvist",
+   "shirt": 4,
+   "team": "away",
+   "position": "MF",
+   "base": {
+    "x": 38,
+    "y": 38
+   },
+   "startsOn": true
+  },
+  {
+   "id": "a8",
+   "name": "Ravi Kapoor",
+   "shirt": 8,
+   "team": "away",
+   "position": "MF",
+   "base": {
+    "x": 38,
+    "y": 62
+   },
+   "startsOn": true
+  },
+  {
+   "id": "a7",
+   "name": "Callum Shaw",
+   "shirt": 7,
+   "team": "away",
+   "position": "MF",
+   "base": {
+    "x": 60,
+    "y": 15
+   },
+   "startsOn": true,
+   "offAtMs": 5035000
+  },
+  {
+   "id": "a10",
+   "name": "Bruno Sena",
+   "shirt": 10,
+   "team": "away",
+   "position": "MF",
+   "base": {
+    "x": 62,
+    "y": 50
+   },
+   "startsOn": true
+  },
+  {
+   "id": "a11",
+   "name": "Felix Arndt",
+   "shirt": 11,
+   "team": "away",
+   "position": "MF",
+   "base": {
+    "x": 60,
+    "y": 85
+   },
+   "startsOn": true,
+   "offAtMs": 3309000
+  },
+  {
+   "id": "a9",
+   "name": "Ibrahim Diallo",
+   "shirt": 9,
+   "team": "away",
+   "position": "FW",
+   "base": {
+    "x": 80,
+    "y": 50
+   },
+   "startsOn": true,
+   "offAtMs": 4638000
+  },
+  {
+   "id": "a17",
+   "name": "Jake Moran",
+   "shirt": 17,
+   "team": "away",
+   "position": "FW",
+   "base": {
+    "x": 76,
+    "y": 45
+   },
+   "startsOn": false,
+   "onFromMs": 4638000
+  },
+  {
+   "id": "a15",
+   "name": "Stefan Kral",
+   "shirt": 15,
+   "team": "away",
+   "position": "DF",
+   "base": {
+    "x": 20,
+    "y": 50
+   },
+   "startsOn": false,
+   "onFromMs": 3309000
+  },
+  {
+   "id": "a20",
+   "name": "Nico Varga",
+   "shirt": 20,
+   "team": "away",
+   "position": "MF",
+   "base": {
+    "x": 60,
+    "y": 15
+   },
+   "startsOn": false,
+   "onFromMs": 5035000
+  }
+ ],
+ "events": [
+  {
+   "id": "e01",
+   "type": "kickoff",
+   "atMs": 0,
+   "playerIds": [],
+   "source": "ball",
+   "headline": "Kick-off",
+   "copy": {
+    "diehard": "We're under way. Come on Northbridge.",
+    "casual": "The match has started.",
+    "tactical": "Northbridge 4-3-3; Harbour City 4-2-3-1, front three high from the off.",
+    "fantasy": "All 22 starters on. Minutes points ticking."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 0,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e02",
+   "type": "offside",
+   "atMs": 681000,
+   "team": "home",
+   "playerIds": [
+    "h9"
+   ],
+   "source": "llm_vision",
+   "headline": "Offside — Bello",
+   "copy": {
+    "diehard": "Bello's gone too early. Flag up.",
+    "casual": "Offside against Northbridge's striker.",
+    "tactical": "Bello 0.7 m beyond the last defender at the pass (vest). Harbour holding a high line.",
+    "fantasy": "No points change."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 685000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e03",
+   "type": "save",
+   "atMs": 783000,
+   "team": "away",
+   "playerIds": [
+    "a1",
+    "h10"
+   ],
+   "source": "fusion",
+   "at": {
+    "x": 89,
+    "y": 50
+   },
+   "xg": 0.76,
+   "headline": "PENALTY SAVED — Lenz",
+   "fantasyPoints": {
+    "a1": 5,
+    "h10": -2
+   },
+   "copy": {
+    "diehard": "PENALTY… and it's SAVED. Ferraz denied. Gutted.",
+    "casual": "Northbridge get a penalty, but the Harbour City keeper saves it!",
+    "tactical": "Penalty after a box entry down the right; Ferraz to the keeper's left at 96 km/h, Lenz guessed right. xG 0.76 lost.",
+    "fantasy": "Lenz +5 (penalty save). Ferraz −2 (penalty miss)."
+   },
+   "critical": true,
+   "revisions": [
+    {
+     "availableMs": 787000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e04",
+   "type": "yellow",
+   "atMs": 969000,
+   "team": "away",
+   "playerIds": [
+    "a5"
+   ],
+   "source": "llm_vision",
+   "headline": "Yellow card — Dini",
+   "fantasyPoints": {
+    "a5": -1
+   },
+   "copy": {
+    "diehard": "Booked. Their centre-back has to be careful now.",
+    "casual": "Yellow card for Harbour City's Dini — a warning.",
+    "tactical": "Dini carded for a late challenge stopping a Northbridge break; a booked CB is less willing to step out.",
+    "fantasy": "Dini −1 (yellow card)."
+   },
+   "critical": true,
+   "revisions": [
+    {
+     "availableMs": 978000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e05",
+   "type": "goal",
+   "atMs": 1169000,
+   "team": "away",
+   "playerIds": [
+    "a7",
+    "a10"
+   ],
+   "source": "fusion",
+   "at": {
+    "x": 88,
+    "y": 42
+   },
+   "xg": 0.21,
+   "headline": "GOAL — Shaw",
+   "fantasyPoints": {
+    "a7": 5,
+    "a10": 3
+   },
+   "copy": {
+    "diehard": "No. Shaw scores for them. 0-1. Too easy through the middle.",
+    "casual": "Harbour City score first! 0-1.",
+    "tactical": "Sena found Shaw between the lines; Northbridge's midfield three too flat. Finish from 14 m, xG 0.21.",
+    "fantasy": "Shaw +5 (goal, MID). Sena +3 (assist). Northbridge clean sheet gone."
+   },
+   "critical": true,
+   "revisions": [
+    {
+     "availableMs": 1171000,
+     "status": "provisional",
+     "note": "Ball crossed the line (ball sensor)"
+    },
+    {
+     "availableMs": 1227000,
+     "status": "confirmed",
+     "note": "Restart kick-off confirmed on video"
+    }
+   ]
+  },
+  {
+   "id": "e06",
+   "type": "offside",
+   "atMs": 1369000,
+   "team": "away",
+   "playerIds": [
+    "a9"
+   ],
+   "source": "llm_vision",
+   "headline": "Offside — Diallo",
+   "copy": {
+    "diehard": "Flag up. Good line from us.",
+    "casual": "Offside against Harbour City.",
+    "tactical": "Northbridge step up as a unit; Diallo 0.5 m off.",
+    "fantasy": "No points change."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 1373000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e07",
+   "type": "press_win",
+   "atMs": 1540000,
+   "team": "home",
+   "playerIds": [
+    "h8"
+   ],
+   "source": "fusion",
+   "at": {
+    "x": 66,
+    "y": 38
+   },
+   "headline": "High regain — Vance",
+   "copy": {
+    "diehard": "Vance wins it back in their half. More of that!",
+    "casual": "Northbridge win the ball back high up the pitch.",
+    "tactical": "Vance closed Lindqvist in 1.3 s (vest speed 7.2 m/s); regain 34 m from goal.",
+    "fantasy": "Vance +1 recovery (defensive contribution)."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 1544000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e08",
+   "type": "save",
+   "atMs": 1692000,
+   "team": "away",
+   "playerIds": [
+    "a1",
+    "h11"
+   ],
+   "source": "fusion",
+   "at": {
+    "x": 82,
+    "y": 60
+   },
+   "xg": 0.14,
+   "headline": "Save — Lenz",
+   "copy": {
+    "diehard": "Ekdahl tests him — saved.",
+    "casual": "Northbridge shot, saved by the keeper.",
+    "tactical": "Ekdahl cut inside, 20 m shot at 98 km/h; routine save.",
+    "fantasy": "Lenz +1 towards save points."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 1696000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e09",
+   "type": "goal",
+   "atMs": 1749000,
+   "team": "away",
+   "playerIds": [
+    "a9",
+    "a7"
+   ],
+   "source": "fusion",
+   "at": {
+    "x": 90,
+    "y": 50
+   },
+   "xg": 0.38,
+   "headline": "GOAL — Diallo",
+   "fantasyPoints": {
+    "a9": 4,
+    "a7": 3
+   },
+   "copy": {
+    "diehard": "0-2. Diallo. We're getting carved open.",
+    "casual": "Harbour City score again! 0-2.",
+    "tactical": "Shaw's cut-back after a run in behind the right-back; Diallo first time from 9 m. xG 0.38.",
+    "fantasy": "Diallo +4 (goal, FW). Shaw +3 (assist) — 8 pts already."
+   },
+   "critical": true,
+   "revisions": [
+    {
+     "availableMs": 1751000,
+     "status": "provisional",
+     "note": "Ball crossed the line (ball sensor)"
+    },
+    {
+     "availableMs": 1803000,
+     "status": "confirmed",
+     "note": "Restart kick-off confirmed on video"
+    }
+   ]
+  },
+  {
+   "id": "e10",
+   "type": "goal",
+   "atMs": 2090000,
+   "team": "home",
+   "playerIds": [
+    "h9",
+    "h10"
+   ],
+   "source": "fusion",
+   "at": {
+    "x": 91,
+    "y": 46
+   },
+   "xg": 0.44,
+   "headline": "GOAL — Bello",
+   "fantasyPoints": {
+    "h9": 4,
+    "h10": 3
+   },
+   "copy": {
+    "diehard": "BELLO! 1-2! We're back in it!",
+    "casual": "Northbridge pull one back! 1-2.",
+    "tactical": "Ferraz through ball split the centre-backs (gap 10 m); Bello finish from 10 m, xG 0.44.",
+    "fantasy": "Bello +4 (goal, FW). Ferraz +3 (assist) — back to positive after the penalty."
+   },
+   "critical": true,
+   "revisions": [
+    {
+     "availableMs": 2092000,
+     "status": "provisional",
+     "note": "Ball crossed the line (ball sensor)"
+    },
+    {
+     "availableMs": 2133000,
+     "status": "confirmed",
+     "note": "Restart kick-off confirmed on video"
+    }
+   ]
+  },
+  {
+   "id": "e11",
+   "type": "yellow",
+   "atMs": 2163000,
+   "team": "home",
+   "playerIds": [
+    "h4"
+   ],
+   "source": "llm_vision",
+   "headline": "Yellow card — Asante",
+   "fantasyPoints": {
+    "h4": -1
+   },
+   "copy": {
+    "diehard": "Asante booked. Frustration showing.",
+    "casual": "Yellow card for Northbridge's Asante.",
+    "tactical": "Asante carded for a pull on Diallo; Northbridge's left CB now carded.",
+    "fantasy": "Asante −1 (yellow card)."
+   },
+   "critical": true,
+   "revisions": [
+    {
+     "availableMs": 2172000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e12",
+   "type": "goal",
+   "atMs": 2499000,
+   "team": "away",
+   "playerIds": [
+    "a3",
+    "a10"
+   ],
+   "source": "fusion",
+   "at": {
+    "x": 93,
+    "y": 52
+   },
+   "xg": 0.34,
+   "headline": "GOAL — Prado",
+   "fantasyPoints": {
+    "a3": 6,
+    "a10": 3
+   },
+   "copy": {
+    "diehard": "1-3. Just before half time. Awful.",
+    "casual": "Harbour City score a third! 1-3.",
+    "tactical": "Prado arrives unmarked at the back post from Sena's delivery; Northbridge's zonal line lost him. xG 0.34.",
+    "fantasy": "Prado +6 (goal, DEF). Sena +3 — two assists."
+   },
+   "critical": true,
+   "revisions": [
+    {
+     "availableMs": 2501000,
+     "status": "provisional",
+     "note": "Ball crossed the line (ball sensor)"
+    },
+    {
+     "availableMs": 2555000,
+     "status": "confirmed",
+     "note": "Restart kick-off confirmed on video"
+    }
+   ]
+  },
+  {
+   "id": "e13",
+   "type": "half_time",
+   "atMs": 2700000,
+   "playerIds": [],
+   "source": "operator",
+   "headline": "Half time",
+   "copy": {
+    "diehard": "Half time, 1-3 down. Need a reaction.",
+    "casual": "Half time. Harbour City lead 3-1.",
+    "tactical": "HT: Northbridge more of the ball, but Harbour 3 goals from 0.93 xG; Northbridge's penalty miss is the swing.",
+    "fantasy": "HT: Shaw 9, Prado 8, Sena 8, Lenz 7. Bello 6."
+   },
+   "critical": true,
+   "revisions": [
+    {
+     "availableMs": 2703000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e14",
+   "type": "save",
+   "atMs": 2998000,
+   "team": "home",
+   "playerIds": [
+    "h1",
+    "a9"
+   ],
+   "source": "fusion",
+   "at": {
+    "x": 85,
+    "y": 44
+   },
+   "xg": 0.2,
+   "headline": "Save — Reyna",
+   "copy": {
+    "diehard": "Reyna keeps us in it!",
+    "casual": "Good save from the Northbridge keeper.",
+    "tactical": "Diallo low shot, 102 km/h; Reyna down quickly. xGOT 0.31.",
+    "fantasy": "Reyna +1 towards save points."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 3002000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e15",
+   "type": "red",
+   "atMs": 3201000,
+   "team": "away",
+   "playerIds": [
+    "a6"
+   ],
+   "source": "llm_vision",
+   "headline": "RED CARD — Obi",
+   "fantasyPoints": {
+    "a6": -3
+   },
+   "copy": {
+    "diehard": "RED! Obi off! Ten men — game on!",
+    "casual": "Red card! Harbour City down to 10 players.",
+    "tactical": "Last-man foul on Bello through on goal. Harbour must drop to a 4-4-1 for 37 minutes.",
+    "fantasy": "Obi −3 (red card). Harbour clean-sheet hopes long gone; their attackers' minutes at risk."
+   },
+   "critical": true,
+   "revisions": [
+    {
+     "availableMs": 3211000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e16",
+   "type": "sub",
+   "atMs": 3309000,
+   "team": "away",
+   "playerIds": [
+    "a15",
+    "a11"
+   ],
+   "source": "llm_vision",
+   "headline": "Sub — Kral on for Arndt",
+   "copy": {
+    "diehard": "They're shutting up shop. Push!",
+    "casual": "Harbour City change: a defender comes on.",
+    "tactical": "Kral replaces a winger to rebuild the back four after the red; 4-4-1 block.",
+    "fantasy": "Arndt off before 60 (1 pt)."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 3313000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e17",
+   "type": "save",
+   "atMs": 3322000,
+   "team": "away",
+   "playerIds": [
+    "a1",
+    "h10"
+   ],
+   "source": "fusion",
+   "at": {
+    "x": 80,
+    "y": 40
+   },
+   "xg": 0.09,
+   "headline": "Save — Lenz",
+   "copy": {
+    "diehard": "Ferraz from distance — saved.",
+    "casual": "Northbridge shoot, the keeper saves.",
+    "tactical": "Ferraz 22 m strike, 104 km/h.",
+    "fantasy": "Lenz +1 towards save points."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 3326000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e18",
+   "type": "save",
+   "atMs": 3355000,
+   "team": "away",
+   "playerIds": [
+    "a1",
+    "h9"
+   ],
+   "source": "fusion",
+   "at": {
+    "x": 88,
+    "y": 55
+   },
+   "xg": 0.27,
+   "headline": "Save — Lenz again",
+   "copy": {
+    "diehard": "Bello! Saved again. Their keeper's having a day.",
+    "casual": "Another save from Harbour City's keeper.",
+    "tactical": "Second shot in 33 s; Northbridge's overload on the right is working.",
+    "fantasy": "Lenz now 3 saves (+1)."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 3359000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e19",
+   "type": "save",
+   "atMs": 3423000,
+   "team": "home",
+   "playerIds": [
+    "h1",
+    "a10"
+   ],
+   "source": "fusion",
+   "at": {
+    "x": 79,
+    "y": 50
+   },
+   "xg": 0.07,
+   "headline": "Save — Reyna",
+   "copy": {
+    "diehard": "Sena tries his luck. Reyna holds.",
+    "casual": "Harbour City shoot, saved.",
+    "tactical": "Counter after a Northbridge corner; long-range effort.",
+    "fantasy": "Reyna +1 towards save points."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 3427000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e20",
+   "type": "goal",
+   "atMs": 3513000,
+   "team": "home",
+   "playerIds": [
+    "h9",
+    "h11"
+   ],
+   "source": "fusion",
+   "at": {
+    "x": 90,
+    "y": 54
+   },
+   "xg": 0.36,
+   "headline": "GOAL — Bello",
+   "fantasyPoints": {
+    "h9": 4,
+    "h11": 3
+   },
+   "copy": {
+    "diehard": "BELLO AGAIN! 2-3! Here we go!",
+    "casual": "Northbridge score again! 2-3, game on.",
+    "tactical": "Ekdahl beat the stand-in full-back 1v1 and cut back; Bello's second. xG 0.36.",
+    "fantasy": "Bello +4 — two goals, 10 pts. Ekdahl +3 (assist)."
+   },
+   "critical": true,
+   "revisions": [
+    {
+     "availableMs": 3515000,
+     "status": "provisional",
+     "note": "Ball crossed the line (ball sensor)"
+    },
+    {
+     "availableMs": 3570000,
+     "status": "confirmed",
+     "note": "Restart kick-off confirmed on video"
+    }
+   ]
+  },
+  {
+   "id": "e21",
+   "type": "sub",
+   "atMs": 3563000,
+   "team": "home",
+   "playerIds": [
+    "h19",
+    "h7"
+   ],
+   "source": "llm_vision",
+   "headline": "Sub — Tan on for Pike",
+   "copy": {
+    "diehard": "Another striker on. Go for it!",
+    "casual": "Northbridge change: Tan replaces Pike.",
+    "tactical": "Two strikers vs ten men; Pike's high-speed running had dropped 35% (vest).",
+    "fantasy": "Pike off just before 60 (1 pt)."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 3567000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e22",
+   "type": "sprint",
+   "atMs": 3720000,
+   "team": "home",
+   "playerIds": [
+    "h11"
+   ],
+   "source": "vest",
+   "headline": "Top speed — Ekdahl 34.6 km/h",
+   "copy": {
+    "diehard": "Ekdahl flying down the wing!",
+    "casual": "Northbridge's winger hits 34.6 km/h — the fastest run today.",
+    "tactical": "Ekdahl 34.6 km/h over 45 m, attacking the space behind ten men.",
+    "fantasy": "No points; sprint data from player vest."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 3724000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e23",
+   "type": "offside",
+   "atMs": 4213000,
+   "team": "home",
+   "playerIds": [
+    "h19"
+   ],
+   "source": "llm_vision",
+   "headline": "Offside — Tan",
+   "copy": {
+    "diehard": "Flag up. Tan too eager.",
+    "casual": "Offside against Northbridge.",
+    "tactical": "Tan 0.9 m off (vest).",
+    "fantasy": "No points change."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 4217000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e24",
+   "type": "yellow",
+   "atMs": 4221000,
+   "team": "home",
+   "playerIds": [
+    "h6"
+   ],
+   "source": "llm_vision",
+   "headline": "Yellow card — Okafor",
+   "fantasyPoints": {
+    "h6": -1
+   },
+   "copy": {
+    "diehard": "Okafor booked for arguing. Calm down.",
+    "casual": "Yellow card for Northbridge's Okafor.",
+    "tactical": "Dissent booking; Northbridge's only holding mid now carded.",
+    "fantasy": "Okafor −1 (yellow card)."
+   },
+   "critical": true,
+   "revisions": [
+    {
+     "availableMs": 4230000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e25",
+   "type": "sub",
+   "atMs": 4635000,
+   "team": "home",
+   "playerIds": [
+    "h14",
+    "h8"
+   ],
+   "source": "llm_vision",
+   "headline": "Sub — Marsh on for Vance",
+   "copy": {
+    "diehard": "Fresh legs in midfield.",
+    "casual": "Northbridge change: Marsh on.",
+    "tactical": "Like-for-like; Vance HR in red zone 11 min (vest).",
+    "fantasy": "Vance 2 pts appearance."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 4639000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e26",
+   "type": "sub",
+   "atMs": 4638000,
+   "team": "away",
+   "playerIds": [
+    "a17",
+    "a9"
+   ],
+   "source": "llm_vision",
+   "headline": "Sub — Moran on for Diallo",
+   "copy": {
+    "diehard": "Their scorer goes off.",
+    "casual": "Harbour City change: Moran on.",
+    "tactical": "Moran to hold the ball up alone.",
+    "fantasy": "Diallo 6 pts, off."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 4642000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e27",
+   "type": "sub",
+   "atMs": 5035000,
+   "team": "away",
+   "playerIds": [
+    "a20",
+    "a7"
+   ],
+   "source": "llm_vision",
+   "headline": "Sub — Varga on for Shaw",
+   "copy": {
+    "diehard": "Shaw off. Wasting time now.",
+    "casual": "Harbour City change: Varga replaces Shaw.",
+    "tactical": "Fresh legs on the right to track Ekdahl.",
+    "fantasy": "Shaw finishes on 10 pts."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 5039000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e28",
+   "type": "save",
+   "atMs": 5136000,
+   "team": "away",
+   "playerIds": [
+    "a1",
+    "h19"
+   ],
+   "source": "fusion",
+   "at": {
+    "x": 89,
+    "y": 47
+   },
+   "xg": 0.31,
+   "headline": "BIG SAVE — Lenz",
+   "copy": {
+    "diehard": "TAN! NO! How has he saved that?!",
+    "casual": "Huge chance for Northbridge — saved by the keeper!",
+    "tactical": "Tan header from 8 m off a Quinn cross; Lenz reaction save. xGOT 0.55.",
+    "fantasy": "Lenz +1 save point — 5 saves."
+   },
+   "critical": true,
+   "revisions": [
+    {
+     "availableMs": 5140000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e29",
+   "type": "sub",
+   "atMs": 5247000,
+   "team": "home",
+   "playerIds": [
+    "h16",
+    "h11"
+   ],
+   "source": "llm_vision",
+   "headline": "Sub — Quinn on for Ekdahl",
+   "copy": {
+    "diehard": "Last roll of the dice.",
+    "casual": "Northbridge change: Quinn on.",
+    "tactical": "Quinn for the final push.",
+    "fantasy": "Ekdahl 5 pts."
+   },
+   "critical": false,
+   "revisions": [
+    {
+     "availableMs": 5251000,
+     "status": "confirmed"
+    }
+   ]
+  },
+  {
+   "id": "e30",
+   "type": "full_time",
+   "atMs": 5410000,
+   "playerIds": [],
+   "source": "operator",
+   "headline": "Full time",
+   "copy": {
+    "diehard": "Full time. 2-3. A missed penalty and 45 bad minutes cost us.",
+    "casual": "Full time. Harbour City win 3-2.",
+    "tactical": "FT 2-3. Northbridge won the second half 1-0 against ten men but couldn't recover from three first-half concessions.",
+    "fantasy": "Final: Bello 10, Shaw 10, Lenz 9, Prado 8, Sena 8."
+   },
+   "critical": true,
+   "revisions": [
+    {
+     "availableMs": 5413000,
+     "status": "confirmed"
+    }
+   ]
+  }
+ ],
+ "matches": [
+  {
+   "id": "nor-har",
+   "competition": "Demo League",
+   "venue": "Northbridge Park",
+   "kickoffLabel": "Today 19:45",
+   "status": "live",
+   "home": {
+    "id": "home",
+    "name": "Northbridge FC",
+    "short": "NOR"
+   },
+   "away": {
+    "id": "away",
+    "name": "Harbour City",
+    "short": "HAR"
+   },
+   "liveEdgeStartMs": 1800000,
+   "durationMs": 5410000
+  },
+  {
+   "id": "wes-kin",
+   "competition": "Demo League",
+   "venue": "Westmoor Ground",
+   "kickoffLabel": "Today 21:00",
+   "status": "scheduled",
+   "home": {
+    "id": "home",
+    "name": "Westmoor Athletic",
+    "short": "WES"
+   },
+   "away": {
+    "id": "away",
+    "name": "Kingsford Rovers",
+    "short": "KIN"
+   },
+   "durationMs": 5410000
+  },
+  {
+   "id": "nor-har-r1",
+   "competition": "Demo Cup",
+   "venue": "Northbridge Park",
+   "kickoffLabel": "Sat 15:00",
+   "status": "completed",
+   "home": {
+    "id": "home",
+    "name": "Northbridge FC",
+    "short": "NOR"
+   },
+   "away": {
+    "id": "away",
+    "name": "Harbour City",
+    "short": "HAR"
+   },
+   "durationMs": 5410000
+  },
+  {
+   "id": "eas-wes",
+   "competition": "Demo Cup",
+   "venue": "Eastgate Lane",
+   "kickoffLabel": "Tue 20:00",
+   "status": "completed",
+   "home": {
+    "id": "home",
+    "name": "Eastgate Town",
+    "short": "EAS"
+   },
+   "away": {
+    "id": "away",
+    "name": "Westmoor Athletic",
+    "short": "WES"
+   },
+   "durationMs": 5410000
+  }
+ ],
+ "durationMs": 5410000,
+ "calibratedTimeline": [
+  [
+   20,
+   "throw",
+   "home"
+  ],
+  [
+   114,
+   "throw",
+   "home"
+  ],
+  [
+   241,
+   "off",
+   "away"
+  ],
+  [
+   297,
+   "clearance",
+   "home"
+  ],
+  [
+   467,
+   "throw",
+   "home"
+  ],
+  [
+   529,
+   "throw",
+   "home"
+  ],
+  [
+   620,
+   "throw",
+   "away"
+  ],
+  [
+   681,
+   "offside",
+   "home"
+  ],
+  [
+   708,
+   "fk",
+   "away"
+  ],
+  [
+   724,
+   "throw",
+   "home"
+  ],
+  [
+   745,
+   "foul",
+   "away"
+  ],
+  [
+   783,
+   "on",
+   "home"
+  ],
+  [
+   815,
+   "corner",
+   "home"
+  ],
+  [
+   817,
+   "foul",
+   "home"
+  ],
+  [
+   858,
+   "fk",
+   "away"
+  ],
+  [
+   934,
+   "foul",
+   "away"
+  ],
+  [
+   953,
+   "fk",
+   "home"
+  ],
+  [
+   960,
+   "foul",
+   "away"
+  ],
+  [
+   993,
+   "fk",
+   "home"
+  ],
+  [
+   998,
+   "foul",
+   "away"
+  ],
+  [
+   1033,
+   "fk",
+   "home"
+  ],
+  [
+   1034,
+   "off",
+   "home"
+  ],
+  [
+   1061,
+   "clearance",
+   "away"
+  ],
+  [
+   1089,
+   "throw",
+   "away"
+  ],
+  [
+   1282,
+   "throw",
+   "away"
+  ],
+  [
+   1312,
+   "corner",
+   "away"
+  ],
+  [
+   1333,
+   "corner",
+   "away"
+  ],
+  [
+   1369,
+   "offside",
+   "away"
+  ],
+  [
+   1403,
+   "fk",
+   "home"
+  ],
+  [
+   1459,
+   "throw",
+   "home"
+  ],
+  [
+   1477,
+   "throw",
+   "away"
+  ],
+  [
+   1497,
+   "foul",
+   "home"
+  ],
+  [
+   1511,
+   "fk",
+   "away"
+  ],
+  [
+   1586,
+   "corner",
+   "away"
+  ],
+  [
+   1639,
+   "throw",
+   "away"
+  ],
+  [
+   1692,
+   "on",
+   "home"
+  ],
+  [
+   1733,
+   "corner",
+   "home"
+  ],
+  [
+   1831,
+   "throw",
+   "home"
+  ],
+  [
+   1869,
+   "off",
+   "away"
+  ],
+  [
+   1911,
+   "throw",
+   "away"
+  ],
+  [
+   1942,
+   "throw",
+   "home"
+  ],
+  [
+   2009,
+   "throw",
+   "away"
+  ],
+  [
+   2153,
+   "foul",
+   "home"
+  ],
+  [
+   2197,
+   "fk",
+   "away"
+  ],
+  [
+   2220,
+   "corner",
+   "away"
+  ],
+  [
+   2294,
+   "off",
+   "away"
+  ],
+  [
+   2333,
+   "clearance",
+   "home"
+  ],
+  [
+   2347,
+   "off",
+   "away"
+  ],
+  [
+   2382,
+   "clearance",
+   "home"
+  ],
+  [
+   2394,
+   "throw",
+   "away"
+  ],
+  [
+   2620,
+   "throw",
+   "away"
+  ],
+  [
+   2663,
+   "foul",
+   "home"
+  ],
+  [
+   2746,
+   "throw",
+   "home"
+  ],
+  [
+   2749,
+   "foul",
+   "away"
+  ],
+  [
+   2785,
+   "fk",
+   "home"
+  ],
+  [
+   2822,
+   "corner",
+   "home"
+  ],
+  [
+   2913,
+   "throw",
+   "home"
+  ],
+  [
+   2953,
+   "foul",
+   "home"
+  ],
+  [
+   2996,
+   "fk",
+   "away"
+  ],
+  [
+   2998,
+   "on",
+   "away"
+  ],
+  [
+   3028,
+   "corner",
+   "away"
+  ],
+  [
+   3028,
+   "foul",
+   "away"
+  ],
+  [
+   3123,
+   "fk",
+   "home"
+  ],
+  [
+   3148,
+   "throw",
+   "home"
+  ],
+  [
+   3191,
+   "foul",
+   "away"
+  ],
+  [
+   3322,
+   "fk",
+   "home"
+  ],
+  [
+   3322,
+   "on",
+   "home"
+  ],
+  [
+   3347,
+   "corner",
+   "home"
+  ],
+  [
+   3355,
+   "on",
+   "home"
+  ],
+  [
+   3375,
+   "foul",
+   "home"
+  ],
+  [
+   3423,
+   "fk",
+   "away"
+  ],
+  [
+   3423,
+   "on",
+   "away"
+  ],
+  [
+   3446,
+   "corner",
+   "away"
+  ],
+  [
+   3494,
+   "foul",
+   "away"
+  ],
+  [
+   3497,
+   "fk",
+   "home"
+  ],
+  [
+   3695,
+   "throw",
+   "away"
+  ],
+  [
+   3718,
+   "throw",
+   "home"
+  ],
+  [
+   3745,
+   "off",
+   "away"
+  ],
+  [
+   3784,
+   "clearance",
+   "home"
+  ],
+  [
+   3840,
+   "clearance",
+   "away"
+  ],
+  [
+   3866,
+   "clearance",
+   "home"
+  ],
+  [
+   3931,
+   "throw",
+   "away"
+  ],
+  [
+   3951,
+   "foul",
+   "away"
+  ],
+  [
+   3971,
+   "fk",
+   "home"
+  ],
+  [
+   4006,
+   "corner",
+   "home"
+  ],
+  [
+   4010,
+   "off",
+   "home"
+  ],
+  [
+   4037,
+   "clearance",
+   "away"
+  ],
+  [
+   4129,
+   "throw",
+   "away"
+  ],
+  [
+   4207,
+   "throw",
+   "home"
+  ],
+  [
+   4213,
+   "offside",
+   "home"
+  ],
+  [
+   4246,
+   "fk",
+   "away"
+  ],
+  [
+   4314,
+   "off",
+   "home"
+  ],
+  [
+   4352,
+   "clearance",
+   "away"
+  ],
+  [
+   4426,
+   "throw",
+   "home"
+  ],
+  [
+   4439,
+   "foul",
+   "away"
+  ],
+  [
+   4448,
+   "fk",
+   "home"
+  ],
+  [
+   4504,
+   "off",
+   "home"
+  ],
+  [
+   4527,
+   "off",
+   "home"
+  ],
+  [
+   4561,
+   "corner",
+   "home"
+  ],
+  [
+   4591,
+   "off",
+   "away"
+  ],
+  [
+   4655,
+   "clearance",
+   "home"
+  ],
+  [
+   4660,
+   "foul",
+   "home"
+  ],
+  [
+   4680,
+   "fk",
+   "away"
+  ],
+  [
+   4721,
+   "throw",
+   "away"
+  ],
+  [
+   4791,
+   "off",
+   "away"
+  ],
+  [
+   4806,
+   "clearance",
+   "home"
+  ],
+  [
+   4870,
+   "throw",
+   "home"
+  ],
+  [
+   4901,
+   "corner",
+   "home"
+  ],
+  [
+   4905,
+   "off",
+   "home"
+  ],
+  [
+   4938,
+   "clearance",
+   "away"
+  ],
+  [
+   4979,
+   "foul",
+   "home"
+  ],
+  [
+   4995,
+   "fk",
+   "away"
+  ],
+  [
+   5048,
+   "clearance",
+   "home"
+  ],
+  [
+   5083,
+   "throw",
+   "home"
+  ],
+  [
+   5136,
+   "on",
+   "home"
+  ],
+  [
+   5177,
+   "off",
+   "away"
+  ],
+  [
+   5195,
+   "clearance",
+   "home"
+  ],
+  [
+   5217,
+   "off",
+   "home"
+  ],
+  [
+   5259,
+   "clearance",
+   "away"
+  ],
+  [
+   5300,
+   "throw",
+   "home"
+  ],
+  [
+   5345,
+   "foul",
+   "home"
+  ],
+  [
+   5393,
+   "fk",
+   "away"
+  ]
+ ]
+}

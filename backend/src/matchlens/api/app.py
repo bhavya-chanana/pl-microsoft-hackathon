@@ -18,6 +18,7 @@ from matchlens.agents.llm import build_clients
 from matchlens.agents.pipeline import AgentTeam, InsightPipeline
 from matchlens.agents.services import CATCHUP_WINDOWS, FanServices, personalise_feed
 from matchlens.domain.models import EventType
+from matchlens.fi.api import router as fi_router, state as fi_state
 from matchlens.mcp_server.server import mcp
 from matchlens.runtime.manager import manager
 from matchlens.runtime.session import MatchSession, event_payload
@@ -59,6 +60,7 @@ runtime: AgentRuntime | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global runtime
+    fi_state.start()  # sensor-first match data; seeds the demo match in the background
     runtime = AgentRuntime()
     store = await open_store()
     writer = WriteBehind(store)
@@ -89,6 +91,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/mcp", mcp.streamable_http_app())
+app.include_router(fi_router)
 
 
 def _session():

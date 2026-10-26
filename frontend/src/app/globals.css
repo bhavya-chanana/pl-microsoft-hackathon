@@ -200,3 +200,9 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Persona wash: a faint tint of the viewer's persona hue behind every page. */
+html[data-persona] body {
+  background-image: radial-gradient(120% 60% at 50% -10%, color-mix(in oklch, var(--persona) 10%, transparent), transparent 70%);
+  background-attachment: fixed;
+}
