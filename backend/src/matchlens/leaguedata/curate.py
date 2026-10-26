@@ -813,6 +813,7 @@ def curate(cfg: Config, *, version: int | None = None) -> CurateReport:
                                            "splits": dict(sorted(assignment.items()))})
 
         report.share_counts, share_notes = _write_share(work / "share", curated, curated["id_links"])
+        (work / "share").mkdir(parents=True, exist_ok=True)  # exists only when something was redistributable
         (work / "share" / "SHARE_LICENSE.md").write_text(
             SHARE_LICENSE + "\n## Not shared\n\n" + "\n".join(f"* {n}" for n in share_notes) + "\n", encoding="utf-8")
 

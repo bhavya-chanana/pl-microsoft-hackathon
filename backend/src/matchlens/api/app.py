@@ -29,6 +29,9 @@ from matchlens.agents.pundit import MAX_QUESTION
 from matchlens.agents.scenario import MAX_PROMPT, write_storyline
 from matchlens.agents.scenario import roster as scenario_roster
 from matchlens.agents.services import CATCHUP_WINDOWS, FanServices, narration_text, personalise_feed
+from matchlens.api.kb_routes import router as kb_router
+from matchlens.api.tactics_routes import router as tactics_router
+from matchlens.api.tactics_routes import service as tactics_service
 from matchlens.domain.models import EventType, SyntheticMatch
 from matchlens.ingest.adapters import ReplayControl, SyntheticReplayAdapter
 from matchlens.interpret.moments import moment
@@ -81,6 +84,7 @@ runtime: AgentRuntime | None = None
 async def lifespan(app: FastAPI):
     global runtime
     runtime = AgentRuntime()
+    tactics_service.set_clients(runtime.clients)
     store = await open_store()
     writer = WriteBehind(store)
     writer.start()
@@ -98,6 +102,7 @@ async def lifespan(app: FastAPI):
             )
         yield
         await manager.stop()
+        await tactics_service.close()
         await writer.close()  # flush what the match wrote last
         await store.close()
 
@@ -110,6 +115,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/mcp", mcp.streamable_http_app())
+app.include_router(tactics_router)  # /api/tactics/*: the Tactics Board
+app.include_router(kb_router)  # /api/kb/*: live only when MATCHLENS_KB_DIR is set
 
 # Local-only extensions (a package that exists only on never-pushed local branches).
 if importlib.util.find_spec("matchlens.local"):
