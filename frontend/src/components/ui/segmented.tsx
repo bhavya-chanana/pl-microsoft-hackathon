@@ -30,7 +30,7 @@ export function Segmented<T extends string>({
       <div
         role="radiogroup"
         aria-label={label}
-        className={cn("inline-flex w-full max-w-full items-center gap-1 rounded-full bg-raised p-1 ring-1 ring-border", className)}
+        className={cn("inline-flex w-fit max-w-[420px] min-w-[min(100%,18rem)] items-center gap-1 rounded-full bg-raised p-1 ring-1 ring-border", className)}
       >
         {options.map((o) => {
           const active = o.value === value;

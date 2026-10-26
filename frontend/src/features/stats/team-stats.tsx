@@ -16,18 +16,19 @@ const L = copy.stats.labels;
 
 function StatRow({ label, home, away, digits = 0, unit = "" }: { label: string; home: number; away: number; digits?: number; unit?: string }) {
   const total = home + away || 1;
+  const lead = home === away ? null : home > away ? "home" : "away";
+  const value = (side: "home" | "away", n: number) => (
+    <span className={cn("font-display text-2xl tabular-nums", lead === side ? cn("font-semibold", sideTone[side].text) : "font-medium text-muted-foreground")}>
+      {formatNumber(n, digits)}
+      {unit}
+    </span>
+  );
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-baseline justify-between text-sm">
-        <span className="font-display text-lg font-semibold tabular-nums">
-          {formatNumber(home, digits)}
-          {unit}
-        </span>
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <span className="font-display text-lg font-semibold tabular-nums">
-          {formatNumber(away, digits)}
-          {unit}
-        </span>
+    <div className="flex flex-col gap-1.5">
+      <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
+      <div className="flex items-baseline justify-between">
+        {value("home", home)}
+        {value("away", away)}
       </div>
       <div aria-hidden className="flex h-1.5 gap-0.5 overflow-hidden rounded-full">
         <span className="bg-home" style={{ flexGrow: home / total || 0.0001 }} />
@@ -35,6 +36,20 @@ function StatRow({ label, home, away, digits = 0, unit = "" }: { label: string; 
       </div>
     </div>
   );
+}
+
+/** One plain sentence on who is on top, from chances created, shots and possession. */
+function whoIsOnTop(meta: MatchMeta, h: TeamStats, a: TeamStats, possession: { home: number; away: number }): string {
+  const checks: [string, number, number][] = [
+    [copy.stats.labels.xg.toLowerCase(), h.xg, a.xg],
+    [copy.stats.labels.shots.toLowerCase(), h.shots, a.shots],
+    [copy.stats.labels.possession.toLowerCase(), possession.home, possession.away],
+  ];
+  const homeWins = checks.filter(([, x, y]) => x > y);
+  const awayWins = checks.filter(([, x, y]) => y > x);
+  if (homeWins.length === awayWins.length) return copy.stats.evenSummary;
+  const [team, wins] = homeWins.length > awayWins.length ? [meta.home.name, homeWins] : [meta.away.name, awayWins];
+  return copy.stats.onTop(team, wins.map(([name]) => name));
 }
 
 /** Whole-number possession that adds up to 100: rounded on its own, 54.5 and 45.5 would show as 55 and 46. */
@@ -82,6 +97,7 @@ export function TeamComparison() {
         </h3>
         <span className={cn("font-display text-lg font-semibold", sideTone.away.text)}>{meta.away.short_name}</span>
       </div>
+      <p className="text-base font-medium">{whoIsOnTop(meta, h, a, possession)}</p>
       <StatRow label={L.possession} home={possession.home} away={possession.away} unit="%" />
       <StatRow label={L.shots} home={h.shots} away={a.shots} />
       <StatRow label={L.onTarget} home={h.shots_on_target} away={a.shots_on_target} />

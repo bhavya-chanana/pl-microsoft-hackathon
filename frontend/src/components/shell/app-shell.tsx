@@ -46,7 +46,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <TopBar />
       <MatchHeader hero={hero} />
       {/* Mobile has no top bar: search and profile sit in the header's top-right corner. */}
-      <div className="fixed top-1 right-2 z-50 flex items-center gap-1 md:hidden">
+      <div className="fixed top-0 right-2 z-50 flex h-11 items-center gap-1 md:hidden">
         <CommandChip />
         <ProfileMenu />
       </div>
@@ -57,6 +57,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         {children}
       </main>
+      <div aria-hidden className="pointer-events-none fixed inset-x-0 bottom-0 z-40 h-32 bg-gradient-to-t from-background via-background/85 to-transparent md:hidden" />
       <TabBar />
       <CommandPalette />
       <DevDrawer />

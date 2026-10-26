@@ -10,6 +10,10 @@ import { useProfile } from "@/features/profile/profile-store";
 import type { MatchMeta, Pulse, PulsePin, PulseRow } from "@/lib/contract";
 import { copy, signalLabels } from "@/lib/copy";
 import { playerName, sideOf, sideTone, teamName } from "@/lib/match";
+import { Info } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 const VW = 1000;
@@ -193,7 +197,7 @@ export function MatchPulse({ className }: { className?: string }) {
             />
           )}
         </svg>
-        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 text-[13px] text-muted-foreground">
           <span className={sideTone.home.text}>{meta.home.short_name}</span>
           <span className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
             {(["control", "balanced", "chaos"] as const).map((state) => (
@@ -219,7 +223,15 @@ export function MatchPulse({ className }: { className?: string }) {
         </h2>
         {data && <span className="text-xs text-muted-foreground tabular-nums">{data.now.minute_label}</span>}
       </div>
-      <p className="max-w-prose text-xs text-muted-foreground">{copy.pulse.help}</p>
+      <p className="flex items-center gap-1 text-[13px] text-muted-foreground">
+        {copy.pulse.short}
+        <Popover>
+          <PopoverTrigger render={<Button variant="ghost" size="icon-sm" className="size-8 rounded-full" aria-label={copy.pulse.more} />}>
+            <Info aria-hidden className="size-4" />
+          </PopoverTrigger>
+          <PopoverContent className="w-72 text-sm">{copy.pulse.help}</PopoverContent>
+        </Popover>
+      </p>
       {body}
     </section>
   );

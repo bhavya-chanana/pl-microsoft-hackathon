@@ -115,7 +115,7 @@ export function FanPolls() {
         <p className="text-xs text-muted-foreground">{T.anonymous}</p>
       </div>
       {shown.length && runId ? (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="flex flex-col gap-3">
           {shown.map((p) => (
             <PollCard key={p.poll_id} poll={p} runId={runId} language={language} />
           ))}

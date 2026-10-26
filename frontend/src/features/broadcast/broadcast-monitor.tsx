@@ -24,7 +24,7 @@ import { TelestratorLayer } from "./telestrator";
 import { type InstantReplay, REPLAY_FRAME_MS, useInstantReplay } from "./use-instant-replay";
 import { useOverlayDirector } from "./use-overlay-director";
 
-function FeedNotice() {
+export function FeedNotice() {
   const status = useLive((s) => s.status);
   const hasMatch = useLive((s) => s.meta !== null);
   const reconnect = useReconnect();

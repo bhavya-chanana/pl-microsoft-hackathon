@@ -15,7 +15,7 @@ export function TabBar() {
   return (
     <nav
       aria-label="Main"
-      className="glass fixed inset-x-3 bottom-[calc(12px+env(safe-area-inset-bottom))] z-50 h-16 rounded-full p-1.5 md:hidden"
+      className="glass-strong fixed inset-x-3 bottom-[calc(12px+env(safe-area-inset-bottom))] z-50 h-16 rounded-full p-1.5 md:hidden"
     >
       <LayoutGroup id="tabbar">
         <ul className="grid h-full grid-cols-5">
@@ -35,7 +35,7 @@ export function TabBar() {
                     <motion.span
                       layoutId="tab-pill"
                       transition={spring.snappy}
-                      className="absolute inset-0 rounded-full bg-foreground/12 ring-1 ring-foreground/10"
+                      className="absolute inset-0 rounded-full bg-raised ring-1 ring-foreground/10"
                     />
                   )}
                   <Icon aria-hidden className="relative size-[22px]" />

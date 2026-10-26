@@ -13,6 +13,7 @@ import { useFanProfile } from "@/features/profile/profile-store";
 import { CATCHUP_WINDOWS, type CatchupWindow, type FactCheck, type MatchMeta } from "@/lib/contract";
 import { copy } from "@/lib/copy";
 import { playerName } from "@/lib/match";
+import { cn } from "@/lib/utils";
 
 import { FactCheckBadge } from "./fact-check-badge";
 
@@ -74,7 +75,7 @@ function Header({ title, description }: { title: string; description?: string })
 }
 
 /** The primary action: "What did I miss?" for the last 5, 15 or 30 minutes. */
-export function CatchupDialog() {
+export function CatchupDialog({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const [minutes, setMinutes] = useState<CatchupWindow>(15);
   const profile = useFanProfile();
@@ -83,7 +84,7 @@ export function CatchupDialog() {
   const data = query.data;
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="lg" className="h-12 w-full gap-2 text-base" disabled={!meta} />}>
+      <DialogTrigger render={<Button size="lg" className={cn("h-12 w-full gap-2 text-base", className)} disabled={!meta} />}>
         <History aria-hidden className="size-5" />
         {copy.catchup.cta}
       </DialogTrigger>

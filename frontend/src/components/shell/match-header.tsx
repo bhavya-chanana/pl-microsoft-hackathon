@@ -1,11 +1,14 @@
 "use client";
 
-import { motion, useMotionTemplate, useScroll, useTransform } from "motion/react";
+import { AnimatePresence, motion, useMotionTemplate, useReducedMotion, useScroll, useTransform } from "motion/react";
+import { useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLive } from "@/features/live/live-store";
 import type { Team } from "@/lib/contract";
 import { cn } from "@/lib/utils";
+
+import { copy } from "@/lib/copy";
 
 import { ConnectionPill } from "./connection-pill";
 
@@ -29,6 +32,38 @@ function Crest({ team, side, className }: { team: Team; side: "home" | "away"; c
       )}
     >
       {initials(team.short_name || team.name)}
+    </span>
+  );
+}
+
+/** A score digit that rolls up on a goal, with a short pulse of the scorer's colour behind it. */
+function ScoreDigit({ value, side }: { value: number; side: "home" | "away" }) {
+  const reduce = useReducedMotion();
+  const [first] = useState(value);
+  const changed = value !== first;
+  return (
+    <span className="relative inline-grid overflow-hidden px-1">
+      {changed && !reduce && (
+        <motion.span
+          key={`glow-${value}`}
+          aria-hidden
+          className={cn("absolute inset-0 -z-10 rounded-xl blur-md", side === "home" ? "bg-home" : "bg-away")}
+          initial={{ opacity: 0.7 }}
+          animate={{ opacity: 0 }}
+          transition={{ duration: 0.8 }}
+        />
+      )}
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.span
+          key={value}
+          initial={{ y: reduce ? 0 : "100%", opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: reduce ? 0 : "-100%", opacity: 0 }}
+          transition={{ duration: reduce ? 0 : 0.4, ease: [0.16, 1, 0.3, 1] }}
+        >
+          {value}
+        </motion.span>
+      </AnimatePresence>
     </span>
   );
 }
@@ -69,30 +104,33 @@ export function MatchHeader({ hero }: { hero: boolean }) {
       {hero && (
         <motion.div
           style={{ opacity: heroOpacity }}
-          className="pointer-events-none absolute inset-x-0 top-0 mx-auto flex max-w-7xl items-center justify-center px-4 pr-24 md:pr-4 h-[var(--hdr-max)]"
+          className="pointer-events-none absolute inset-x-0 top-0 mx-auto flex h-[var(--hdr-max)] max-w-7xl items-center justify-center px-4 pt-11 md:pt-0"
           aria-label="Match score"
         >
+          <span className="absolute top-0 left-4 flex h-11 items-center font-display text-xl font-bold tracking-tight uppercase md:hidden">
+            {copy.product}
+          </span>
           {meta && home && away && hs !== null && as !== null ? (
             <div className="flex items-center gap-4 md:gap-10">
               <div className="flex flex-col items-center gap-1 md:flex-row md:gap-3">
-                <Crest team={home} side="home" className="size-9 text-sm md:size-14 md:text-xl" />
+                <Crest team={home} side="home" className="size-8 text-xs md:size-14 md:text-xl" />
                 <span className="max-w-24 truncate text-[13px] font-medium text-muted-foreground md:max-w-none md:text-base md:text-foreground">
                   {home.name}
                 </span>
               </div>
               <div className="flex flex-col items-center">
-                <p className="font-display text-[56px] leading-[52px] font-bold tnum md:text-[72px] md:leading-[68px]">
-                  {hs}
-                  <span className="px-2 text-muted-foreground">-</span>
-                  {as}
+                <p className="font-display text-[48px] leading-[46px] font-bold tnum md:text-[72px] md:leading-[68px]">
+                  <ScoreDigit value={hs} side="home" />
+                  <span className="px-1 text-muted-foreground">-</span>
+                  <ScoreDigit value={as} side="away" />
                 </p>
-                <div className="mt-1 flex items-center gap-2">
-                  <span className="font-display text-lg font-semibold tnum">{state?.minute_label}</span>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <span className="font-display text-base font-semibold tnum md:text-lg">{state?.minute_label}</span>
                   <ConnectionPill className="pointer-events-auto" />
                 </div>
               </div>
               <div className="flex flex-col items-center gap-1 md:flex-row-reverse md:gap-3">
-                <Crest team={away} side="away" className="size-9 text-sm md:size-14 md:text-xl" />
+                <Crest team={away} side="away" className="size-8 text-xs md:size-14 md:text-xl" />
                 <span className="max-w-24 truncate text-[13px] font-medium text-muted-foreground md:max-w-none md:text-base md:text-foreground">
                   {away.name}
                 </span>

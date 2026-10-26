@@ -18,7 +18,7 @@ const TAKEOVER_MS = 2_800;
  * Watches for goals that happen while the viewer is watching (not ones already
  * in the match when they joined), shows the takeover, then rolls the replay.
  */
-function useGoalCall(autoReplay: boolean): Signal | null {
+export function useGoalCall(autoReplay: boolean): Signal | null {
   const signals = useLive((s) => s.signals);
   const runId = useLive((s) => s.runId);
   const play = useReplay((s) => s.play);
