@@ -9,7 +9,7 @@ import pytest
 cv2 = pytest.importorskip("cv2")
 pytest.importorskip("scipy")
 
-from matchlens.vision.camera import CameraTracker, FrameLines, fit, project, to_pitch  # noqa: E402
+from matchlens.vision.camera import CameraTracker, FrameLines, fit, plausible, project, to_pitch  # noqa: E402
 from matchlens.vision.lines import distance_map  # noqa: E402
 from matchlens.vision.markings import landmarks, model_points, polylines  # noqa: E402
 from matchlens.vision.views import classify, look  # noqa: E402
@@ -94,6 +94,17 @@ def test_camera_model_looks_at_the_pitch():
     near, _ = project(h, np.array([[52.5, 68.0]]))
     assert near[0, 1] > centre[0, 1]  # the near touchline is lower in the frame
     assert np.allclose(to_pitch(h, centre), [[52.5, 34.0]], atol=1e-6)
+
+
+def test_squashed_or_mirrored_cameras_are_not_plausible():
+    h = camera(pan=5)
+    shape = (SIZE[1], SIZE[0])
+    assert plausible(h, shape)
+    # The whole pitch squashed onto one line of the frame: every marking would sit on that line.
+    assert not plausible(np.c_[h[:, 0], h[:, 0] * 1.01, h[:, 2]], shape)
+    # The pitch flipped end to end, as if filmed from the far side.
+    assert not plausible(h @ np.array([[-1.0, 0, 105], [0, 1, 0], [0, 0, 1]]), shape)
+    assert not plausible(camera(pan=5, focal=40), shape)  # far too wide for the main camera
 
 
 def test_lines_found_where_the_markings_are(ground):
