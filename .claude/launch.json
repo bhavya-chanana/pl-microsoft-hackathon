@@ -33,7 +33,7 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": [
         "-c",
-        "cd backend && uv run --group vision python -m matchlens.vision.label data/local/broadcast/clips/LiverpoolBrighton.mov"
+        "cd backend && uv run --group vision python -m matchlens.vision.label"
       ],
       "port": 8777
     },
