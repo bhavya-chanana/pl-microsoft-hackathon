@@ -4,7 +4,8 @@ The main camera stays in one place and pans, tilts and zooms. That makes the
 change between two of its frames a homography too, for the stands as much as
 the pitch, so a calibration carries from frame to frame:
 
-1. **Anchor.** A frame a person labelled (four or more pitch landmarks) starts it.
+1. **Anchor.** A frame a person labelled (four or more pitch landmarks) starts it,
+   and sets the calibration afresh when the run reaches it.
 2. **Track.** Corners on the pitch are followed into the next frame (pyramidal
    Lucas-Kanade); a RANSAC homography over them, players voted out, moves the
    last calibration on.
@@ -20,8 +21,9 @@ the pitch, so a calibration carries from frame to frame:
 4. **Relocate.** After a cut back to the main camera there is no previous frame.
    Calibrated frames are kept as keyframes (SIFT features over the whole frame,
    since the stands and boards hold still for a panning camera, with their
-   homography); the new frame is matched against them, and the few best matches
-   each give a guess to fit. The best fit wins, if it is as good as a keyframe:
+   homography), and so is every labelled frame from the outset, so a cut to a
+   part of the pitch the run has not reached yet can still be found; the new
+   frame is matched against them, and the few best matches each give a guess to fit. The best fit wins, if it is as good as a keyframe:
    a weak start would be tracked onwards, wrong, until the next cut.
 
 Lines alone can be fooled: squash the whole pitch onto one painted line, or
@@ -322,6 +324,14 @@ class CameraTracker:
         self.keyframes = Keyframes()
         self._last: _Last | None = None
         self._since_attempt = RELOCATE_EVERY
+
+    def seed(self, bgr: np.ndarray, h: np.ndarray) -> None:
+        """Keep a labelled frame as a keyframe before the run starts."""
+        cal = fit(h, FrameLines(bgr), "anchor")
+        if cal is not None and cal.score >= MIN_SCORE:
+            h = cal.homography
+        if plausible(h, bgr.shape):
+            self.keyframes.add(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY), h)
 
     def reset(self) -> None:
         """Forget the previous frame (a cut, or a jump in the clip); keep the keyframes."""

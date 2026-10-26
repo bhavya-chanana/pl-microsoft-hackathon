@@ -5,34 +5,40 @@
 (with no clip, the newest video in ``data/local/broadcast/clips/``)
 
 1. Sorts the frames into main camera and other views (``views.py``).
-2. Starts the calibration from the labelled frame with the most landmarks and carries it through
-   the clip, forwards and then from the start (``camera.py``).
+2. Calibrates the main-camera frames (``camera.py``). Every labelled main-camera frame with four or
+   more landmarks is a starting point: it sets the calibration when the run reaches it, and is a
+   keyframe from the outset, so a cut to its part of the pitch can be found before the run gets
+   there. The run goes from the first of them to the end, then from the start up to it.
 3. Scores both steps against ``labels.json`` (made with ``python -m matchlens.vision.label``):
-   the view filter on every labelled frame, and the calibration on every labelled main-camera frame
-   except the one it started from. Calibration error is where a labelled pixel lands on the pitch
-   against where that landmark really is (metres), and where the landmark is drawn against where
-   it was clicked (pixels). For scale, the same is shown for a camera that never moved from the
-   starting frame.
+   the view filter on every labelled frame, and the calibration on every labelled main-camera
+   frame, each with its own label left out. A starting frame is scored by a run of its own without
+   it, in parallel with the main run; any other labelled frame by the main run, which never used
+   its label. Calibration error is where a labelled pixel lands on the pitch against where that
+   landmark really is (metres), and where the landmark is drawn against where it was clicked
+   (pixels). For scale, the same is shown for a camera that never moved from the most-labelled frame.
 
 An HDR clip is read from its standard-colour copy (``footage.py``), and pixels are that copy's.
 
 Writes ``data/local/broadcast/<clip>/calibration.json`` (each frame's view and its homography from
 pitch metres to clip pixels), and with ``--overlay`` an ``overlay.mp4`` with the pitch drawn on
-every calibrated frame plus a still of each labelled one under ``check/``.
+every calibrated frame plus a still of each labelled one under ``check/`` (drawn with its label
+left out, as scored).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Iterator
+import os
+from collections.abc import Iterable, Iterator
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
 import numpy as np
 
-from .camera import Calibration, CameraTracker, project, scaled, to_pitch
+from .camera import Calibration, CameraTracker, plausible, project, scaled, to_pitch
 from .footage import CLIPS, default_clip, prepare, workdir
 from .markings import landmarks, polylines
 from .views import Views, classify
@@ -88,13 +94,25 @@ def clip_info(clip: Path) -> tuple[tuple[int, int], float]:
         capture.release()
 
 
-def calibrate(clip: Path, views: Views, anchors: dict[int, np.ndarray], factor: float) -> list[Calibration | None]:
-    """Each frame's calibration, in clip pixels. ``anchors`` are clip-pixel homographies by frame."""
+def keep(stream: Iterable[np.ndarray], wanted: set[int], into: dict[int, np.ndarray]) -> Iterator[np.ndarray]:
+    """Pass frames through, keeping the ``wanted`` ones in ``into``."""
+    for i, frame in enumerate(stream):
+        if i in wanted:
+            into[i] = frame
+        yield frame
+
+
+def calibrate(clip: Path, views: Views, anchors: dict[int, np.ndarray], images: dict[int, np.ndarray],
+              factor: float, until: int | None = None) -> list[Calibration | None]:
+    """Each frame's calibration, in clip pixels. ``anchors`` are clip-pixel homographies by frame and
+    ``images`` those frames at the working size. With ``until``, stops once that frame is done."""
     work = {f: scaled(h, factor) for f, h in anchors.items()}
     start = min(work, default=0)
     cut = set(views.cuts)
     out: list[Calibration | None] = [None] * len(views.main)
     tracker = CameraTracker()
+    for f, h in work.items():
+        tracker.seed(images[f], h)
     # From the first anchor to the end, then from the start up to it (the keyframes carry over).
     for lo, hi in ((start, len(out)), (0, start)):
         tracker.reset()
@@ -106,7 +124,21 @@ def calibrate(clip: Path, views: Views, anchors: dict[int, np.ndarray], factor: 
             cal = tracker.step(frame, main=bool(views.main[i]), cut=i in cut, anchor=work.get(i))
             if cal is not None:
                 out[i] = Calibration(scaled(cal.homography, 1 / factor), cal.score, cal.visible, cal.how)
+            if i == until:
+                return out
     return out
+
+
+def _left_out(clip: Path, views: Views, anchors: dict[int, np.ndarray], images: dict[int, np.ndarray],
+              factor: float, frame: int, filtered: bool) -> tuple[int, Calibration | None]:
+    """Calibrate up to ``frame`` without its label, and with the view filter's own call on it."""
+    cv2.setNumThreads(2)
+    main = views.main.copy()
+    main[frame] = filtered
+    rest = {f: h for f, h in anchors.items() if f != frame}
+    if not rest:
+        return frame, None
+    return frame, calibrate(clip, Views(main, views.cuts, []), rest, images, factor, until=frame)[frame]
 
 
 def errors(h: np.ndarray, lab: Labelled) -> tuple[np.ndarray, np.ndarray]:
@@ -123,8 +155,11 @@ def summary(values: list[np.ndarray]) -> str:
     return f"median {np.median(v):.2f}, p90 {np.percentile(v, 90):.2f}, max {v.max():.2f} ({v.size} points)"
 
 
-def report(views: Views, results: list[Calibration | None], labels: list[Labelled], anchor: int | None,
-           anchor_h: np.ndarray | None) -> None:
+def report(views: Views, results: list[Calibration | None], labels: list[Labelled],
+           scored: dict[int, Calibration | None], filtered: np.ndarray, best: int | None,
+           best_h: np.ndarray | None) -> None:
+    """``scored`` holds each labelled frame's calibration with its label left out; ``filtered`` is the
+    view filter's call on every frame, before the labelled ones were made main."""
     n = len(results)
     main = int(views.main.sum())
     done = sum(r is not None for r in results)
@@ -140,35 +175,38 @@ def report(views: Views, results: list[Calibration | None], labels: list[Labelle
         return
 
     seen = [lab for lab in labels if lab.frame < n]
-    tp = sum(views.main[lab.frame] and lab.main for lab in seen)
-    fp = sum(views.main[lab.frame] and not lab.main for lab in seen)
-    fn = sum(not views.main[lab.frame] and lab.main for lab in seen)
+    tp = sum(filtered[lab.frame] and lab.main for lab in seen)
+    fp = sum(filtered[lab.frame] and not lab.main for lab in seen)
+    fn = sum(not filtered[lab.frame] and lab.main for lab in seen)
     tn = len(seen) - tp - fp - fn
     print(f"\nview filter on {len(seen)} labelled frames: {tp} main kept, {tn} other dropped, "
           f"{fn} main dropped, {fp} other kept")
     if tp + fn:
         print(f"  main camera: recall {tp / (tp + fn):.0%}" + (f", precision {tp / (tp + fp):.0%}" if tp + fp else ""))
 
-    held = [lab for lab in seen if lab.main and len(lab.names) and lab.frame != anchor]
+    held = [lab for lab in seen if lab.main and len(lab.names)]
     metres, pixels, base_m, base_px, missing = [], [], [], [], []
     for lab in held:
-        cal = results[lab.frame]
+        cal = scored.get(lab.frame)
         if cal is None:
             missing.append(lab.frame)
         else:
             m, p = errors(cal.homography, lab)
             metres.append(m)
             pixels.append(p)
-        if anchor_h is not None:
-            m, p = errors(anchor_h, lab)
+            print(f"  {lab.frame}: {cal.how}, score {cal.score:.2f}, {np.median(m):.2f} m, {np.median(p):.1f} px")
+        if best_h is not None and lab.frame != best:
+            m, p = errors(best_h, lab)
             base_m.append(m)
             base_px.append(p)
-    print(f"\ncalibration on {len(held)} labelled main-camera frames (frame {anchor} started it, not scored):")
-    print(f"  calibrated {len(held) - len(missing)} of {len(held)}" + (f"; missed {missing}" if missing else ""))
+    dropped = [f for f in missing if not filtered[f]]
+    print(f"\ncalibration on {len(held)} labelled main-camera frames, each with its own label left out:")
+    print(f"  calibrated {len(held) - len(missing)} of {len(held)}" + (f"; missed {missing}" if missing else "")
+          + (f" ({dropped} dropped by the view filter)" if dropped else ""))
     print(f"  metres: {summary(metres)}")
     print(f"  pixels: {summary(pixels)}")
-    print(f"  camera held at the start frame, metres: {summary(base_m)}")
-    print(f"  camera held at the start frame, pixels: {summary(base_px)}")
+    print(f"  camera held at frame {best}, metres: {summary(base_m)}")
+    print(f"  camera held at frame {best}, pixels: {summary(base_px)}")
 
 
 def draw(frame: np.ndarray, cal: Calibration | None, main: bool, index: int) -> np.ndarray:
@@ -188,7 +226,7 @@ def draw(frame: np.ndarray, cal: Calibration | None, main: bool, index: int) -> 
 
 
 def overlay(clip: Path, out: Path, views: Views, results: list[Calibration | None], labels: list[Labelled],
-            size: tuple[int, int], fps: float) -> None:
+            scored: dict[int, Calibration | None], size: tuple[int, int], fps: float) -> None:
     check = out / "check"
     check.mkdir(parents=True, exist_ok=True)
     labelled = {lab.frame: lab for lab in labels}
@@ -200,6 +238,7 @@ def overlay(clip: Path, out: Path, views: Views, results: list[Calibration | Non
             image = draw(frame, results[i], bool(views.main[i]), i)
             writer.write(image)
             if i in labelled:
+                image = draw(frame, scored.get(i, results[i]), bool(views.main[i]), i)
                 for x, y in labelled[i].pixels:
                     cv2.circle(image, (round(x), round(y)), 6, (0, 255, 255), 2)
                 cv2.imwrite(str(check / f"{i}.jpg"), image, [cv2.IMWRITE_JPEG_QUALITY, 90])
@@ -221,25 +260,41 @@ def main() -> None:
         raise SystemExit(f"cannot read {source}")
     factor = WORK_WIDTH / size[0]
 
-    print(f"{clip.name}: {size[0]}x{size[1]} at {fps:g} fps; sorting views ...")
-    views = classify(frames(source, WORK_WIDTH))
-
     labels = read_labels(out / "labels.json")
-    usable = [lab for lab in labels if lab.main and len(lab.names) >= MIN_ANCHOR_POINTS]
-    anchor, anchor_h, anchors = None, None, {}
-    if usable:
-        best = max(usable, key=lambda lab: (len(lab.names), -lab.frame))
-        anchor_h, _ = cv2.findHomography(best.pitch, best.pixels, 0)
-        anchor, anchors = best.frame, {best.frame: anchor_h}
-        if not views.main[anchor]:
-            print(f"note: the view filter dropped start frame {anchor}; calibrating it anyway")
-            views.main[anchor] = True
-        print(f"starting from frame {anchor} ({len(best.names)} landmarks); calibrating ...")
+    # Starting points: four or more landmarks that give a believable camera (not all on one line).
+    anchors: dict[int, np.ndarray] = {}
+    for lab in labels:
+        if lab.main and len(lab.names) >= MIN_ANCHOR_POINTS:
+            h, _ = cv2.findHomography(lab.pitch, lab.pixels, 0)
+            if h is not None and plausible(h, (size[1], size[0])):
+                anchors[lab.frame] = h
+    best = max((lab for lab in labels if lab.frame in anchors), key=lambda lab: (len(lab.names), -lab.frame),
+               default=None)
+
+    print(f"{clip.name}: {size[0]}x{size[1]} at {fps:g} fps; sorting views ...")
+    images: dict[int, np.ndarray] = {}
+    views = classify(keep(frames(source, WORK_WIDTH), set(anchors), images))
+    filtered = views.main.copy()
+    anchors = {f: h for f, h in anchors.items() if f in images}
+    for f in anchors:
+        views.main[f] = True  # a person said so
+
+    results: list[Calibration | None] = [None] * len(views.main)
+    scored: dict[int, Calibration | None] = {}
+    if anchors:
+        print(f"starting points: frames {sorted(anchors)}; calibrating, and again without each of them ...")
+        workers = max(1, min(len(anchors), (os.cpu_count() or 2) // 2))
+        with ProcessPoolExecutor(workers) as pool:
+            pending = [pool.submit(_left_out, source, views, anchors, images, factor, f, bool(filtered[f]))
+                       for f in sorted(anchors)]
+            results = calibrate(source, views, anchors, images, factor)
+            scored = dict(job.result() for job in pending)
     else:
         print("no labelled main-camera frame with 4 or more landmarks: nothing to start the calibration from")
-
-    results = calibrate(source, views, anchors, factor) if anchors else [None] * len(views.main)
-    report(views, results, labels, anchor, anchor_h)
+    scored.update({lab.frame: results[lab.frame] for lab in labels
+                   if lab.frame not in anchors and lab.frame < len(results)})
+    report(views, results, labels, scored, filtered, best.frame if best else None,
+           anchors[best.frame] if best else None)
 
     (out / "calibration.json").write_text(json.dumps({
         "clip": clip.name, "source": source.name, "size": size, "fps": fps, "cuts": views.cuts,
@@ -247,10 +302,12 @@ def main() -> None:
                     **({"homography": r.homography.round(8).tolist(), "score": round(r.score, 3), "how": r.how}
                        if r is not None else {})}
                    for i, r in enumerate(results)],
+        "left_out": {str(f): {"homography": r.homography.round(8).tolist(), "score": round(r.score, 3), "how": r.how}
+                     for f, r in scored.items() if f in anchors and r is not None},
     }))
     print(f"\n-> {out / 'calibration.json'}")
     if args.overlay:
-        overlay(source, out, views, results, labels, size, fps)
+        overlay(source, out, views, results, labels, scored, size, fps)
         print(f"-> {out / 'overlay.mp4'} and {out / 'check'}/")
 
 
