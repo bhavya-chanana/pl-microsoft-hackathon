@@ -12,8 +12,10 @@ context pack differs slightly (a viewer joining mid-match, a faster replay):
 * live insights: task + signal id + revision
 * catch-ups and recaps: task + window or phase + mode + language + fan focus
   + a digest of the score and key moments in the window
-* Tactics Board persona calls: ``tactics|snapshot|persona|prompt hash|language``, and the Gaffer's
-  verdict ``tactics_verdict|snapshot|prompt hash|language`` (the snapshot digest is in the payload).
+* Tactics Board persona calls: ``tactics|snapshot|team|persona|n|horizon|prompt hash|language``, and the
+  Gaffer's verdict ``tactics_verdict|snapshot|team|horizon|risk|prompt hash|language``. The snapshot digest
+  is in the payload and is the same for both sides of one moment, so the coached team is part of the key;
+  horizon and risk are included when the payload has them.
   A repair turn shares its persona's key, so the final (repaired) answer is the one stored.
 
 A miss goes to the wrapped client when it is online (and is stored while
@@ -71,12 +73,19 @@ def request_key(payload: dict[str, Any], *, focus: bool = True) -> str | None:
     task = payload.get("task")
     if task in ("tactics", "tactics_verdict"):
         digest = payload.get("snapshot_digest")
-        if not digest:
+        team = (payload.get("coaching") or {}).get("team_id")
+        if not digest or not team:
             return None
-        persona = payload.get("persona")
-        persona = persona.get("name") if isinstance(persona, dict) else persona
-        parts = [task, digest] + ([persona] if task == "tactics" else [])
-        return "|".join(str(p) for p in (*parts, prompt_hash(payload.get("prompt")), payload.get("language")))
+        tail = [prompt_hash(payload.get("prompt")), payload.get("language")]
+        horizon = payload.get("horizon_s")
+        horizon = f"h{horizon:g}" if isinstance(horizon, (int, float)) else ""
+        if task == "tactics":
+            persona = payload.get("persona")
+            persona = persona.get("name") if isinstance(persona, dict) else persona
+            head = [task, digest, team, persona, f"n{payload.get('n', '')}", horizon]
+        else:
+            head = [task, digest, team, horizon, payload.get("risk") or ""]
+        return "|".join(str(p) for p in (*head, *tail))
     context = payload.get("context") or {}
     signal = context.get("signal")
     if signal:

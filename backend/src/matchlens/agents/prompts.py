@@ -141,6 +141,7 @@ Return exactly the number of tactics asked for in "n", each with a different "me
 Every tactic is a TacticIntent the simulator plays literally:
 - team_id is the coached team. "title" max 60 characters, "idea" one or two sentences (max 280) for the card,
   in the language given by "language". Everything else (ids, zones, enums) stays in English exactly as listed.
+  Do not put numbers in the title or idea other than a shirt number or a minute; no invented statistics.
 - directives (at most 6): concrete players by player_id from the coached team, an action, a zone from
   "allowed.zones" where the action needs one, and a time window start_s < end_s inside the horizon ("horizon_s").
   Give each player one job at a time. pin_defender, press_player and man_mark need target_player_id, an
@@ -163,7 +164,8 @@ You are the Gaffer, the head coach's trusted voice. The coaching staff paused th
 for the next few seconds. The simulator already played each one many times; you explain the result.
 The user message is JSON: "moment", the coach's "prompt" (may be null), "baseline" (do-nothing outcome),
 "ranked" (the tactics best first, each with its title, idea, mechanism, persona, "outcome" statistics,
-"lift" against the baseline, "utility" and "confidence") and "allowed_metrics".
+"lift" against the baseline, "utility" and "confidence"), "allowed_metrics" and "names" (the players and teams
+you may mention).
 Write, in the language given by "language":
 - headline: max 80 characters, the call ("Overload the left and switch").
 - text: three to five sentences. Say which tactic to try and why, using the outcome statistics; name the
@@ -171,8 +173,11 @@ Write, in the language given by "language":
   lower-ranked but safer idea is also worth a look). Mention players and mechanisms by name where it helps.
 - recommended_tactic_id: the tactic_id of your pick, normally rank 1; null when nothing clearly beats the baseline.
 - cited_metrics: the metric keys from "allowed_metrics" that your text relies on.
-Numbers: use ONLY numbers that appear in the JSON, copied exactly (probabilities may be written as percentages).
-Never compute new statistics, never invent players, injuries, tactics or history. State uncertainty plainly:
+Numbers: use ONLY numbers that appear in the JSON, copied exactly. Write a probability as a whole-number percentage
+(0.42 as 42%) or with one decimal, and mean_xg and xt_delta with two decimals. Quote an interval bound only for a
+metric you list in cited_metrics. Write numbers as digits; do not spell out counts above two.
+Never compute new statistics. Name only players and teams from "names"; never invent players, injuries, tactics
+or history. State uncertainty plainly:
 the simulator is a model, not a prediction. No hype words, no betting advice.
 """
 
@@ -186,6 +191,8 @@ Rules (mandatory):
   results, even if you think you recognise the match. In blind mode the names are placeholders: write {H} and {A}
   for the clubs, and the exact {P:...} / {M:...} placeholders that appear in the digest for people. Never write a
   real name and never invent a placeholder. Write only the placeholder forms that appear in the digest.
+  Never write any capitalised proper name (club, player, manager, city, stadium, nationality) of your own, even an
+  invented one: the check refuses them. Write "{P:...} scored", never a name.
 - Every claim cites evidence ids. Valid ids: S01.. (shots and goals), E01.. (cards, substitutions, and goals when
   there is no shot table), G1.. (game-state segments, one per score), T1..T6 (the six 15-minute xG bins in order),
   M:<metric> (how this match differed from the team's own pre-match form, as listed in style_delta for that side),

@@ -173,7 +173,7 @@ async def record_board(
     ranked = evaluate.rank(results, baseline, "balanced")
     shown = tactician.select_diverse(ranked, 6)
     gaffer = await tactician.verdict(clients, situation, shown, baseline, language, meta=meta, prompt=prompt,
-                                     snapshot_digest=digest, timeout_s=240.0, errors=errors)
+                                     snapshot_digest=digest, timeout_s=240.0, errors=errors, risk="balanced")
     return {"digest": digest, "tactics": len(ranked), "mechanisms": len({r.intent.mechanism for r in ranked}),
             "verdict": gaffer.headline, "errors": errors}
 

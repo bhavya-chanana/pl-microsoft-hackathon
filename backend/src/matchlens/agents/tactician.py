@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 import time
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
@@ -43,7 +44,6 @@ from matchlens.agents.llm import ModelClients
 from matchlens.agents.pipeline import call_agent
 from matchlens.domain.models import MatchMeta
 from matchlens.domain.pitch import distance, to_relative
-from matchlens.factcheck.verify import numbers_in
 from matchlens.simulator.style import SimStyle
 from matchlens.tactics import playbook
 from matchlens.tactics.intent import ZONES, Action, BallAction, Mechanism, PressTrigger, TacticIntent
@@ -318,6 +318,55 @@ def _recipes(situation: Situation, meta: MatchMeta, horizon_s: float) -> list[Ta
 OnTactic = Callable[[str, TacticIntent], Awaitable[None]]
 
 
+_NUMBER = re.compile(r"(?<![\w.])(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?)")
+_GROUPED = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?")
+
+
+def numbers_of(text: str) -> list[float]:
+    """Numbers written in text. Thousands separators count ("1,200" is 1200); a decimal comma is a decimal."""
+    return [float(raw.replace(",", "")) if _GROUPED.fullmatch(raw) else float(raw.replace(",", "."))
+            for raw in _NUMBER.findall(text)]
+
+
+def _all_numbers(value: Any) -> set[float]:
+    """Every number inside a nested structure of dicts, lists, strings and numbers."""
+    if isinstance(value, bool) or value is None:
+        return set()
+    if isinstance(value, (int, float)):
+        return {float(value)}
+    if isinstance(value, str):
+        return set(numbers_of(value))
+    if isinstance(value, dict):
+        return set().union(*(_all_numbers(v) for v in value.values())) if value else set()
+    if isinstance(value, (list, tuple, set)):
+        return set().union(*(_all_numbers(v) for v in value)) if value else set()
+    return set()
+
+
+def text_number_allowance(meta: MatchMeta, situation: Situation, horizon_s: float,
+                          baseline: OutcomeStats | None) -> set[float]:
+    """Numbers a tactic's title and idea may mention: shirt numbers, the minute, the horizon and the
+    baseline statistics as they would be written. Anything else would be an invented statistic."""
+    allowed = {float(meta.players[p.player_id].shirt) for p in situation.players if p.player_id in meta.players}
+    allowed |= {float(n) for n in numbers_of(situation.minute_label)} | {float(horizon_s)}
+    allowed |= {float(v) for v in situation.score.values()}
+    if baseline is not None:
+        allowed |= _stat_forms(baseline.model_dump(), set(OUTCOME_METRICS))
+    return allowed
+
+
+def text_number_problems(intent: TacticIntent, allowed: set[float]) -> list[str]:
+    """Digits in the title or idea that are not a shirt number, a minute or a statistic we supplied."""
+    own = {float(d.start_s) for d in intent.directives} | {float(d.end_s) for d in intent.directives}
+    own |= {float(intent.rest_defence), float(len(intent.directives))}
+    stray = sorted({v for v in numbers_of(f"{intent.title} {intent.idea}")
+                    if not any(abs(v - a) < 1e-6 for a in allowed | own)})
+    if not stray:
+        return []
+    return ["title/idea: numbers " + ", ".join(f"{v:g}" for v in stray) + " are not shirt numbers, minutes or "
+            "supplied statistics; remove them (describe the idea in words)"]
+
+
 def _screen(
     meta: MatchMeta,
     situation: Situation,
@@ -325,6 +374,7 @@ def _screen(
     horizon_s: float,
     allowed_keys: set[str],
     held: set[Mechanism],
+    text_numbers: set[float] | None = None,
 ) -> tuple[list[TacticIntent], list[tuple[TacticIntent, list[str]]]]:
     """Split a draft into valid intents and (intent, problems) pairs. ``held`` are mechanisms the
     persona already has, so the second tactic must differ from the first."""
@@ -338,6 +388,8 @@ def _screen(
         problems = check_intent(meta, situation, intent, horizon_s, allowed_keys)
         if intent.team_id != team:
             problems.insert(0, f"team_id must be the coached team {team}, not {intent.team_id}")
+        if text_numbers is not None:
+            problems.extend(text_number_problems(intent, text_numbers))
         if intent.mechanism in used:
             problems.append(f"mechanism {intent.mechanism.value} is already used by your other tactic; "
                             "give each tactic a different mechanism")
@@ -383,6 +435,7 @@ async def ideate(
     on_board = [{"title": r.title, "mechanism": r.mechanism.value} for r in recipes]
     keys = context_keys(situation, provider_context, baseline)
     allowed = set(keys) | set(getattr(playbook, "PLAYBOOK_KEYS", ()))
+    text_numbers = text_number_allowance(meta, situation, horizon_s, baseline)
     offline = not clients.settings.online
     digest = snapshot_digest or situation_digest(situation)
     landed: list[tuple[str, TacticIntent]] = []
@@ -425,7 +478,7 @@ async def ideate(
         if draft is None:
             errors.append(err or f"{persona}: no answer")
             return 0
-        good, bad = _screen(meta, situation, draft.tactics, horizon_s, allowed, set())
+        good, bad = _screen(meta, situation, draft.tactics, horizon_s, allowed, set(), text_numbers)
         count = 0
         for intent in good:  # count what the persona got right, even when another persona already landed it
             await land(persona, intent)
@@ -439,7 +492,7 @@ async def ideate(
                 errors.append(err2 or f"{persona}: no answer to the repair turn")
             else:
                 held = {i.mechanism for i in good}
-                good2, bad = _screen(meta, situation, draft2.tactics, horizon_s, allowed, held)
+                good2, bad = _screen(meta, situation, draft2.tactics, horizon_s, allowed, held, text_numbers)
                 for intent in good2:
                     if count < PER_PERSONA:
                         await land(persona, intent)
@@ -534,56 +587,154 @@ def _row(r: TacticResult) -> dict[str, Any]:
 def verdict_payload(
     situation: Situation, ranked: list[TacticResult], baseline: OutcomeStats | None, language: str, *,
     meta: MatchMeta | None = None, prompt: str | None = None, snapshot_digest: str | None = None, top: int = 6,
+    risk: str | None = None,
 ) -> dict[str, Any]:
-    names = {t: meta.team(t).name for t in situation.score} if meta else dict(situation.score)
+    names = {t: meta.team(t).name if meta else t for t in situation.score}
     scored = [r for r in ranked if r.outcome is not None][:top]
     return {
         "task": "tactics_verdict",
         "language": language,
         "snapshot_digest": snapshot_digest or situation_digest(situation),
         "prompt": (prompt or "").strip()[:400] or None,
+        "coaching": {"team_id": situation.coaching_team_id, "name": names.get(situation.coaching_team_id)},
+        "horizon_s": baseline.horizon_s if baseline is not None else None,
+        "risk": risk,
         "moment": {"minute": situation.minute_label, "phase": situation.phase, "ball_zone": situation.ball_zone,
                    "score": {names.get(t, t): g for t, g in situation.score.items()},
                    "coaching_team_id": situation.coaching_team_id},
         "baseline": baseline.model_dump() if baseline is not None else None,
         "ranked": [_row(r) for r in scored],
         "allowed_metrics": sorted(set(OUTCOME_METRICS) | {m for r in scored for m in r.lift}),
+        "names": sorted({p.name for p in situation.players} | set(names.values())
+                        | {t for t in situation.score}),
     }
 
 
-def _allowed_numbers(payload: dict[str, Any]) -> set[float]:
-    """Every way the supplied statistics may be written: as given, as a percentage, rounded."""
-    rows = payload.get("ranked") or []
-    values = numbers_in(payload.get("baseline")) | numbers_in([r.get("outcome") for r in rows])
-    values |= numbers_in([r.get("lift") for r in rows]) | numbers_in([r.get("utility") for r in rows])
-    out: set[float] = set()
-    for v in values:
-        for scale in (1.0, 100.0):
-            x = v * scale
-            for k in range(4):
-                out.add(round(x, k))
-            out.update((float(int(x // 1)), float(int(x // 1) + 1)))
-    out |= {float(i) for i in range(0, len(rows) + 2)}  # "the top 3", "rank 2"
-    out |= numbers_in([r.get("title") for r in rows]) | numbers_in(payload.get("moment"))
-    out.add(float(payload.get("horizon_s") or 10))
+# ----------------------------------------------------------- verdict fact-check
+
+_COUNT_WORDS = (
+    "three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen "
+    "nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred thousand million dozen "
+    "tres cuatro cinco seis siete ocho nueve diez once doce trece catorce quince veinte treinta cuarenta "
+    "cincuenta sesenta setenta ochenta noventa cien ciento mil millon millones docena"
+).split()
+_COUNT_WORD = re.compile(r"\b(" + "|".join(_COUNT_WORDS) + r")\b", re.IGNORECASE)
+_COMMON_WORDS = frozenset((
+    "the this that these those then there here they them their it its he his we our and but so or if while because "
+    "however overall also still both with without given expect keep when where why what who how on in at for by as "
+    "to from after before once since until even only both either neither some any all each every most more less "
+    "el la los las un una y o pero si con sin en por para como cuando donde porque aunque tambien "
+    "try base based confidence confianza probar basado").split())
+_CAPITALISED = re.compile(r"(?<![\w'’-])[A-ZÀ-ÖØ-Þ][\w'’-]*")
+_SENTENCE_END = re.compile(r"(?<=[.!?:;])\s+|\n+")
+
+
+def _forms(v: float, percent: bool) -> set[float]:
+    """How a statistic may be written: a share as 0-100 with 0 or 1 decimals or as a fraction, else 2 decimals."""
+    out = {round(v, 2), round(v, 1), round(v, 0)} if abs(v) >= 1 else {round(v, 2)}
+    if percent:
+        out |= {round(v * 100, 0), round(v * 100, 1)}
     return out
 
 
+def _stat_forms(stats: dict[str, Any], bounds_for: set[str]) -> set[float]:
+    """Allowed written forms of an OutcomeStats dump. Interval bounds only for metrics in ``bounds_for``."""
+    out: set[float] = set()
+    for key, v in stats.items():
+        if isinstance(v, dict) and "value" in v:  # Interval
+            out |= _forms(v["value"], True)
+            if key in bounds_for:
+                out |= _forms(v["low"], True) | _forms(v["high"], True)
+        elif isinstance(v, dict):  # terminals: counts
+            out |= {float(c) for c in v.values()}
+        elif isinstance(v, bool) or v is None:
+            continue
+        elif isinstance(v, (int, float)):
+            out |= {float(v)} if float(v).is_integer() else _forms(float(v), False)
+    return out
+
+
+def _allowed_numbers(payload: dict[str, Any], cited: set[str]) -> set[float]:
+    """Exactly the written forms of the supplied statistics: a share as value*100 (0 or 1 decimals), a raw
+    value to 2 decimals, counts as given, ranks and the moment's own numbers. Interval bounds are allowed
+    only for metrics the verdict cites."""
+    rows = payload.get("ranked") or []
+    out = _stat_forms(payload.get("baseline") or {}, cited)
+    for r in rows:
+        out |= _stat_forms(r.get("outcome") or {}, cited)
+        for lift in (r.get("lift") or {}).values():
+            out |= _forms(lift, True)
+        if r.get("utility") is not None:
+            out.add(round(r["utility"], 2))
+        out |= _all_numbers(r.get("title"))
+    out |= {float(i) for i in range(1, len(rows) + 1)} | {float(len(rows))}
+    out |= _all_numbers(payload.get("moment"))
+    if payload.get("horizon_s"):
+        out.add(float(payload["horizon_s"]))
+    return out
+
+
+def _vocabulary(payload: dict[str, Any]) -> set[str]:
+    words: set[str] = set()
+    texts = list(payload.get("names") or []) + [str(payload.get("coaching", {}).get("name") or "")]
+    for r in payload.get("ranked") or []:
+        texts += [r.get("title", ""), r.get("idea", ""), str(r.get("mechanism", "")).replace("_", " "),
+                  str(r.get("persona", ""))]
+    texts += [str(k) for k in (payload.get("moment") or {}).get("score", {})]
+    texts += [str(payload.get("moment", {}).get(k, "")) for k in ("phase", "ball_zone", "minute")]
+    for t in texts:
+        words |= {w.lower().strip("'’-") for w in re.findall(r"[\w'’-]+", t)}
+        words |= {w.lower().strip("'’-").removesuffix("'s").removesuffix("’s") for w in re.findall(r"[\w'’-]+", t)}
+    return words
+
+
+def unknown_names(text: str, vocab: set[str]) -> list[str]:
+    """Capitalised, name-like words that the supplied roster, teams and tactic titles do not contain.
+
+    A word that merely starts a sentence is ordinary capitalisation and is only checked when it is part
+    of a multi-word name or a possessive ("Mbappe Jr", "Salah's").
+    """
+    out: list[str] = []
+    for sentence in _SENTENCE_END.split(text):
+        lead = len(sentence) - len(sentence.lstrip(" \t\"'“‘(¿¡[-"))
+        tokens = list(_CAPITALISED.finditer(sentence))
+        for n, m in enumerate(tokens):
+            word = m.group(0)
+            base = word.lower().removesuffix("'s").removesuffix("’s").strip("'’-")
+            if len(base) < 2 or word.isupper() or base in vocab or base in _COMMON_WORDS:
+                continue
+            if m.start() <= lead:  # starts the sentence
+                nxt = tokens[n + 1] if n + 1 < len(tokens) else None
+                chained = nxt is not None and sentence[m.end():nxt.start()].strip() == ""
+                if not chained and not word.lower().endswith(("'s", "’s")):
+                    continue
+            out.append(word)
+    return sorted(set(out))
+
+
 def check_verdict(draft: VerdictDraft, payload: dict[str, Any]) -> list[str]:
-    """Problems with a verdict: an unknown tactic or metric, or any number the statistics do not contain."""
+    """Problems with a verdict: an unknown tactic or metric, a number the statistics do not contain (as
+    digits or as a spelled-out count above two), or a name that is not in the roster or tactic titles."""
     problems: list[str] = []
     ids = {r["tactic_id"] for r in payload.get("ranked") or []}
     if draft.recommended_tactic_id is not None and draft.recommended_tactic_id not in ids:
         problems.append(f"recommended_tactic_id {draft.recommended_tactic_id} is not one of the ranked tactics")
     allowed_metrics = set(payload.get("allowed_metrics") or [])
+    cited = {m.split(".")[0] for m in draft.cited_metrics}
     unknown = [m for m in draft.cited_metrics if m.split(".")[0] not in allowed_metrics]
     if unknown:
         problems.append(f"cited_metrics not in the statistics: {', '.join(unknown)}")
-    allowed = _allowed_numbers(payload)
-    stray = sorted(v for v in numbers_in(f"{draft.headline} {draft.text}")
-                   if not any(abs(v - a) < 1e-6 for a in allowed))
+    text = f"{draft.headline}\n{draft.text}"
+    allowed = _allowed_numbers(payload, cited)
+    stray = sorted({v for v in numbers_of(text) if not any(abs(v - a) < 1e-6 for a in allowed)})
     if stray:
         problems.append("numbers that are not in the statistics: " + ", ".join(f"{v:g}" for v in stray))
+    words = sorted({m.group(0).lower() for m in _COUNT_WORD.finditer(text)})
+    if words:
+        problems.append("spelled-out counts are not allowed (write the supplied figure): " + ", ".join(words))
+    names = unknown_names(text, _vocabulary(payload))
+    if names:
+        problems.append("names that are not in the roster, teams or tactic titles: " + ", ".join(names))
     return problems
 
 
@@ -653,6 +804,7 @@ async def verdict(
     snapshot_digest: str | None = None,
     timeout_s: float = VERDICT_TIMEOUT_S,
     errors: list[str] | None = None,
+    risk: str | None = None,
 ) -> Verdict:
     """The Gaffer's verdict on the ranked, simulated tactics.
 
@@ -661,7 +813,7 @@ async def verdict(
     ``errors`` collects why, when given.
     """
     payload = verdict_payload(situation, ranked, baseline, language, meta=meta, prompt=prompt,
-                              snapshot_digest=snapshot_digest)
+                              snapshot_digest=snapshot_digest, risk=risk)
 
     def fallback(reason: str) -> Verdict:
         log.warning("gaffer's verdict: %s", reason)

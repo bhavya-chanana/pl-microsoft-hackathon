@@ -16,9 +16,12 @@ Configuration (environment or backend/.env):
     MATCHLENS_REASONING_FAST     reasoning effort for live agents (default low)
     MATCHLENS_REASONING_STRONG   reasoning effort for recaps (default high)
     MATCHLENS_REASONING_CREATIVE reasoning effort for persona calls (default medium)
-    MATCHLENS_CREATIVE_TEMPERATURE  sampling temperature for persona calls (default 0.9), sent ONLY to
-                                 non-reasoning deployments: gpt-5 and o-series deployments reject
-                                 ``temperature``, so there diversity comes from structure (personas,
+    MATCHLENS_MODEL_CREATIVE_REASONING  1|0: whether the creative deployment is a reasoning model. Azure
+                                 deployment names are arbitrary, so set this when the name is not gpt-5.../o3...
+    MATCHLENS_CREATIVE_TEMPERATURE  sampling temperature for persona calls (default 0.9), sent ONLY when the
+                                 deployment is known to be a chat model (gpt-3/gpt-4 name, or the override set
+                                 to 0). gpt-5 / o-series deployments reject ``temperature`` and an unknown
+                                 name never gets one; diversity then comes from structure (personas,
                                  claimed mechanisms, MMR selection; see agents/tactician.py)
     MATCHLENS_LLM                "auto" (default: online when an endpoint is set), "online" or "offline"
     MATCHLENS_CASSETTE           recorded demo match to replay agent answers from (see cassette.py)
@@ -44,11 +47,32 @@ log = logging.getLogger(__name__)
 
 
 _REASONING_FAMILY = re.compile(r"^(gpt-5|o\d)", re.IGNORECASE)
+_CHAT_FAMILY = re.compile(r"^gpt-(3|4)", re.IGNORECASE)
 
 
 def is_reasoning_model(deployment: str) -> bool:
     """gpt-5 and o-series deployments take a reasoning effort and reject ``temperature``."""
     return bool(_REASONING_FAMILY.match(deployment.strip()))
+
+
+def reasoning_family(deployment: str, override: bool | None = None) -> bool | None:
+    """True for a reasoning deployment, False for a chat one, None when the name says nothing.
+
+    Azure deployment names are arbitrary, so ``MATCHLENS_MODEL_CREATIVE_REASONING=1|0`` (``override``) wins;
+    otherwise the name decides (gpt-5 / o-series reasoning, gpt-3 / gpt-4 chat) and any other name is unknown.
+    """
+    if override is not None:
+        return override
+    name = deployment.strip()
+    if _REASONING_FAMILY.match(name):
+        return True
+    return False if _CHAT_FAMILY.match(name) else None
+
+
+def _flag(value: str | None) -> bool | None:
+    if value is None or not value.strip():
+        return None
+    return value.strip().lower() in ("1", "true", "yes", "on")
 
 
 @dataclass(frozen=True)
@@ -63,6 +87,7 @@ class LlmSettings:
     creative_model: str = ""  # "" means the strong model
     creative_reasoning: str = "medium"
     creative_temperature: float = 0.9
+    creative_is_reasoning: bool | None = None  # MATCHLENS_MODEL_CREATIVE_REASONING; None: decide by name
 
     @property
     def creative_deployment(self) -> str:
@@ -93,6 +118,7 @@ class LlmSettings:
             creative_model=os.getenv("MATCHLENS_MODEL_CREATIVE", ""),
             creative_reasoning=os.getenv("MATCHLENS_REASONING_CREATIVE", "medium"),
             creative_temperature=float(os.getenv("MATCHLENS_CREATIVE_TEMPERATURE", "0.9")),
+            creative_is_reasoning=_flag(os.getenv("MATCHLENS_MODEL_CREATIVE_REASONING")),
         )
 
 
@@ -163,16 +189,18 @@ class ModelClients:
         return {"reasoning": {"effort": effort}}
 
     def creative_options(self) -> dict[str, Any]:
-        """Run options for persona calls: reasoning effort on gpt-5 / o-series, temperature elsewhere.
+        """Run options for persona calls.
 
-        Reasoning deployments reject ``temperature``, so it is only ever sent to other deployments.
+        Temperature goes only to a deployment known to be a chat model (never to a reasoning one, and never
+        when the name is unknown and no override says so); everything else gets a reasoning effort, as
+        the fast and strong tiers do.
         """
         s = self.settings
         if not s.online:
             return {}
-        if is_reasoning_model(s.creative_deployment):
-            return {"reasoning": {"effort": s.creative_reasoning}}
-        return {"temperature": s.creative_temperature}
+        if reasoning_family(s.creative_deployment, s.creative_is_reasoning) is False:
+            return {"temperature": s.creative_temperature}
+        return {"reasoning": {"effort": s.creative_reasoning}}
 
 
 def build_clients(settings: LlmSettings | None = None) -> ModelClients:

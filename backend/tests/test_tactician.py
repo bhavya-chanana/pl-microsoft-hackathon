@@ -13,13 +13,17 @@ import pytest
 
 from matchlens.agents import tactician, templates
 from matchlens.agents.cassette import Cassette, CassetteChatClient, request_key
-from matchlens.agents.llm import LlmSettings, ModelClients, OfflineChatClient, build_clients, is_reasoning_model
+from matchlens.agents.llm import LlmSettings, ModelClients, OfflineChatClient, build_clients, is_reasoning_model, reasoning_family
 from matchlens.agents.tactician import (
     PERSONAS,
     TacticDraftSet,
     VerdictDraft,
     build_payload,
     check_verdict,
+    numbers_of,
+    text_number_allowance,
+    text_number_problems,
+    unknown_names,
     context_keys,
     ideate,
     offline_verdict,
@@ -396,11 +400,21 @@ def test_cassette_key_format(meta, situation):
     ctx = {}
     payload = build_payload(situation, ctx, None, prompt, "gegenpress", language="hi", meta=meta,
                             snapshot_digest="snap42")
-    assert request_key(payload) == f"tactics|snap42|gegenpress|{digest}|hi"
+    team = situation.coaching_team_id
+    assert request_key(payload) == f"tactics|snap42|{team}|gegenpress|n2|h10|{digest}|hi"
     v = verdict_payload(situation, [], None, "es", prompt=prompt, snapshot_digest="snap42")
-    assert request_key(v) == f"tactics_verdict|snap42|{digest}|es"
+    assert request_key(v) == f"tactics_verdict|snap42|{team}|||{digest}|es"
+    v2 = verdict_payload(situation, [], outcome(), "es", prompt=prompt, snapshot_digest="snap42", risk="bold")
+    assert request_key(v2) == f"tactics_verdict|snap42|{team}|h10|bold|{digest}|es"
+    # Both sides of one moment share a snapshot digest, so the coached team must be in the key.
+    other = meta.opponent(team).team_id
+    flipped = dict(payload, coaching={"team_id": other, "name": "x"})
+    assert request_key(flipped) != request_key(payload) and other in request_key(flipped)
+    assert request_key(dict(payload, n=3)) != request_key(payload)
+    assert request_key(dict(payload, horizon_s=6.0)) != request_key(payload)
+    assert request_key({k: v for k, v in payload.items() if k != "coaching"}) is None
     no_prompt = build_payload(situation, ctx, None, None, "direct", meta=meta, snapshot_digest="s")
-    assert request_key(no_prompt) == f"tactics|s|direct|{hashlib.sha1(b'').hexdigest()[:10]}|en"
+    assert request_key(no_prompt) == f"tactics|s|{team}|direct|n2|h10|{hashlib.sha1(b'').hexdigest()[:10]}|en"
 
 
 def test_record_then_replay_a_board_without_a_model(meta, situation):
@@ -411,8 +425,9 @@ def test_record_then_replay_a_board_without_a_model(meta, situation):
     v1 = run(verdict(offline_clients(recorder), situation, ranked, base, "en", meta=meta, prompt="p",
                      snapshot_digest="d1"))
     keys = set(cassette.entries)
-    assert {f"tactics|d1|{p}|{hashlib.sha1(b'p').hexdigest()[:10]}|en" for p in PERSONAS} <= keys
-    assert any(k.startswith("tactics_verdict|d1|") for k in keys)
+    team = situation.coaching_team_id
+    assert {f"tactics|d1|{team}|{p}|n2|h10|{hashlib.sha1(b'p').hexdigest()[:10]}|en" for p in PERSONAS} <= keys
+    assert any(k.startswith(f"tactics_verdict|d1|{team}|") for k in keys)
 
     replay = CassetteChatClient(OfflineChatClient(), cassette, live_misses=False)
     again, errors = run(ideate(offline_clients(replay), situation, {}, meta=meta, prompt="p", snapshot_digest="d1"))
@@ -438,6 +453,32 @@ def settings(creative: str, **kw) -> LlmSettings:
 ])
 def test_reasoning_family_detection(deployment, reasoning):
     assert is_reasoning_model(deployment) is reasoning
+
+
+def test_override_decides_when_the_deployment_name_says_nothing():
+    dummy = OfflineChatClient()
+
+    def opts(name, flag):
+        return ModelClients(fast=dummy, strong=dummy, settings=settings(name, creative_is_reasoning=flag)
+                            ).creative_options()
+
+    # A gpt-5 deployment called "creative" must never get a temperature (the API would answer 400).
+    assert opts("creative", None) == {"reasoning": {"effort": "medium"}}
+    assert opts("creative", True) == {"reasoning": {"effort": "medium"}}
+    assert opts("creative", False) == {"temperature": 0.9}
+    assert opts("gpt-5-mini", False) == {"temperature": 0.9}, "an explicit override wins over the name"
+    assert opts("gpt-4.1", True) == {"reasoning": {"effort": "medium"}}
+    assert reasoning_family("creative") is None and reasoning_family("gpt-4o") is False
+
+
+def test_override_is_read_from_the_environment(monkeypatch):
+    monkeypatch.setenv("MATCHLENS_LLM", "offline")
+    monkeypatch.setenv("MATCHLENS_MODEL_CREATIVE_REASONING", "0")
+    assert LlmSettings.from_env().creative_is_reasoning is False
+    monkeypatch.setenv("MATCHLENS_MODEL_CREATIVE_REASONING", "1")
+    assert LlmSettings.from_env().creative_is_reasoning is True
+    monkeypatch.delenv("MATCHLENS_MODEL_CREATIVE_REASONING")
+    assert LlmSettings.from_env().creative_is_reasoning is None
 
 
 def test_temperature_is_never_sent_to_reasoning_deployments():
@@ -507,3 +548,97 @@ def test_context_keys_name_rows_of_kb_lists(situation):
     keys = context_keys(situation, {"NBR": {"patterns_for": [{"tag": "low_block", "share_pct": 20}],
                                             "key_players": [{"player_id": "NBR-9", "name": "A B"}]}}, None)
     assert "NBR.patterns_for:low_block" in keys and "NBR.key_players:NBR-9" in keys
+
+
+# ----------------------------------------------------- stricter fact-checking
+
+
+def _verdict_text(meta, situation, text, cited=("p_shot", "mean_xg"), headline="Overload the left"):
+    ranked, base = ranked_pair(situation.coaching_team_id)
+    payload = verdict_payload(situation, ranked, base, "en", meta=meta)
+    draft = VerdictDraft(headline=headline, text=text, recommended_tactic_id=ranked[0].tactic_id,
+                         cited_metrics=list(cited))
+    return check_verdict(draft, payload)
+
+
+GOOD = ("Overload the left lifts shot chance to 42% from 30% and expected goals to 0.17 from 0.11. "
+        "Conceding a shot stays at 15%.")
+
+
+def test_grounded_text_passes_the_strict_check(meta, situation):
+    assert _verdict_text(meta, situation, GOOD) == []
+
+
+@pytest.mark.parametrize("text", [
+    "Overload the left lifts shot chance to 57% from 30%.",           # not a statistic we supplied
+    "Overload the left lifts shot chance to 43% from 30%.",           # near miss: no more +-1 tolerance
+    "Overload the left gives 0.171 expected goals.",                  # 3 decimals is not a rendered form
+    "Overload the left lifts shot chance to 42% in 14 simulations.",  # 14 is neither 24 nor a rank
+    "Overload the left makes 1,200 shots from 30%.",                  # thousands separator is 1200, not 1.2
+])
+def test_loose_numbers_are_rejected(meta, situation, text):
+    problems = _verdict_text(meta, situation, text)
+    assert problems and "numbers" in problems[0], problems
+
+
+def test_interval_bounds_only_when_the_metric_is_cited(meta, situation):
+    text = "Overload the left lifts shot chance to 42%, somewhere between 32% and 52%."
+    assert any("numbers" in p for p in _verdict_text(meta, situation, text, cited=("mean_xg",)))
+    assert _verdict_text(meta, situation, text, cited=("p_shot",)) == []
+
+
+def test_percent_forms_and_fractions_are_both_fine(meta, situation):
+    assert _verdict_text(meta, situation, "Shot chance 0.42 against 0.3, or 42.0% against 30.0%.") == []
+
+
+def test_spelled_out_counts_above_two_are_rejected(meta, situation):
+    assert any("spelled-out" in p for p in _verdict_text(meta, situation, GOOD + " Thirty more shots follow."))
+    assert any("spelled-out" in p for p in _verdict_text(meta, situation, GOOD + " Expect three chances."))
+    assert _verdict_text(meta, situation, GOOD + " One run and two passes.") == []
+
+
+def test_invented_names_are_rejected(meta, situation):
+    problems = _verdict_text(meta, situation, GOOD + " The run of Zinedine Zidane stretches them.")
+    assert any("Zidane" in p for p in problems)
+    pid = next(p for p in situation.players if p.team_id == situation.coaching_team_id)
+    assert _verdict_text(meta, situation, GOOD + f" The run of {pid.name} stretches them.") == []
+    # Tactic titles and team names are fine; a sentence-initial common word is not a name.
+    assert _verdict_text(meta, situation, GOOD + f" Third-man run is the safer option for {meta.home.name}.") == []
+    assert _verdict_text(meta, situation, GOOD + " Mbappe's pace is the reason.")
+
+
+def test_unknown_names_helper():
+    vocab = {"salah", "liverpool"}
+    assert unknown_names("Salah drifts inside. Overload follows. Liverpool press.", vocab) == []  # sentence starts
+    assert unknown_names("The cross finds Haaland.", vocab) == ["Haaland"]
+    assert unknown_names("Erling Haaland arrives.", vocab) == ["Erling", "Haaland"]
+    assert unknown_names("Then Haaland arrives.", vocab) == ["Haaland"]
+    assert unknown_names("Haaland's run.", vocab) == ["Haaland's"]
+    assert numbers_of("1,200 and 0,17 and 42%") == [1200.0, 0.17, 42.0]
+
+
+def test_ideate_rejects_invented_numbers_in_title_and_idea(meta, situation):
+    asked: list[dict] = []
+
+    def stat_stuffing(draft, payload):
+        asked.append(payload)
+        if payload["persona"]["name"] == "positional" and "problems" not in payload:
+            bad = draft.tactics[0].model_copy(update={"idea": "Overload that scores 83% of the time."})
+            return TacticDraftSet(tactics=[bad, draft.tactics[1]])
+        return draft
+
+    results, errors = run(ideate(offline_clients(ScriptedClient(tamper={"tactics": stat_stuffing})), situation, {},
+                                 meta=meta))
+    repair = next(p for p in asked if "problems" in p)
+    assert any("83" in prob for prob in repair["problems"])
+    assert all("83%" not in i.idea for _, i in results)
+
+
+def test_title_numbers_allow_shirts_minutes_and_baseline_only(meta, situation):
+    team = situation.coaching_team_id
+    pid = next(p.player_id for p in situation.players if p.team_id == team)
+    shirt = meta.players[pid].shirt
+    allowed = text_number_allowance(meta, situation, 10.0, outcome())
+    ok = blank(team, title=f"No. {shirt} drops", idea=f"After the {situation.minute_label[:-1]}th minute, 30% baseline.")
+    assert text_number_problems(ok, allowed) == []
+    assert text_number_problems(blank(team, idea="He has scored 37 this season."), allowed)
