@@ -346,7 +346,36 @@ def rewrite(payload: Pack) -> RewriteDraft:
     return RewriteDraft(headline=head, body=body, claims=[_score_claim(payload["context"])])
 
 
+def tactics_template(payload: Pack) -> Any:
+    """Offline persona answer: playbook recipes chosen for the persona (see agents/tactician.py)."""
+    from matchlens.agents.tactician import offline_tactics
+
+    return offline_tactics(payload)
+
+
+def tactics_verdict_template(payload: Pack) -> Any:
+    """Offline Gaffer's verdict: the top-ranked tactic and its simulated statistics."""
+    from matchlens.agents.tactician import offline_verdict
+
+    return offline_verdict(payload)
+
+
+def league_match_reasoning_template(payload: Pack) -> Any:
+    """Offline league match reasoning: rules over the digest (see leaguedata/reasoner.py)."""
+    from matchlens.leaguedata.reasoner import offline_draft
+
+    return offline_draft(payload["digest"])
+
+
+def league_playbook_template(payload: Pack) -> Any:
+    """Offline playbook text: the deterministic template of leaguedata/playbook.py."""
+    from matchlens.leaguedata.playbook import template_draft
+
+    return template_draft(payload)
+
+
 TASKS = {
+    "league_playbook": league_playbook_template,
     "tactical": lambda p: tactical(p["context"]),
     "narrative": lambda p: narrative(p["context"]),
     "overlay": lambda p: overlay_plan(p["context"], p.get("headline"), p.get("body")),
@@ -356,4 +385,7 @@ TASKS = {
     "rewrite": rewrite,
     "coach": lambda p: coach_template(p["context"]),
     "pundit": lambda p: pundit_template(p["context"], p.get("language", "en")),
+    "tactics": tactics_template,
+    "tactics_verdict": tactics_verdict_template,
+    "league_match_reasoning": league_match_reasoning_template,
 }

@@ -91,6 +91,11 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--data-dir", type=Path, default=None, help="override the data folder")
         if name == "curate":
             p.add_argument("--version", type=int, default=None, help="curated version number (default: next)")
+        if name == "reason":
+            p.add_argument("--concurrency", type=int, default=6, help="parallel model calls")
+            p.add_argument("--force", action="store_true", help="re-reason matches already on disk")
+            p.add_argument("--emit-batch", type=Path, default=None,
+                           help="write Azure Batch JSONL here instead of calling the model")
     return parser
 
 
