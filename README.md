@@ -182,6 +182,35 @@ cd backend && uv run --group vision python -m matchlens.vision 128057 --detect 2
 
 The first run with `--detect` downloads the RT-DETR weights (`PekingU/rtdetr_r50vd`, Apache-2.0, about 172 MB).
 
+### Broadcast footage: main camera and per-frame calibration
+
+TV footage cuts between cameras and its main camera pans and zooms, so one fixed calibration no longer works. The
+first step towards it:
+
+- **Main camera only** (`views.py`): cuts are found from jumps in the colour histogram, and each shot is kept only
+  if most of its frames are mostly grass with nothing large standing on it. Close-ups, other angles and the crowd
+  are set aside. Replays from the main camera's angle are not caught yet.
+- **A homography per frame** (`camera.py`): one hand-labelled frame starts it. Corners tracked on the pitch carry it
+  from frame to frame, and each frame is then fitted to its painted lines both ways (markings onto paint, paint onto
+  markings), which stops drift. After a cut it finds its way back through keyframes it saved earlier.
+
+On synthetic footage (a textured pitch filmed by a known panning and zooming camera, with a cut away and back), every
+main-camera frame is calibrated with a median error of 1.4 px (0.26 m). That is measured against labels that
+themselves carry about 1 px of click noise. It has not been measured on real broadcast footage yet.
+
+Put a clip in `backend/data/local/broadcast/clips/` (gitignored), label 15 to 20 frames, then run and measure:
+
+```bash
+cd backend && uv run --group vision python -m matchlens.vision.label
+```
+
+```bash
+cd backend && uv run --group vision python -m matchlens.vision.broadcast --overlay
+```
+
+Use only footage you have the right to use. Like the SoccerTrack data, it and everything made from it stay in
+`backend/data/local/`.
+
 ## Data and schemas
 
 - **[docs/DATABASE.md](docs/DATABASE.md):** the Cosmos DB containers, write and read paths, cache, resuming after a

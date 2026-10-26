@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitch labels</title>
+<style>
+  :root {
+    --bg: #111315; --panel: #1a1d20; --line: #2b3035; --text: #e7e9ea; --muted: #8b949e;
+    --accent: #f5c542; --done: #4cc38a; --other: #e5534b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif;
+         display: grid; grid-template-columns: 1fr 340px; height: 100vh; overflow: hidden; }
+  main { position: relative; display: flex; align-items: center; justify-content: center; padding: 16px;
+         min-width: 0; }
+  #stage { position: relative; max-width: 100%; max-height: 100%; line-height: 0; }
+  #stage img { max-width: 100%; max-height: calc(100vh - 32px); display: block; cursor: crosshair;
+               user-select: none; -webkit-user-drag: none; }
+  #stage svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  #stage.other img { filter: grayscale(1) brightness(.55); }
+  aside { background: var(--panel); border-left: 1px solid var(--line); padding: 16px; overflow-y: auto;
+          display: flex; flex-direction: column; gap: 14px; }
+  h1 { font-size: 15px; margin: 0; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .muted { color: var(--muted); }
+  button { background: #22272b; color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+           padding: 6px 10px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.on { border-color: var(--accent); color: var(--accent); }
+  #pitch { width: 100%; background: #1f5132; border-radius: 6px; }
+  #pitch .mark { fill: none; stroke: #e7e9ea; stroke-width: .35; opacity: .8; }
+  #pitch .lm { fill: #111315; stroke: #e7e9ea; stroke-width: .35; cursor: pointer; }
+  #pitch .lm.placed { fill: var(--done); }
+  #pitch .lm.sel { fill: var(--accent); stroke: var(--accent); }
+  #selected { min-height: 1.45em; font-weight: 600; color: var(--accent); }
+  #loupe { width: 100%; aspect-ratio: 1; background: #000; border-radius: 6px; image-rendering: pixelated; }
+  #strip { display: flex; flex-wrap: wrap; gap: 4px; }
+  #strip button { padding: 2px 6px; font-size: 12px; min-width: 30px; }
+  #strip button.has { border-color: var(--done); }
+  #strip button.no { border-color: var(--other); }
+  #strip button.cur { background: var(--accent); color: #111; }
+  kbd { background: #22272b; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 12px; }
+  .help { font-size: 12px; color: var(--muted); }
+  .help p { margin: 2px 0; }
+  #status { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <div id="stage">
+    <img id="frame" alt="frame to label">
+    <svg id="marks"></svg>
+  </div>
+</main>
+<aside>
+  <div>
+    <h1 id="title">Pitch labels</h1>
+    <div id="where" class="muted"></div>
+  </div>
+  <div class="row">
+    <button id="prev" title="Previous frame (Left arrow)">◀ Prev</button>
+    <button id="next" title="Next frame (Right arrow)">Next ▶</button>
+    <span id="status"></span>
+  </div>
+  <div class="row">
+    <button id="main-cam">Main camera</button>
+    <button id="other-cam">Other view</button>
+  </div>
+  <div>
+    <div class="muted">Pick a landmark, then click it in the frame</div>
+    <svg id="pitch" viewBox="-6 -6 117 80"></svg>
+    <div id="selected"></div>
+    <div id="count" class="muted"></div>
+  </div>
+  <canvas id="loupe" width="240" height="240"></canvas>
+  <div id="strip"></div>
+  <div class="help">
+    <p><kbd>←</kbd> <kbd>→</kbd> previous or next frame · <kbd>M</kbd> main camera or other view</p>
+    <p><kbd>Delete</kbd> remove the picked landmark's point · <kbd>Esc</kbd> unpick</p>
+    <p>Label 4 or more landmarks spread across the view on every main-camera frame. Skip points you cannot
+      place within a couple of pixels.</p>
+  </div>
+</aside>
+<script>
+const NS = "http://www.w3.org/2000/svg";
+const $ = (id) => document.getElementById(id);
+let S = null, labels = { frames: {} }, index = 0, selected = null, saveTimer = null;
+
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const frameId = () => String(S.frames[index]);
+function entry() {
+  const id = frameId();
+  if (!labels.frames[id]) { labels.frames[id] = { view: "main", points: {} }; save(); }
+  return labels.frames[id];
+}
+
+function save() {
+  $("status").textContent = "Saving…";
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      const r = await fetch("/api/labels", { method: "POST", headers: { "Content-Type": "application/json" },
+                                             body: JSON.stringify(labels) });
+      $("status").textContent = r.ok ? "Saved" : "Save failed";
+    } catch { $("status").textContent = "Save failed"; }
+  }, 250);
+}
+
+function drawPitch() {
+  const svg = $("pitch");
+  svg.innerHTML = "";
+  for (const line of S.markings) el("polyline", { class: "mark", points: line.map((p) => p.join(",")).join(" ") }, svg);
+  const e = entry();
+  for (const [name, [x, y]] of Object.entries(S.landmarks)) {
+    const c = el("circle", { cx: x, cy: y, r: 1.6, class: "lm" + (name in e.points ? " placed" : "") +
+                             (name === selected ? " sel" : "") }, svg);
+    el("title", {}, c).textContent = name;
+    c.addEventListener("click", () => { selected = name === selected ? null : name; render(); });
+  }
+}
+
+function drawMarks() {
+  const svg = $("marks"), [w, h] = S.size, e = entry();
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.innerHTML = "";
+  const r = w / 240;
+  for (const [name, [x, y]] of Object.entries(e.points)) {
+    const sel = name === selected;
+    el("circle", { cx: x, cy: y, r: r * (sel ? 2.2 : 1.6), fill: "none", stroke: sel ? "#f5c542" : "#4cc38a",
+                   "stroke-width": r * 0.6 }, svg);
+    el("circle", { cx: x, cy: y, r: r * 0.4, fill: sel ? "#f5c542" : "#4cc38a" }, svg);
+    if (!sel) continue;  // only the picked point is named, so the frame stays readable
+    const t = el("text", { x: x + r * 2.5, y: y - r * 2, fill: "#fff", "font-size": r * 5, stroke: "#000",
+                           "stroke-width": r * 0.8, "paint-order": "stroke" }, svg);
+    t.textContent = name;
+  }
+}
+
+function drawStrip() {
+  const strip = $("strip");
+  strip.innerHTML = "";
+  S.frames.forEach((f, i) => {
+    const e = labels.frames[String(f)];
+    const b = document.createElement("button");
+    b.textContent = i + 1;
+    b.title = `frame ${f}`;
+    if (e) b.className = e.view === "other" ? "no" : Object.keys(e.points).length >= 4 ? "has" : "";
+    if (i === index) b.classList.add("cur");
+    b.onclick = () => go(i);
+    strip.appendChild(b);
+  });
+}
+
+function render() {
+  const e = entry(), n = Object.keys(e.points).length;
+  $("where").textContent = `Frame ${index + 1} of ${S.frames.length} · #${frameId()}`;
+  $("main-cam").classList.toggle("on", e.view === "main");
+  $("other-cam").classList.toggle("on", e.view === "other");
+  $("stage").classList.toggle("other", e.view === "other");
+  $("selected").textContent = selected ? `Picked: ${selected}` : "";
+  $("count").textContent = e.view === "other" ? "Not the main camera: no points needed" :
+    `${n} landmark${n === 1 ? "" : "s"} placed${n < 4 ? " (4 or more needed)" : ""}`;
+  drawPitch(); drawMarks(); drawStrip();
+}
+
+function go(i) {
+  index = Math.max(0, Math.min(S.frames.length - 1, i));
+  $("frame").src = `/frames/${frameId()}.jpg`;
+  render();
+}
+
+function toImage(ev) {
+  const img = $("frame"), box = img.getBoundingClientRect();
+  return [(ev.clientX - box.left) * img.naturalWidth / box.width, (ev.clientY - box.top) * img.naturalHeight / box.height];
+}
+
+$("frame").addEventListener("click", (ev) => {
+  if (!selected) return;
+  const e = entry();
+  if (e.view === "other") return;
+  const [x, y] = toImage(ev);
+  e.points[selected] = [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
+  selected = null;
+  save(); render();
+});
+
+$("frame").addEventListener("mousemove", (ev) => {
+  const img = $("frame"), c = $("loupe"), g = c.getContext("2d"), [x, y] = toImage(ev), zoom = 4;
+  const half = c.width / zoom / 2;
+  g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, c.width, c.height);
+  g.drawImage(img, x - half, y - half, half * 2, half * 2, 0, 0, c.width, c.height);
+  g.strokeStyle = "#f5c542"; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(c.width / 2, 0); g.lineTo(c.width / 2, c.height);
+  g.moveTo(0, c.height / 2); g.lineTo(c.width, c.height / 2); g.stroke();
+});
+
+function setView(view) { entry().view = view; save(); render(); }
+$("main-cam").onclick = () => setView("main");
+$("other-cam").onclick = () => setView("other");
+$("prev").onclick = () => go(index - 1);
+$("next").onclick = () => go(index + 1);
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "ArrowLeft") go(index - 1);
+  else if (ev.key === "ArrowRight") go(index + 1);
+  else if (ev.key === "m" || ev.key === "M") setView(entry().view === "main" ? "other" : "main");
+  else if (ev.key === "Escape") { selected = null; render(); }
+  else if ((ev.key === "Delete" || ev.key === "Backspace") && selected) {
+    delete entry().points[selected]; save(); render();
+  } else return;
+  ev.preventDefault();
+});
+
+(async () => {
+  S = await (await fetch("/api/state")).json();
+  labels = S.labels && S.labels.frames ? S.labels : { frames: {} };
+  $("title").textContent = S.clip;
+  go(0);
+})();
+</script>
+</body>
+</html>

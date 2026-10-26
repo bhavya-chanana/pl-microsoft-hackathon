@@ -27,6 +27,15 @@
         "cd frontend && npx next build && MATCHLENS_BACKEND_URL=http://localhost:8767 npx next start --port 3002"
       ],
       "port": 3002
+    },
+    {
+      "name": "broadcast-label",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && uv run --group vision python -m matchlens.vision.label"
+      ],
+      "port": 8777
     }
   ]
 }
