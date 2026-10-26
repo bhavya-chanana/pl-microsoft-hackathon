@@ -316,7 +316,7 @@ def test_verify_blocks_unknown_evidence_and_placeholders(digest):
     assert any("{P:pdeadbe}" in p for p in problems) and any("{M:mabc123}" in p for p in problems)
     real_name = next(k for k in digest.names if k.startswith("{P:"))
     assert not [p for p in rs.verify(mutate(good, home_note=f"{real_name} scored."), digest) if "placeholder" in p]
-    # a real name is not a placeholder, but braces that are not ours are refused
+    # braces that are not ours are refused
     assert any("{X}" in p for p in rs.verify(mutate(good, away_note="{X} struggled."), digest))
 
 
@@ -343,6 +343,59 @@ def test_verify_checks_sides_turning_points_and_verdict(digest):
     assert any("verdict" in p for p in rs.verify(mutate(good, verdict="deserved"), digest)) is False
 
 
+def names_in(digest, text, known=()):
+    return rs.name_problems(text, digest, known)
+
+
+def test_blind_mode_rejects_names_real_invented_and_known(tables, digest):
+    good = rs.offline_draft(digest.payload())
+    for text, bad in [
+        ("Zlatko Fakename scored a late winner for Northfield United, the way Lionel Messi would.",
+         {"Zlatko", "Fakename", "Northfield", "United", "Lionel", "Messi"}),
+        ("{H} won because Messi was everywhere.", {"Messi"}),
+        ("{H} beat Eastbridge Rovers at home.", {"Eastbridge Rovers"}),  # the real name of this very match
+        ("The goal came from Okoye.", {"Okoye"}),  # a known surname, sentence-initial position elsewhere
+        ("{H} controlled it after Ada Okoye scored.", {"Ada Okoye"}),
+        ("Ten-man {A} were undone in London.", {"London"}),
+        ("Messi scored the winner.", {"Messi"}),  # sentence-initial, not English-shaped
+        ("Carla Mendes scored.", {"Carla", "Mendes"}),
+    ]:
+        found = names_in(digest, text, tables.known_names())
+        assert found, text
+        assert bad & set(found) or any(b in " ".join(found) for b in bad), (text, found)
+    # verify() reports it for every text field and the rewrite turn gets the problem
+    for field in ("why_won", "home_note", "headline"):
+        problems = rs.verify(mutate(good, **{field: "Lionel Messi scored for {H}."}), digest, tables.known_names())
+        assert any(p.startswith(field) and "name(s)" in p and "Messi" in p for p in problems), field
+    problems = rs.verify(mutate(good, how=["{P:pa146db} pressed.", "Zlatko Fakename ran the show."]), digest)
+    assert any(p.startswith("how[1]") and "Fakename" in p for p in problems)
+    # a pattern description and a limitation are checked too
+    pat = good.patterns[0].model_copy(update={"description": "Pep Guardiola would approve."})
+    assert any("patterns[0]" in p and "Guardiola" in p for p in rs.verify(mutate(good, patterns=[pat]), digest))
+    assert any("limitations[0]" in p for p in rs.verify(mutate(good, limitations=["Kylian Mbappe missing"]), digest))
+
+
+def test_name_check_has_few_false_positives(tables, digest):
+    sample = [
+        "{H} won 2-1 and the xG backed it up: 1.59 to 0.86.",
+        "Despite fewer shots, {H} created the better chances. Late pressure from {A} fizzled out after the red card.",
+        "The VAR check did not change the outcome. PPDA fell to 5.2 (xG 1.59).",
+        "Half-time score 1-0, full-time 2-1. Territory favoured {H} in the second half.",
+        "{A} were reduced to ten men at 60' (E03); {H} then scored from the penalty spot (S10).",
+        "In October the EPL leaders dropped points; an UCL tie would differ. Compared with recent form, {P:pa146db} shot more.",
+        "Cross and Throughball chances came from open play. Counter attacks gave {A} their goal.",
+        "No xG or shot data for this match: judge quality only from the score.",
+        "Strong finishing flattered {H}; Elo gave them 1780 against 1703.",
+        "Notably, {A} pressed less. Overall the shape held. Instead of pressing, {H} sat deeper. Unusually direct play.",
+        "Premier League and Champions League football; the La Liga and Serie A sample is separate.",
+        "Mentality is a light tiebreaker: {H} had won 3 of 4 when leading (M:xg_per_shot).",
+    ]
+    for text in sample:
+        assert names_in(digest, text, tables.known_names()) == [], text
+    # not enforced when the digest is not blind (real names are expected there)
+    assert names_in(build_digest(TARGET, tables, blind=False), "Lionel Messi scored.") == []
+
+
 # ------------------------------------------------------------------ rewrite turn
 
 
@@ -350,6 +403,22 @@ def invent(draft: MatchReasoningDraft, payload: dict) -> MatchReasoningDraft:
     if "problems" in payload:  # the rewrite turn: fix it
         return draft
     return draft.model_copy(update={"why_won": "{H} won thanks to 9 big chances and 4.20 xG."})
+
+
+def test_rewrite_turn_repairs_a_draft_that_names_people(digest):
+    def name_dropper(draft, payload):
+        if "problems" in payload:
+            return draft
+        return draft.model_copy(update={"why_won": "Zlatko Fakename won it for Northfield United."})
+
+    client = ScriptedClient(tamper={"league_match_reasoning": name_dropper})
+    out = run(rs.reason_match(agent_for(client), digest, model="scripted"))
+    assert out.provenance.fact_check == "rewritten" and "Fakename" in out.provenance.problems[0]
+    assert "Fakename" not in out.draft.model_dump_json()
+
+
+def test_prompt_version_is_bumped_for_resume():
+    assert rs.PROMPT_VERSION == "league-reasoner-v2"
 
 
 def test_rewrite_turn_repairs_a_bad_draft(digest):

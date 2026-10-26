@@ -249,6 +249,11 @@ class Tables:
         m = self._managers.get(manager_id)
         return m.name if m else manager_id
 
+    def known_names(self) -> list[str]:
+        """Every club, player and manager name in the tables (sorted; the blind-mode name check)."""
+        names = {c.name for c in self.clubs} | {p.name for p in self.players} | {m.name for m in self.managers}
+        return sorted(n for n in names if n)
+
     def prior_league_matches(self, m: Match) -> list[Match]:
         """Same-season matches of the match's competition strictly before its date."""
         return [x for x in self._by_season[(m.league.value, m.season)] if x.date < m.date]

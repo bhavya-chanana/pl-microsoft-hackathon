@@ -58,7 +58,7 @@ from matchlens.leaguedata.style import BINS
 
 log = logging.getLogger(__name__)
 
-PROMPT_VERSION = "league-reasoner-v1"
+PROMPT_VERSION = "league-reasoner-v2"
 TASK = "league_match_reasoning"
 REASON_TIMEOUT_S = 180.0
 BACKOFF_S = 2.0  # first retry delay after a failed call; doubles each time
@@ -337,7 +337,8 @@ _SCORE_STR = re.compile(r"\d{1,2}-\d{1,2}")
 def _scorelines(value: Any) -> set[str]:
     """Every ``a-b`` score string that appears as a value in the digest payload."""
     if isinstance(value, str):
-        return {value} if _SCORE_STR.fullmatch(value) else set()
+        # "2-0" is also fine written winner-first for a 0-2 result
+        return {value, "-".join(reversed(value.split("-")))} if _SCORE_STR.fullmatch(value) else set()
     if isinstance(value, dict):
         return set().union(*(_scorelines(v) for v in value.values())) if value else set()
     if isinstance(value, (list, tuple)):
@@ -370,9 +371,139 @@ def _unaccounted(text: str, exact: set[float], percent: list[float]) -> list[str
     return bad
 
 
-def verify(draft: MatchReasoningDraft, digest: Digest) -> list[str]:
-    """Problems found in ``draft`` against ``digest`` (empty list: the draft is supported)."""
+# ---- names in blind mode
+# Blind mode exists so the model cannot recall the real match, so any name-like capitalised word that is not a
+# placeholder, a digest word or ordinary football English is refused (and so is any known club/player/manager).
+
+_CAP_WORD = re.compile(r"(?<![^\W\d_])[A-ZÀ-ÖØ-Þ][^\W\d_]*(?:['’-][^\W\d_]+)*")
+_SENT_END = re.compile(r"(?:^|[.!?:;\n—–(\[\"'“])\s*$")
+_PHRASES = ("Premier League", "La Liga", "Serie A", "Champions League", "Europa League", "Ligue 1",
+            "Man of the Match")
+_MONTHS_DAYS = ("january february march april may june july august september october november december "
+                "monday tuesday wednesday thursday friday saturday sunday")
+_COMMON = frozenset((
+    # articles, pronouns, conjunctions, prepositions, adverbs
+    "a an the this that these those it its they them their he she his her we our you i and but or nor so yet for "
+    "of in on at by to from with without within into onto over under after before during until since while "
+    "between against through across about around above below behind beyond despite although though because "
+    "however therefore thus hence also then still just only even both either neither each every all any some "
+    "most more less much many few several other another such no not never always often once twice again "
+    "here there when where what which who whom whose why how if else yet already instead overall meanwhile "
+    "finally initially eventually later earlier first second third last next early late now soon "
+    # verbs and auxiliaries commonly opening a clause
+    "is are was were be been being has have had do does did can could will would shall should may might must "
+    "scored scoring conceded won lost drew led trailed created took saw gave made needed kept got went "
+    "came played looked proved remained stayed turned ended finished started opened settled sealed "
+    # football nouns / adjectives / adverbs
+    "goal goals shot shots chance chances xg xa ppda press pressing counter counters set piece pieces corner "
+    "corners penalty penalties foul fouls card cards red yellow substitution substitutions sub subs half "
+    "time halftime fulltime full extra stoppage minute minutes score scoreline result results win wins draw "
+    "defeat victory loss margin edge lead advantage pressure territory possession shape formation formations "
+    "defence defense defensive attack attacking attacks midfield midfielder forward striker winger "
+    "keeper goalkeeper side sides team teams club clubs league match matches game games season home away "
+    "host hosts visitors visitor opponent opponents period spell phase phases state states quality volume "
+    "finishing finish finished efficient clinical wasteful dominant dominated dominance deserved fortunate "
+    "even level balanced open tight low mid high deep wide direct patient quick slow long short big small "
+    "strong weak good poor better worse best worst clear key main major minor single early late decisive "
+    "evidence digest data limitation limitations note notes confidence verdict headline form form's "
+    "recent pre-match prematch recent typical usual unusual normal average usually typically mostly largely "
+    "mainly partly largely entirely clearly simply broadly slightly sharply heavily rarely "
+    "one two three four five six seven eight nine ten eleven twelve own "
+    "rest half-time full-time late-goal ").split())
+
+
+def _name_vocab(digest: Digest) -> set[str]:
+    """Lower-cased words of every string in the digest payload (situations, actions, limitations, ...)."""
+    words: set[str] = set()
+
+    def walk(v: Any) -> None:
+        if isinstance(v, str):
+            words.update(w.lower() for w in re.findall(r"[^\W\d_]+", _PLACEHOLDER.sub(" ", v)))
+        elif isinstance(v, dict):
+            for k, x in v.items():
+                walk(str(k))
+                walk(x)
+        elif isinstance(v, (list, tuple)):
+            for x in v:
+                walk(x)
+
+    walk(digest.payload())
+    return words
+
+
+def _parts(word: str) -> list[str]:
+    word = re.sub(r"['’]s$", "", word)
+    return [p.lower() for p in re.split(r"['’-]", word) if p]
+
+
+_ENGLISH_SUFFIX = re.compile(r"(?:ed|ing|ly|ion|ions|ness|ment|ments|ive|ous|ful|ity|ally|able|ible|ence|ance|less)$")
+
+
+def _plain(word: str, vocab: set[str], initial: bool, known: frozenset[str] = frozenset()) -> bool:
+    """True when a capitalised word is ordinary English / football / digest vocabulary."""
+    if len(word) >= 2 and word.isupper():
+        return True  # VAR, PPDA, UCL, EPL
+    parts = _parts(word)
+    if not parts:
+        return True
+    ok = _COMMON | vocab | set(_MONTHS_DAYS.split())
+    if any(p in known and p not in ok for p in parts):
+        return False  # a surname / club word from the tables ("Sterling", "Villa")
+    if initial:
+        # a sentence opener: ordinary vocabulary, or a word shaped like English ("Compared", "Notably")
+        return all(p in ok or (len(p) >= 6 and _ENGLISH_SUFFIX.search(p)) for p in parts)
+    # mid-sentence capital: only digest vocabulary and months/days (nationalities, cities, surnames are refused)
+    return all(p in vocab or p in set(_MONTHS_DAYS.split()) for p in parts)
+
+
+def name_problems(text: str, digest: Digest, known: Iterable[str] = ()) -> list[str]:
+    """Name-like words in ``text`` that a blind-mode draft must not contain."""
+    if not digest.blind:
+        return []
+    flagged: list[str] = []
+    for real in [*digest.names.values(), *(k for k in known if len(k) >= 5)]:
+        # the real names of this very match, and every known club / player / manager
+        if real and re.search(rf"(?<!\w){re.escape(real)}(?!\w)", text, re.I):
+            flagged.append(real)
+    clean = text
+    for phrase in _PHRASES:
+        clean = clean.replace(phrase, " ")
+    clean = _EVIDENCE_IN_TEXT.sub(" ", _PLACEHOLDER.sub(" ", clean))
+    vocab = _name_vocab(digest)
+    known_tok = frozenset(t.lower() for k in known for t in re.findall(r"[^\W\d_]{4,}", k))
+    runs: list[list[tuple[str, bool]]] = []
+    last_end = -10
+    for m in _CAP_WORD.finditer(clean):
+        before = clean[:m.start()]
+        initial = bool(_SENT_END.search(before))
+        gap = clean[last_end:m.start()] if last_end >= 0 else None
+        if runs and gap is not None and gap.strip() == "" and "\n" not in gap and len(gap) == 1:
+            runs[-1].append((m.group(0), initial))
+        else:
+            runs.append([(m.group(0), initial)])
+        last_end = m.end()
+    for run in runs:
+        if len(run) == 1:
+            word, initial = run[0]
+            if not _plain(word, vocab, initial, known_tok):
+                flagged.append(word)
+            continue
+        # a sentence-opening ordinary word ("The", "Despite") may sit in front of a name
+        words = list(run)
+        while words and words[0][1] and _plain(words[0][0], vocab, True, known_tok):
+            words.pop(0)
+        if words and not all(_plain(w, vocab, False, known_tok) for w, _ in words):
+            flagged.extend(w for w, _ in words if not _plain(w, vocab, False, known_tok))
+    return sorted(set(flagged), key=flagged.index)
+
+
+def verify(draft: MatchReasoningDraft, digest: Digest, known_names: Iterable[str] = ()) -> list[str]:
+    """Problems found in ``draft`` against ``digest`` (empty list: the draft is supported).
+
+    ``known_names``: club, player and manager names from the tables; in blind mode none may appear.
+    """
     problems: list[str] = []
+    known = list(known_names)
     payload = digest.payload()
     exact, percent = _allowed_numbers(digest)
     scorelines = _scorelines(payload)
@@ -386,6 +517,10 @@ def verify(draft: MatchReasoningDraft, digest: Digest) -> list[str]:
             if ph not in allowed_ph:
                 problems.append(f"{path}: unknown placeholder {ph}; use only {{H}}, {{A}} and the {{P:..}}/{{M:..}} "
                                 "placeholders that appear in the digest")
+        names = name_problems(text, digest, known)
+        if names:
+            problems.append(f"{path}: name(s) {', '.join(names)} are not allowed in blind mode; refer to people and "
+                            "clubs only by the {H}/{A}/{P:..}/{M:..} placeholders from the digest")
         bad = _unaccounted(text, exact, percent)
         wrong_scores = [x for x in _SCORE.findall(text) if x not in scorelines]
         if wrong_scores:
@@ -503,7 +638,8 @@ def _provenance(model: str, digest: Digest, status: str, problems: list[str]) ->
                       created_at=datetime.now(UTC).isoformat(timespec="seconds"))
 
 
-async def reason_match(agent: Agent, digest: Digest, *, model: str | None = None, retries: int = 2) -> MatchReasoning:
+async def reason_match(agent: Agent, digest: Digest, *, model: str | None = None, retries: int = 2,
+                       known_names: Iterable[str] = ()) -> MatchReasoning:
     """Ask the model, verify, allow one rewrite turn, fall back to the data-only template.
 
     ``fact_check``: passed (first draft verified), rewritten (second draft verified; ``problems`` lists what
@@ -511,6 +647,7 @@ async def reason_match(agent: Agent, digest: Digest, *, model: str | None = None
     never answered: the template is stored, ``problems`` holds the error; batch runs retry these).
     """
     model = model or _model_label(agent)
+    known = list(known_names)
     payload: dict[str, Any] = {"task": TASK, "digest": digest.payload()}
     template = offline_draft(digest.payload())
     status, problems = "passed", []
@@ -518,11 +655,11 @@ async def reason_match(agent: Agent, digest: Digest, *, model: str | None = None
     if draft is None:
         draft, status, problems = template, "template", [err or "no answer"]
     else:
-        problems = verify(draft, digest)
+        problems = verify(draft, digest, known)
         if problems:
             retry = {**payload, "previous": draft.model_dump(mode="json"), "problems": problems}
             second, err = await _call(agent, retry, retries)
-            if second is not None and not (remaining := verify(second, digest)):
+            if second is not None and not (remaining := verify(second, digest, known)):
                 draft, status = second, "rewritten"
             else:
                 draft, status = template, "blocked"
@@ -629,6 +766,7 @@ async def run_batch(
     """
     tables = tables or Tables.load(cfg)
     builder = tables.style_builder()
+    known = tables.known_names()
     keys = list(match_keys)[:limit] if limit else list(match_keys)
     report = BatchReport()
     started = time.monotonic()
@@ -684,7 +822,7 @@ async def run_batch(
                 report.counts["skipped"] += 1
                 return
             try:
-                result = await reason_match(agent, digest, model=model_label, retries=retries)
+                result = await reason_match(agent, digest, model=model_label, retries=retries, known_names=known)
             except Exception as exc:  # noqa: BLE001
                 log.warning("reasoning failed for %s: %s", key, exc)
                 record_failure(key, "error", f"{type(exc).__name__}: {exc}")
