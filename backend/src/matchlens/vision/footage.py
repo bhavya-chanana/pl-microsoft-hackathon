@@ -8,7 +8,8 @@ colour with a PQ or HLG transfer curve. OpenCV decodes it without tone mapping, 
 out grey and flat, and the white lines lose the contrast the calibration fits to. Such a clip is
 converted once to 8-bit standard dynamic range at no more than 1920 x 1080 (macOS ``avconvert``, or
 FFmpeg with zscale), and the copy is what gets labelled and calibrated, so frame numbers and pixels
-agree between the two.
+agree between the two. The copy remembers the size and modification time of the file it came from,
+so a clip replaced under the same name is converted afresh.
 """
 
 from __future__ import annotations
@@ -66,8 +67,18 @@ def prepare(clip: Path) -> Path:
     if not is_hdr(clip):
         return clip
     out = workdir(clip) / "sdr.mov"
-    if out.exists() and out.stat().st_mtime >= clip.stat().st_mtime:
+    stamp = out.with_name("sdr.json")
+    stat = clip.stat()
+    origin = {"source": clip.name, "size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+    if out.exists() and stamp.exists() and json.loads(stamp.read_text()) == origin:
         return out
+    if out.exists():
+        # A different video under the same name: what was made from the old one no longer fits.
+        shutil.rmtree(out.parent / "frames", ignore_errors=True)
+        labels = out.parent / "labels.json"
+        if labels.exists():
+            labels.replace(out.parent / "labels.replaced.json")
+            print(f"{clip.name} has changed: its old labels are kept as labels.replaced.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     partial = out.with_name("sdr.partial.mov")
     print(f"{clip.name} is HDR: making a standard-colour copy for reading (once) ...")
@@ -82,4 +93,5 @@ def prepare(clip: Path) -> Path:
                          "convert it to 8-bit SDR first")
     subprocess.run(cmd, check=True)
     partial.replace(out)
+    stamp.write_text(json.dumps(origin))
     return out
