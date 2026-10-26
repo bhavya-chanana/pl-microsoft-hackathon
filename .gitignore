@@ -36,3 +36,6 @@ backend/data/local/
 
 # Working notes, local only.
 HANDOFF.md
+
+# Local speech output
+*.mp3
