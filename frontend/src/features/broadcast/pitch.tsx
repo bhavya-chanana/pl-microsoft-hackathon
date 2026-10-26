@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
 import { type Point, useLive } from "@/features/live/live-store";
 import { useProfile } from "@/features/profile/profile-store";
@@ -48,16 +48,18 @@ type DotProps = {
   tweenMs: number;
   favourite: boolean;
   selected: boolean;
+  /** Marker size multiplier, so dots stay at least 16px across on a phone-sized pitch. */
+  scale: number;
   onSelect?: (id: string, el: SVGGElement) => void;
   onHover?: (id: string | null) => void;
 };
 
-function Dot({ entity, meta, tweenMs, favourite, selected, onSelect, onHover }: DotProps) {
+function Dot({ entity, meta, tweenMs, favourite, selected, scale, onSelect, onHover }: DotProps) {
   const transition = `transform ${tweenMs}ms linear`;
   if (entity.entity_id === "ball") {
     return (
       <circle
-        r={0.75}
+        r={0.75 * Math.max(1, scale * 0.8)}
         aria-hidden
         className="pointer-events-none fill-graphic-foreground stroke-graphic"
         strokeWidth={0.2}
@@ -94,25 +96,25 @@ function Dot({ entity, meta, tweenMs, favourite, selected, onSelect, onHover }: 
         onBlur: () => onHover?.(null),
       })}
     >
-      {interactive && <circle r={3.2} fill="transparent" />}
+      {interactive && <circle r={3.2 * scale} fill="transparent" />}
       <circle
-        r={3.2}
+        r={3.2 * scale}
         className="fill-none stroke-ring opacity-0 transition-opacity group-focus-visible:opacity-100"
         strokeWidth={0.5}
       />
-      {selected && <circle r={2.7} className="fill-none stroke-graphic-foreground" strokeWidth={0.5} strokeDasharray="1 0.6" />}
-      {favourite && !selected && <circle r={2.6} className="fill-none stroke-graphic-foreground" strokeWidth={0.35} />}
+      {selected && <circle r={2.7 * scale} className="fill-none stroke-graphic-foreground" strokeWidth={0.5} strokeDasharray="1 0.6" />}
+      {favourite && !selected && <circle r={2.6 * scale} className="fill-none stroke-graphic-foreground" strokeWidth={0.35} />}
       <circle
-        r={1.55}
+        r={1.55 * scale}
         className={cn(sideTone[side].fill, "stroke-graphic transition-transform group-hover:scale-125")}
         strokeWidth={0.25}
       />
       {player && (
         <text
-          y={0.55}
+          y={0.55 * scale}
           textAnchor="middle"
           className="pointer-events-none fill-graphic font-display font-bold"
-          style={{ fontSize: 1.5 }}
+          style={{ fontSize: 1.5 * scale }}
         >
           {player.shirt}
         </text>
@@ -230,6 +232,18 @@ export function Pitch({
   const entities = order && frame ? frame.entities.slice().sort((a, b) => order(a) - order(b)) : [];
   const tagged = entities.find((e) => e.entity_id === hovered);
   const svgRef = useRef<SVGSVGElement>(null);
+  // Keep markers at least 16px across: 1.55 pitch units is only ~11px on a 390px-wide pitch.
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const ro = new ResizeObserver(() => {
+      const px = svg.getBoundingClientRect().width;
+      if (px > 0) setScale(Math.min(1.8, Math.max(1, 8 / (1.55 * (px / (W + 6))))));
+    });
+    ro.observe(svg);
+    return () => ro.disconnect();
+  }, []);
 
   /** Taps that miss every marker go to the nearest player, if one is close enough. */
   const pickNearest = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -285,6 +299,7 @@ export function Pitch({
             tweenMs={tweenMs}
             favourite={e.entity_id === favourite}
             selected={e.entity_id === selectedPlayerId}
+            scale={scale}
             onSelect={onSelectPlayer}
             onHover={interactive ? setHovered : undefined}
           />

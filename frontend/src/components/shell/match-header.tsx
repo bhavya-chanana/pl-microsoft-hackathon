@@ -68,7 +68,7 @@ function ScoreDigit({ value, side }: { value: number; side: "home" | "away" }) {
   );
 }
 
-const collapseRange = () => (typeof window !== "undefined" && window.innerWidth < 768 ? 96 : 120);
+const collapseRange = () => (typeof window !== "undefined" && window.innerWidth < 768 ? 96 : 72);
 
 /**
  * The match header on every primary page. On the Live page it opens as a hero scoreboard and
@@ -113,13 +113,13 @@ export function MatchHeader({ hero }: { hero: boolean }) {
           {meta && home && away && hs !== null && as !== null ? (
             <div className="flex items-center gap-4 md:gap-10">
               <div className="flex flex-col items-center gap-1 md:flex-row md:gap-3">
-                <Crest team={home} side="home" className="size-8 text-xs md:size-14 md:text-xl" />
+                <Crest team={home} side="home" className="size-8 text-xs md:size-11 md:text-lg" />
                 <span className="max-w-24 truncate text-[13px] font-medium text-muted-foreground md:max-w-none md:text-base md:text-foreground">
                   {home.name}
                 </span>
               </div>
               <div className="flex flex-col items-center">
-                <p className="font-display text-[48px] leading-[46px] font-bold tnum md:text-[72px] md:leading-[68px]">
+                <p className="font-display text-[48px] leading-[46px] font-bold tnum md:text-[64px] md:leading-[60px]">
                   <ScoreDigit value={hs} side="home" />
                   <span className="px-1 text-muted-foreground">-</span>
                   <ScoreDigit value={as} side="away" />
@@ -130,7 +130,7 @@ export function MatchHeader({ hero }: { hero: boolean }) {
                 </div>
               </div>
               <div className="flex flex-col items-center gap-1 md:flex-row-reverse md:gap-3">
-                <Crest team={away} side="away" className="size-8 text-xs md:size-14 md:text-xl" />
+                <Crest team={away} side="away" className="size-8 text-xs md:size-11 md:text-lg" />
                 <span className="max-w-24 truncate text-[13px] font-medium text-muted-foreground md:max-w-none md:text-base md:text-foreground">
                   {away.name}
                 </span>

@@ -165,6 +165,11 @@ export const copy = {
   feed: {
     heading: "Latest moments",
     seeAll: "See all moments",
+    share: "Share",
+    copied: "Copied to clipboard",
+    replayOnPitch: "Replay on pitch",
+    details: "Details",
+    detailsHelp: "What we checked before showing this.",
     empty: "Nothing yet. Insights appear here as the match unfolds.",
     error: "Insights could not be loaded.",
     yourPlayer: "Your player",
@@ -228,10 +233,10 @@ export const copy = {
     unsupported: "This browser cannot read insights aloud.",
   },
   factCheck: {
-    verified: "Fact-checked",
-    rewritten: "Corrected by fact-checker",
-    blocked: "Blocked, data shown",
-    data_only: "Match data",
+    verified: "Checked against match data",
+    rewritten: "Corrected against match data",
+    blocked: "Showing match data",
+    data_only: "From match data",
   } satisfies Record<FactCheckStatus, string>,
   factCheckHelp: {
     verified: "Every claim and number matched the match data.",
@@ -759,6 +764,13 @@ export const copy = {
   goalTakeover: {
     scorer: (name: string, minute: string) => `${name}, ${minute}`,
   },
+  onboarding: {
+    title: "Who are you here to watch?",
+    help: "Pick a side and how you like it told. You can change this any time from your profile.",
+    style: "How do you like it?",
+    start: "Start watching",
+  },
+  toast: { view: "View" },
   palette: {
     open: "Search or ask",
     title: "Command palette",
@@ -767,6 +779,7 @@ export const copy = {
     go: "Go to",
     do: "Do",
     theme: "Switch theme",
+    buildIdeas: "Build tactic ideas",
   },
   dev: {
     help: "Demo controls, replays and the agent pipeline. Not needed to follow a match.",
@@ -790,7 +803,13 @@ export const copy = {
     inPossession: (team: string) => `${team} have the ball`,
     attack: "attack this way",
   },
-  momentsPage: { heading: "Moments", intro: "Goals, cards, substitutions and the plays that mattered." },
+  momentsPage: {
+    heading: "Moments",
+    intro: "Goals, cards, substitutions and the plays that mattered.",
+    highlights: "Highlights",
+    filters: "Filter moments",
+    kinds: { all: "All", goals: "Goals", cards: "Cards", shots: "Shots", insights: "Insights" } as Record<string, string>,
+  },
   statsPage: { heading: "Stats", team: "Team", players: "Players", shots: "Shots" },
   coachPage: { brief: "Brief", tactics: "Tactics", tabs: "Coach sections" },
   theme: {

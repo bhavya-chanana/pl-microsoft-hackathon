@@ -36,13 +36,27 @@ function usePick() {
 }
 
 /** What is on air as a caption under the pitch (never over the play). Reserves its height so nothing jumps. */
+function overlay_insight_id(onAir: Record<string, string | null>, overlays: Record<string, { insight_id: string }>) {
+  const id = onAir.banner ?? onAir.lower ?? onAir.upper_right;
+  return id ? overlays[id]?.insight_id : undefined;
+}
+
 function Caption({ onAir }: { onAir: Record<string, string | null> }) {
   const overlays = useLive((s) => s.overlays);
   const meta = useLive((s) => s.meta);
   const language = useProfile((s) => s.language);
+  const analyst = useProfile((s) => s.mode === "analyst");
+  const index = useLive((s) => s.state?.momentum_index ?? 0);
+  const signalType = useLive((s) => (overlay_insight_id(onAir, overlays) ? s.insights[overlay_insight_id(onAir, overlays)!]?.signal_type : undefined));
   const id = onAir.banner ?? onAir.lower ?? onAir.upper_right;
-  const overlay = id ? overlays[id] : undefined;
-  const text = overlay ? overlayText(overlay, language) : null;
+  let overlay = id ? overlays[id] : undefined;
+  let text = overlay ? overlayText(overlay, language) : null;
+  if (overlay && signalType === "momentum_swing") {
+    // The caption must agree with the bar under the pitch; when it does not, say nothing.
+    const leader = Math.abs(index) < 10 ? null : index > 0 ? meta?.home.team_id : meta?.away.team_id;
+    if (!leader || overlay.team_id !== leader) overlay = undefined;
+    else if (!analyst && text) text = { ...text, body: "" };
+  }
   const side = overlay && meta ? (overlay.team_id === meta.home.team_id ? "home" : overlay.team_id === meta.away.team_id ? "away" : null) : null;
   return (
     <div className="min-h-14" aria-live="polite">
@@ -61,7 +75,7 @@ function Caption({ onAir }: { onAir: Record<string, string | null> }) {
               <p className="truncate text-[15px] font-semibold">{text.headline}</p>
               <p className="flex flex-wrap gap-x-3 text-[13px] text-muted-foreground">
                 {text.body && <span className="truncate">{text.body}</span>}
-                {overlay.stats.slice(0, 3).map((st) => (
+                {(signalType === "momentum_swing" && !analyst ? [] : overlay.stats.slice(0, 3)).map((st) => (
                   <span key={st.label} className="tnum">
                     {st.label} <b className="font-semibold text-foreground">{st.value}{st.unit ?? ""}</b>
                   </span>
@@ -117,28 +131,6 @@ export function LivePitch() {
   const label = replay ? (signalLabels[replay.moment.signal_type] ?? replay.moment.signal_type) : null;
   return (
     <section aria-label={copy.pitch.label} data-monitor="main" className="@container flex flex-col gap-3 rounded-2xl border bg-card p-3 shadow-raised max-md:-mx-4 max-md:rounded-none max-md:border-x-0">
-      <div className="flex min-h-9 items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-9 items-center rounded-full bg-raised px-3 text-[13px] font-medium ring-1 ring-border">{copy.pitch.players}</span>
-          {replay && (
-            <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-telestrator px-3 font-display text-sm font-bold tracking-wide text-graphic uppercase">
-              <Video aria-hidden className="size-4" />
-              {copy.instantReplay.bug[language]}
-            </span>
-          )}
-        </div>
-        {replay ? (
-          <Button variant="secondary" size="sm" className="h-9 gap-1.5" onClick={stop}>
-            <Radio aria-hidden />
-            {copy.instantReplay.back}
-          </Button>
-        ) : (
-          <Button variant="ghost" size="sm" aria-pressed={tilt} className="h-9 gap-1.5 text-muted-foreground" onClick={() => setTilt((t) => !t)}>
-            <Video aria-hidden />
-            {copy.instantReplay.camera}
-          </Button>
-        )}
-      </div>
       <div className="relative isolate aspect-[111/74] w-full overflow-hidden rounded-xl bg-turf max-md:-mx-3 max-md:w-[calc(100%+1.5rem)] max-md:rounded-none">
         <Pitch
           tilt={tilt}
@@ -150,6 +142,34 @@ export function LivePitch() {
         >
           {!replay && lane && <PassLane pass={lane} />}
         </Pitch>
+        <div className="absolute top-3 left-3 flex items-center gap-2">
+          {replay && (
+            <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-telestrator px-3 font-display text-sm font-bold tracking-wide text-graphic uppercase">
+              <Video aria-hidden className="size-4" />
+              {copy.instantReplay.bug[language]}
+            </span>
+          )}
+        </div>
+        <div className="absolute top-3 right-3">
+          {replay ? (
+            <Button variant="secondary" size="sm" className="h-9 gap-1.5" onClick={stop}>
+              <Radio aria-hidden />
+              {copy.instantReplay.back}
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              size="icon"
+              aria-pressed={tilt}
+              aria-label={copy.instantReplay.camera}
+              title={copy.instantReplay.cameraHelp}
+              className="size-11 rounded-full bg-background/60 text-foreground backdrop-blur-sm"
+              onClick={() => setTilt((t) => !t)}
+            >
+              <Video aria-hidden />
+            </Button>
+          )}
+        </div>
         <GoalChip />
         <FeedNotice />
       </div>

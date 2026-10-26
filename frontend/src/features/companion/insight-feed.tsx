@@ -10,7 +10,9 @@ import { useFanProfile } from "@/features/profile/profile-store";
 import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
-import { InsightCard } from "./insight-card";
+import type { FeedItem } from "@/lib/contract";
+
+import { BIG_MOMENTS, InsightCard } from "./insight-card";
 
 export function FeedSkeleton() {
   return (
@@ -27,7 +29,18 @@ export function FeedSkeleton() {
 }
 
 /** Personalised, fact-checked insight feed. Newest first. */
-export function InsightFeed({ limit, carousel = false }: { limit?: number; carousel?: boolean }) {
+export function InsightFeed({
+  limit,
+  carousel = false,
+  highlights = false,
+  filter,
+}: {
+  limit?: number;
+  carousel?: boolean;
+  /** Only the big moments plus the very latest item. */
+  highlights?: boolean;
+  filter?: (item: FeedItem) => boolean;
+}) {
   const profile = useFanProfile();
   const { language } = profile;
   const feed = useFeed(profile);
@@ -44,14 +57,21 @@ export function InsightFeed({ limit, carousel = false }: { limit?: number; carou
       </div>
     );
   }
-  if (!feed.data.length) {
+  let items = feed.data;
+  if (filter) items = items.filter(filter);
+  if (highlights) {
+    const latest = items[0];
+    items = items.filter((i) => i === latest || BIG_MOMENTS.has(i.signal_type));
+  }
+  if (limit) items = items.slice(0, limit);
+  if (!items.length) {
     return <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{copy.feed.empty}</p>;
   }
   return (
-    <ol className={cn("flex gap-3", carousel ? "snap-x snap-mandatory overflow-x-auto overscroll-x-contain pb-2 lg:snap-none lg:flex-col lg:overflow-visible lg:pb-0" : "flex-col")} aria-label={copy.feed.heading}>
+    <ol className={cn("flex gap-3", carousel ? "snap-x snap-mandatory overflow-x-auto overscroll-x-contain pb-2 md:grid md:snap-none md:grid-cols-2 md:overflow-visible md:pb-0 min-[1100px]:grid-cols-1" : "flex-col")} aria-label={copy.feed.heading}>
       <AnimatePresence initial={false}>
-        {(limit ? feed.data.slice(0, limit) : feed.data).map((item) => (
-          <li key={item.insight_id} className={cn(carousel && "w-[85%] shrink-0 snap-start sm:w-[60%] lg:w-auto")}>
+        {items.map((item) => (
+          <li key={item.insight_id} className={cn(carousel && "w-[85%] shrink-0 snap-start md:w-auto")}>
             <InsightCard item={item} language={language} />
           </li>
         ))}

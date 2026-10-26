@@ -1,15 +1,22 @@
 "use client";
 
-import { ChevronDown, Star, Video } from "lucide-react";
+import { CircleDot, Info, RectangleVertical, Share2, Star, Target, Video, Zap } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { motion } from "motion/react";
-import { useId, useState } from "react";
+import { useState } from "react";
 
 import { useReplay } from "@/features/broadcast/replay-store";
 import { useLive } from "@/features/live/live-store";
+import { useProfile } from "@/features/profile/profile-store";
 import type { ClaimResult, FeedItem, Language, MatchMeta } from "@/lib/contract";
 import { copy, signalLabels } from "@/lib/copy";
 import { playerName, sideOf, sideTone } from "@/lib/match";
 import { cn } from "@/lib/utils";
+import { routes } from "@/lib/routes";
 
 import { FactCheckBadge } from "./fact-check-badge";
 
@@ -84,47 +91,98 @@ const REPLAYABLE = new Set([
   "chaos_spell", "momentum_swing", "speed_badge", "distance_badge", "card",
 ]);
 
-export function InsightCard({ item, language }: { item: FeedItem; language: Language }) {
-  const meta = useLive((s) => s.meta);
+/** The few moment types that deserve a full card; everything else is a quiet row. */
+export const BIG_MOMENTS = new Set(["goal", "card", "big_chance"]);
+
+const BIG_ICON: Record<string, typeof Zap> = { goal: CircleDot, card: RectangleVertical, big_chance: Target };
+
+function useMomentActions(item: FeedItem) {
   const play = useReplay((s) => s.play);
-  const [open, setOpen] = useState(false);
-  const panelId = useId();
+  const router = useRouter();
+  const replayable = REPLAYABLE.has(item.signal_type);
+  const share = async () => {
+    const text = `${item.minute_label} ${item.headline}`;
+    try {
+      if (navigator.share) await navigator.share({ title: copy.product, text });
+      else {
+        await navigator.clipboard.writeText(text);
+        toast.success(copy.feed.copied);
+      }
+    } catch {
+      /* the share sheet was dismissed */
+    }
+  };
+  const replay = () => {
+    play(item.insight_id, { reveal: true });
+    router.push(routes.live);
+  };
+  return { replayable, share, replay };
+}
+
+/** "Details": the checks behind a moment, in a side sheet rather than inline small print. */
+function DetailsSheet({ item, open, onOpenChange }: { item: FeedItem; open: boolean; onOpenChange: (open: boolean) => void }) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="gap-4 overflow-y-auto overscroll-contain p-5 sm:max-w-md">
+        <SheetHeader className="p-0 pr-10">
+          <SheetTitle className="font-display text-2xl">
+            {item.minute_label} {item.headline}
+          </SheetTitle>
+          <SheetDescription>{copy.feed.detailsHelp}</SheetDescription>
+        </SheetHeader>
+        {open && <Evidence insightId={item.insight_id} />}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function Ticks({ item }: { item: FeedItem }) {
+  return (
+    <>
+      {item.favourite_player && (
+        <span className="inline-flex items-center gap-1 text-[13px] font-medium">
+          <Star aria-hidden className="size-3.5 fill-current" />
+          {copy.feed.yourPlayer}
+        </span>
+      )}
+      <FactCheckBadge status={item.fact_check} />
+    </>
+  );
+}
+
+function MomentCard({ item, language }: { item: FeedItem; language: Language }) {
+  const meta = useLive((s) => s.meta);
   const side = sideOf(meta, item.team_id);
+  const [details, setDetails] = useState(false);
+  const { replayable, share, replay } = useMomentActions(item);
+  const Icon = BIG_ICON[item.signal_type] ?? Zap;
+  const goal = item.signal_type === "goal";
   return (
     <motion.article
       lang={language}
       layout="position"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
-      className="relative flex flex-col gap-2 overflow-hidden rounded-lg border bg-card p-4 pl-5 shadow-raised"
-    >
-      <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", side ? sideTone[side].bg : "bg-border")} />
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="font-display text-xl leading-none font-semibold tabular-nums">{item.minute_label}</span>
-        <span className="text-xs text-muted-foreground">{signalLabels[item.signal_type] ?? item.signal_type}</span>
-        {item.favourite_player && (
-          <span className="inline-flex items-center gap-1 text-xs font-medium">
-            <Star aria-hidden className="size-3.5 fill-current" />
-            {copy.feed.yourPlayer}
-          </span>
-        )}
-        <FactCheckBadge status={item.fact_check} className="ml-auto" />
-      </header>
-      <h3 className="font-display text-xl leading-snug font-semibold">{item.headline}</h3>
-      {item.body && <p className="max-w-prose text-sm text-muted-foreground">{item.body}</p>}
-      {item.club_angle && item.club_angle !== item.headline && (
-        <p className="max-w-prose border-l-2 pl-3 text-sm">
-          <span className="sr-only">{copy.feed.forYourClub}: </span>
-          {item.club_angle}
-        </p>
+      transition={{ duration: 0.25, ease: "easeOut" }}
+      className={cn(
+        "relative flex flex-col gap-3 overflow-hidden rounded-2xl border bg-card p-4 pl-5 shadow-raised sm:p-5 sm:pl-6",
+        goal && (side === "away" ? "border-away/50" : "border-home/50"),
       )}
+    >
+      <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1.5", side ? sideTone[side].bg : "bg-border")} />
+      <header className="flex items-center gap-3">
+        <span className="font-display text-[40px] leading-10 font-bold tnum">{item.minute_label}</span>
+        <Icon aria-hidden className={cn("size-6", side ? sideTone[side].text : "text-muted-foreground")} />
+        <span className="text-[13px] font-medium text-muted-foreground">{signalLabels[item.signal_type] ?? item.signal_type}</span>
+      </header>
+      <h3 className="text-xl leading-7 font-semibold">{item.headline}</h3>
+      {item.body && <p className="line-clamp-2 max-w-prose text-[15px] text-muted-foreground">{item.body}</p>}
       {item.key_numbers.length > 0 && (
         <dl className="flex flex-wrap gap-x-5 gap-y-1">
-          {item.key_numbers.slice(0, 4).map((n) => (
+          {item.key_numbers.slice(0, 3).map((n) => (
             <div key={n.label} className="flex items-baseline gap-1.5">
-              <dt className="text-xs text-muted-foreground">{n.label}</dt>
-              <dd className="font-display text-lg font-semibold tabular-nums">
+              <dt className="text-[13px] text-muted-foreground">{n.label}</dt>
+              <dd className="font-display text-lg font-semibold tnum">
                 {n.value}
                 {n.unit && <span className="ml-0.5 text-xs font-normal">{n.unit}</span>}
               </dd>
@@ -133,30 +191,54 @@ export function InsightCard({ item, language }: { item: FeedItem; language: Lang
         </dl>
       )}
       <div className="-mx-2 -mb-2 flex flex-wrap items-center gap-1">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={panelId}
-          onClick={() => setOpen((v) => !v)}
-          className="flex min-h-11 items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <ChevronDown aria-hidden className={cn("size-4 transition-transform", open && "rotate-180")} />
-          {open ? copy.feed.hideEvidence : copy.feed.showEvidence}
-        </button>
-        {REPLAYABLE.has(item.signal_type) && (
-          <button
-            type="button"
-            onClick={() => play(item.insight_id, { reveal: true })}
-            className="flex min-h-11 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <Video aria-hidden className="size-4" />
-            {copy.instantReplay.watch}
-          </button>
+        <Button variant="ghost" className="h-11 gap-1.5 px-3" onClick={() => void share()}>
+          <Share2 aria-hidden />
+          {copy.feed.share}
+        </Button>
+        {replayable && (
+          <Button variant="ghost" className="h-11 gap-1.5 px-3" onClick={replay}>
+            <Video aria-hidden />
+            {copy.feed.replayOnPitch}
+          </Button>
         )}
+        <Button variant="ghost" className="h-11 gap-1.5 px-3 text-muted-foreground" onClick={() => setDetails(true)}>
+          <Info aria-hidden />
+          {copy.feed.details}
+        </Button>
+        <span className="ml-auto flex items-center gap-3 pr-2">
+          <Ticks item={item} />
+        </span>
       </div>
-      <div id={panelId} hidden={!open}>
-        {open && <Evidence insightId={item.insight_id} />}
-      </div>
+      <DetailsSheet item={item} open={details} onOpenChange={setDetails} />
     </motion.article>
   );
+}
+
+function MomentRow({ item, language }: { item: FeedItem; language: Language }) {
+  const meta = useLive((s) => s.meta);
+  const side = sideOf(meta, item.team_id);
+  const [details, setDetails] = useState(false);
+  return (
+    <motion.article lang={language} layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border-b py-3 last:border-0">
+      <div className="flex items-start gap-3">
+        <span className="w-12 shrink-0 pt-px font-display text-lg leading-6 font-semibold text-muted-foreground tnum">{item.minute_label}</span>
+        <span aria-hidden className={cn("mt-2 size-2 shrink-0 rounded-full", side ? sideTone[side].bg : "bg-subtle")} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] leading-6 font-medium">{item.headline}</p>
+          {item.body && <p className="line-clamp-1 text-[14px] text-muted-foreground">{item.body}</p>}
+        </div>
+        <Button variant="ghost" size="icon" className="size-11 shrink-0 text-muted-foreground" aria-label={copy.feed.details} onClick={() => setDetails(true)}>
+          <Info aria-hidden />
+        </Button>
+      </div>
+      <DetailsSheet item={item} open={details} onOpenChange={setDetails} />
+    </motion.article>
+  );
+}
+
+export function InsightCard({ item: raw, language }: { item: FeedItem; language: Language }) {
+  const analyst = useProfile((s) => s.mode === "analyst");
+  // Raw momentum numbers are for Analyst mode; everyone else gets the words.
+  const item = raw.signal_type === "momentum_swing" && !analyst ? { ...raw, body: "", key_numbers: [] } : raw;
+  return BIG_MOMENTS.has(item.signal_type) ? <MomentCard item={item} language={language} /> : <MomentRow item={item} language={language} />;
 }

@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ListenToggle } from "@/features/companion/narration";
 import { ProfilePanel } from "@/features/profile/profile-panel";
 import { copy } from "@/lib/copy";
 
@@ -27,6 +28,9 @@ export function ProfileMenu() {
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={10} className="max-h-[min(80dvh,40rem)] w-[min(22rem,calc(100vw-1.5rem))] gap-4 overflow-y-auto overscroll-contain p-4">
         <ProfilePanel />
+        <div className="border-t pt-3">
+          <ListenToggle />
+        </div>
         <div className="flex flex-col gap-1 border-t pt-3">
           <Button variant="ghost" className="h-11 justify-start gap-3 px-2" onClick={() => setTheme(dark ? "light" : "dark")}>
             {dark ? <Sun aria-hidden /> : <Moon aria-hidden />}

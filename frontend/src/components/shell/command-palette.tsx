@@ -1,6 +1,6 @@
 "use client";
 
-import { Code2, Compass, Moon, Radio, Search, Sparkles, ChartColumn, ClipboardList, Route } from "lucide-react";
+import { Code2, Compass, History, MessageCircleQuestion, Moon, Newspaper, Radio, Search, Sparkles, ChartColumn, ClipboardList, Route } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -63,15 +63,23 @@ export function CommandPalette() {
       <CommandInput placeholder={copy.palette.placeholder} />
       <CommandList className="max-h-[60dvh] overscroll-contain">
         <CommandEmpty>{copy.palette.empty}</CommandEmpty>
-        <CommandGroup heading={copy.palette.go}>
-          <CommandItem onSelect={go(routes.live)}><Radio aria-hidden />{copy.nav.live}</CommandItem>
-          <CommandItem onSelect={go(routes.moments)}><Sparkles aria-hidden />{copy.nav.moments}</CommandItem>
-          <CommandItem onSelect={go(routes.stats)}><ChartColumn aria-hidden />{copy.nav.stats}</CommandItem>
-          <CommandItem onSelect={go(routes.coach)}><ClipboardList aria-hidden />{copy.nav.coach}</CommandItem>
-          <CommandItem onSelect={go(routes.coachTactics)}><Route aria-hidden />{copy.nav.tactics}</CommandItem>
-          <CommandItem onSelect={go(routes.explore)}><Compass aria-hidden />{copy.nav.explore}</CommandItem>
-        </CommandGroup>
         <CommandGroup heading={copy.palette.do}>
+          <CommandItem onSelect={run(() => useShell.getState().setCatchup(true))}>
+            <History aria-hidden />
+            {copy.catchup.cta}
+          </CommandItem>
+          <CommandItem onSelect={run(() => useShell.getState().setPundit(true))}>
+            <MessageCircleQuestion aria-hidden />
+            {copy.pundit.open}
+          </CommandItem>
+          <CommandItem onSelect={run(() => useShell.getState().setRecap(true))}>
+            <Newspaper aria-hidden />
+            {copy.recap.cta}
+          </CommandItem>
+          <CommandItem onSelect={go(routes.coachTactics)}>
+            <Route aria-hidden />
+            {copy.palette.buildIdeas}
+          </CommandItem>
           <CommandItem onSelect={run(() => setTheme(resolvedTheme === "light" ? "dark" : "light"))}>
             <Moon aria-hidden />
             {copy.palette.theme}
@@ -82,6 +90,14 @@ export function CommandPalette() {
               {copy.nav.dev}
             </CommandItem>
           )}
+        </CommandGroup>
+        <CommandGroup heading={copy.palette.go}>
+          <CommandItem onSelect={go(routes.live)}><Radio aria-hidden />{copy.nav.live}</CommandItem>
+          <CommandItem onSelect={go(routes.moments)}><Sparkles aria-hidden />{copy.nav.moments}</CommandItem>
+          <CommandItem onSelect={go(routes.stats)}><ChartColumn aria-hidden />{copy.nav.stats}</CommandItem>
+          <CommandItem onSelect={go(routes.coach)}><ClipboardList aria-hidden />{copy.nav.coach}</CommandItem>
+          <CommandItem onSelect={go(routes.coachTactics)}><Route aria-hidden />{copy.nav.tactics}</CommandItem>
+          <CommandItem onSelect={go(routes.explore)}><Compass aria-hidden />{copy.nav.explore}</CommandItem>
         </CommandGroup>
       </CommandList>
       </Command>

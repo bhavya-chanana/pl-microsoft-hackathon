@@ -1,11 +1,19 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { useGoalCall } from "@/features/broadcast/goal-takeover";
+import { playerName } from "@/lib/match";
+import { OnboardingSheet } from "./onboarding";
 import { useEffect, type ReactNode } from "react";
 
 import { useLive } from "@/features/live/live-store";
+import { copy } from "@/lib/copy";
 import { routes } from "@/lib/routes";
 
+import { CatchupDialog, RecapDialog } from "@/features/companion/catchup-dialog";
+import { PunditPanel } from "@/features/pundit/pundit-panel";
+import { useShell } from "./shell-store";
 import { CommandPalette } from "./command-palette";
 import { DevDrawer } from "./dev-drawer";
 import { MatchHeader } from "./match-header";
@@ -29,6 +37,37 @@ function useTeamColours() {
       root.style.removeProperty("--team-away");
     };
   }, [meta]);
+}
+
+/** A toast when a goal goes in while you are on another page. The Live page has its own goal chip. */
+function GoalToaster() {
+  const goal = useGoalCall(false);
+  const pathname = usePathname();
+  const router = useRouter();
+  const meta = useLive((s) => s.meta);
+  const id = goal?.signal_id;
+  useEffect(() => {
+    if (!goal || pathname === routes.live) return;
+    const scorer = playerName(meta, goal.player_ids[0]);
+    toast(`GOAL ${goal.minute_label}${scorer ? ` ${scorer}` : ""}`, { action: { label: copy.toast.view, onClick: () => router.push(routes.live) } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  return null;
+}
+
+/** Catch me up, Full recap and Ask the pundit, opened from anywhere (pill, Moments page, palette). */
+function Drawers() {
+  const catchup = useShell((s) => s.catchupOpen);
+  const recap = useShell((s) => s.recapOpen);
+  const pundit = useShell((s) => s.punditOpen);
+  const { setCatchup, setRecap, setPundit } = useShell.getState();
+  return (
+    <>
+      <CatchupDialog open={catchup} onOpenChange={setCatchup} />
+      <RecapDialog open={recap} onOpenChange={setRecap} />
+      <PunditPanel open={pundit} onOpenChange={setPundit} />
+    </>
+  );
 }
 
 /**
@@ -61,6 +100,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <TabBar />
       <CommandPalette />
       <DevDrawer />
+      <Drawers />
+      <GoalToaster />
+      <OnboardingSheet />
     </>
   );
 }

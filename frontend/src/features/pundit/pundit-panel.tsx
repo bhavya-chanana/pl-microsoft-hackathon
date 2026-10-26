@@ -121,12 +121,14 @@ function AnswerCard({
 }
 
 /** Ask the Pundit: a fan asks in their own words, the answer comes from the stats engine and is fact-checked. */
-export function PunditPanel({ className }: { className?: string }) {
+export function PunditPanel({ className, open: controlled, onOpenChange }: { className?: string; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const profile = useFanProfile();
   const hasMatch = useLive((s) => s.meta !== null);
   const play = useReplay((s) => s.play);
   const reader = useReadAloud();
-  const [open, setOpen] = useState(false);
+  const [local, setLocal] = useState(false);
+  const open = controlled ?? local;
+  const setOpen = onOpenChange ?? setLocal;
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const end = useRef<HTMLDivElement>(null);
@@ -165,10 +167,12 @@ export function PunditPanel({ className }: { className?: string }) {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger render={<Button variant="outline" size="lg" className={cn("h-12 w-full gap-2 text-base", className)} disabled={!hasMatch} />}>
-        <MessageCircleQuestion aria-hidden />
-        {copy.pundit.open}
-      </SheetTrigger>
+      {controlled === undefined && (
+        <SheetTrigger render={<Button variant="outline" size="lg" className={cn("h-12 w-full gap-2 text-base", className)} disabled={!hasMatch} />}>
+          <MessageCircleQuestion aria-hidden />
+          {copy.pundit.open}
+        </SheetTrigger>
+      )}
       <SheetContent side="right" className="w-full gap-0 p-0 data-[side=right]:sm:max-w-lg">
         <SheetHeader className="border-b p-5 pr-14">
           <SheetTitle className="font-display text-2xl font-semibold">{copy.pundit.heading}</SheetTitle>
