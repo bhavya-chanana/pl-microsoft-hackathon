@@ -15,6 +15,7 @@ for recent seasons; e.g. field tilt is approximated by deep-completion share.
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 from typing import Literal
 
@@ -234,3 +235,15 @@ class Playbook(_Model):
     key_players: list[str]  # player_ids
     summary: str
     evidence_matches: list[str]
+
+
+_EVIDENCE_ID = r"(?:[SEGT]\d+|M:[A-Za-z0-9_]+|SUM|ST)"
+_CITATIONS = re.compile(rf"\s*\((?:\s*{_EVIDENCE_ID}\s*[,;]?)+\s*\)")  # "(E01, E02, SUM)"
+_TRAILING_IDS = re.compile(rf"(?:\s*[,;]\s*{_EVIDENCE_ID})+(?=\s*\))")  # "(0.85-0.69, SUM)"
+
+
+def strip_citations(text: str) -> str:
+    """``text`` without bracketed evidence ids: "4-0 win (E01, E02, SUM)" -> "4-0 win" and
+    "higher xG (0.85-0.69, SUM)" -> "higher xG (0.85-0.69)". The body keeps its citations; a headline is read
+    on its own, where ids are noise."""
+    return _TRAILING_IDS.sub("", _CITATIONS.sub("", text)).strip()

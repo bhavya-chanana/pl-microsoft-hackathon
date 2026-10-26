@@ -212,7 +212,7 @@ Rules (mandatory):
 Return:
 - verdict: dominant | deserved | even | fortunate | smash_and_grab (judged from the winner's chance quality; for a
   draw use even or the side that created more).
-- headline: one line, max 100 characters. why_won: two to four sentences answering WHY the winner won (or why it
+- headline: one line, max 100 characters, no evidence ids. why_won: two to four sentences answering WHY the winner won (or why it
   ended level), with the 2-4 numbers that prove it. how: 2-5 short bullets on HOW the match was played (shape,
   pressing, where chances came from, what changed in each game state).
 - patterns: 1-5 TacticalPatternDraft items. tag comes only from the allowed enum; side is "home" or "away" and must

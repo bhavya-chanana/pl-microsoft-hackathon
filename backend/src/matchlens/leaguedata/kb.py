@@ -46,6 +46,7 @@ from matchlens.leaguedata.contracts import (
     Playbook,
     PlayerProfile,
     TeamStyle,
+    strip_citations,
 )
 from matchlens.leaguedata.schema import League
 
@@ -116,7 +117,8 @@ def summarise_reasoning(r: MatchReasoning, names: Mapping[str, str] | None = Non
     return MatchSummary(
         match_key=r.match_key, league=r.league, season=r.season, date=parts[2] if len(parts) > 2 else "",
         home_id=r.home_id, away_id=r.away_id, home_name=names.get(r.home_id, r.home_id),
-        away_name=names.get(r.away_id, r.away_id), score=r.score, verdict=d.verdict, headline=d.headline,
+        away_name=names.get(r.away_id, r.away_id), score=r.score, verdict=d.verdict,
+        headline=strip_citations(d.headline),  # reasonings saved before the headline rule
         why_won=d.why_won,
         patterns=[KbPattern(tag=p.tag, side=p.side, strength=p.strength, description=p.description)
                   for p in d.patterns])

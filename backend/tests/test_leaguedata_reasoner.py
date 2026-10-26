@@ -557,3 +557,16 @@ def test_minute_windows_are_not_scorelines_or_invented_numbers(digest):
     # a falling pair is not a window, and single-digit pairs are still checked as scorelines
     bad = rs.verify(mutate(good, why_won="{H} out-shot {A} 93-81 and should have won 7-3."), digest)
     assert any("why_won" in p and "93" in p for p in bad) and any("7-3" in p for p in bad), bad
+
+
+def test_headline_citations_are_stripped():
+    from matchlens.leaguedata.contracts import strip_citations
+
+    assert strip_citations("Three-goal first half sets up {H} 4-0 win (E01,E02,E03,E12,SUM)") == \
+        "Three-goal first half sets up {H} 4-0 win"
+    assert strip_citations("{A} equalised with a 71' header (SUM, S15)") == "{A} equalised with a 71' header"
+    assert strip_citations("Late press (M:ppda; T3) pays off") == "Late press pays off"
+    assert strip_citations("{A} had higher xG (0.85-0.69, SUM)") == "{A} had higher xG (0.85-0.69)"
+    # brackets that are not citations stay
+    assert strip_citations("{H} win on the VAR call (VAR) at 1-0") == "{H} win on the VAR call (VAR) at 1-0"
+    assert strip_citations("Edge on xG (1.97 v 1.79)") == "Edge on xG (1.97 v 1.79)"

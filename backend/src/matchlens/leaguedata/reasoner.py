@@ -52,6 +52,7 @@ from matchlens.leaguedata.contracts import (
     Provenance,
     TacticalPatternDraft,
     TurningPointDraft,
+    strip_citations,
 )
 from matchlens.leaguedata.digest import Digest, Tables, build_digest, estimate_tokens
 from matchlens.leaguedata.schema import League
@@ -688,6 +689,7 @@ async def reason_match(agent: Agent, digest: Digest, *, model: str | None = None
             else:
                 draft, status = template, "blocked"
                 problems = remaining if second is not None else [*problems, err or "no answer to the rewrite turn"]
+    draft = draft.model_copy(update={"headline": strip_citations(draft.headline)})
     return MatchReasoning(
         match_key=digest.match_key, league=League(digest.league), season=digest.season,
         home_id=digest.home_id, away_id=digest.away_id, score=digest.score,
