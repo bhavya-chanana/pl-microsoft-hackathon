@@ -1,0 +1,104 @@
+{
+ "teams": {
+  "1": {
+   "id": "1",
+   "title": "Northvale FC",
+   "history": [
+    {
+     "h_a": "h",
+     "xG": 2.1,
+     "xGA": 0.9,
+     "npxG": 1.9,
+     "npxGA": 0.9,
+     "ppda": {
+      "att": 120,
+      "def": 10
+     },
+     "ppda_allowed": {
+      "att": 200,
+      "def": 8
+     },
+     "deep": 7,
+     "deep_allowed": 3,
+     "scored": 2,
+     "missed": 1,
+     "result": "w",
+     "date": "2023-08-12 14:00:00"
+    }
+   ]
+  },
+  "2": {
+   "id": "2",
+   "title": "Eastbrook Town",
+   "history": [
+    {
+     "h_a": "a",
+     "xG": 0.9,
+     "xGA": 2.1,
+     "npxG": 0.9,
+     "npxGA": 2.1,
+     "ppda": {
+      "att": 200,
+      "def": 8
+     },
+     "ppda_allowed": {
+      "att": 120,
+      "def": 0
+     },
+     "deep": 3,
+     "deep_allowed": 7,
+     "scored": 1,
+     "missed": 2,
+     "result": "w",
+     "date": "2023-08-12 14:00:00"
+    }
+   ]
+  }
+ },
+ "players": [],
+ "dates": [
+  {
+   "id": "9001",
+   "isResult": true,
+   "h": {
+    "id": "1",
+    "title": "Northvale FC",
+    "short_title": "NOR"
+   },
+   "a": {
+    "id": "2",
+    "title": "Eastbrook Town",
+    "short_title": "EAS"
+   },
+   "goals": {
+    "h": "2",
+    "a": "1"
+   },
+   "xG": {
+    "h": "2.1",
+    "a": "0.9"
+   },
+   "datetime": "2023-08-12 14:00:00",
+   "forecast": {
+    "w": "0.6",
+    "d": "0.2",
+    "l": "0.2"
+   }
+  },
+  {
+   "id": "9002",
+   "isResult": false,
+   "h": {
+    "id": "2",
+    "title": "Eastbrook Town",
+    "short_title": "EAS"
+   },
+   "a": {
+    "id": "1",
+    "title": "Northvale FC",
+    "short_title": "NOR"
+   },
+   "datetime": "2023-08-19 14:00:00"
+  }
+ ]
+}
