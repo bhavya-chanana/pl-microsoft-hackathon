@@ -2,14 +2,16 @@
 
     uv run --group vision python -m matchlens.vision.label [path/to/clip.mp4] --frames 20
 
-(with no clip, the newest video in ``data/local/broadcast/clips/``) pulls evenly spaced frames out of the clip into ``data/local/broadcast/<clip>/frames/`` and serves a
-page on http://127.0.0.1:8777 to label them: mark each frame main camera or not, pick a landmark on
+(with no clip, the newest video in ``data/local/broadcast/clips/``) pulls evenly spaced frames out
+of the clip into ``data/local/broadcast/<clip>/frames/`` and serves a page on
+http://127.0.0.1:8777 to label them: mark each frame main camera or not, pick a landmark on
 the pitch diagram and click where it is in the frame. Labels save as you go to
 ``data/local/broadcast/<clip>/labels.json``, which ``python -m matchlens.vision.broadcast`` uses to
 start the calibration and to measure it.
 
 Frames are numbered in decoding order, as the calibration reads them, so they are pulled out by
-reading the clip through rather than seeking (seeking can land a few frames off).
+reading the clip through rather than seeking (seeking can land a few frames off). An HDR clip is
+read from its standard-colour copy (``footage.py``), as the calibration reads it.
 """
 
 from __future__ import annotations
@@ -24,24 +26,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from .footage import CLIPS, default_clip, prepare, workdir
 from .markings import landmarks, polylines
 
-DATA = Path(__file__).resolve().parents[3] / "data" / "local" / "broadcast"
-CLIPS = DATA / "clips"
 PAGE = Path(__file__).with_name("label.html")
-VIDEO = {".mp4", ".mov", ".mkv", ".avi", ".ts", ".m4v", ".webm"}
-
-
-def default_clip() -> Path:
-    """The newest video in ``CLIPS``."""
-    found = sorted((p for p in CLIPS.glob("*") if p.suffix.lower() in VIDEO), key=lambda p: p.stat().st_mtime)
-    if not found:
-        raise SystemExit(f"no clip given and no video in {CLIPS}")
-    return found[-1]
-
-
-def workdir(clip: Path) -> Path:
-    return DATA / clip.stem
 
 
 def pick_frames(total: int, count: int) -> list[int]:
@@ -140,7 +128,8 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8777)
     args = parser.parse_args()
     clip = (args.clip or default_clip()).resolve()
-    capture = cv2.VideoCapture(str(clip))
+    source = prepare(clip)
+    capture = cv2.VideoCapture(str(source))
     total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
     capture.release()
     if total <= 0:
@@ -148,7 +137,7 @@ def main() -> None:
     labelled = [int(f) for f in load_labels(workdir(clip) / "labels.json")["frames"]]
     frames = sorted(set(pick_frames(total, args.frames)) | set(labelled))
     out = workdir(clip) / "frames"
-    size = extract(clip, frames, out)
+    size = extract(source, frames, out)
     # The container's frame count can overstate the frames that decode.
     serve(clip, [f for f in frames if (out / f"{f}.jpg").exists()], size, args.port)
 

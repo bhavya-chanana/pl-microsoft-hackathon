@@ -14,6 +14,8 @@
    it was clicked (pixels). For scale, the same is shown for a camera that never moved from the
    starting frame.
 
+An HDR clip is read from its standard-colour copy (``footage.py``), and pixels are that copy's.
+
 Writes ``data/local/broadcast/<clip>/calibration.json`` (each frame's view and its homography from
 pitch metres to clip pixels), and with ``--overlay`` an ``overlay.mp4`` with the pitch drawn on
 every calibrated frame plus a still of each labelled one under ``check/``.
@@ -31,7 +33,7 @@ import cv2
 import numpy as np
 
 from .camera import Calibration, CameraTracker, project, scaled, to_pitch
-from .label import CLIPS, default_clip, workdir
+from .footage import CLIPS, default_clip, prepare, workdir
 from .markings import landmarks, polylines
 from .views import Views, classify
 
@@ -213,13 +215,14 @@ def main() -> None:
     clip = (args.clip or default_clip()).resolve()
     out = workdir(clip)
     out.mkdir(parents=True, exist_ok=True)
-    size, fps = clip_info(clip)
+    source = prepare(clip)
+    size, fps = clip_info(source)
     if size[0] <= 0:
-        raise SystemExit(f"cannot read {clip}")
+        raise SystemExit(f"cannot read {source}")
     factor = WORK_WIDTH / size[0]
 
     print(f"{clip.name}: {size[0]}x{size[1]} at {fps:g} fps; sorting views ...")
-    views = classify(frames(clip, WORK_WIDTH))
+    views = classify(frames(source, WORK_WIDTH))
 
     labels = read_labels(out / "labels.json")
     usable = [lab for lab in labels if lab.main and len(lab.names) >= MIN_ANCHOR_POINTS]
@@ -235,11 +238,11 @@ def main() -> None:
     else:
         print("no labelled main-camera frame with 4 or more landmarks: nothing to start the calibration from")
 
-    results = calibrate(clip, views, anchors, factor) if anchors else [None] * len(views.main)
+    results = calibrate(source, views, anchors, factor) if anchors else [None] * len(views.main)
     report(views, results, labels, anchor, anchor_h)
 
     (out / "calibration.json").write_text(json.dumps({
-        "clip": clip.name, "size": size, "fps": fps, "cuts": views.cuts,
+        "clip": clip.name, "source": source.name, "size": size, "fps": fps, "cuts": views.cuts,
         "frames": [{"frame": i, "main": bool(views.main[i]),
                     **({"homography": r.homography.round(8).tolist(), "score": round(r.score, 3), "how": r.how}
                        if r is not None else {})}
@@ -247,7 +250,7 @@ def main() -> None:
     }))
     print(f"\n-> {out / 'calibration.json'}")
     if args.overlay:
-        overlay(clip, out, views, results, labels, size, fps)
+        overlay(source, out, views, results, labels, size, fps)
         print(f"-> {out / 'overlay.mp4'} and {out / 'check'}/")
 
 
