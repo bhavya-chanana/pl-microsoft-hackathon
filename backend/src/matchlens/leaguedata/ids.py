@@ -129,7 +129,7 @@ BUILTIN_CLUB_ALIASES: dict[str, str] = {
     "Ath Madrid": "Atlético de Madrid", "Atletico Madrid": "Atlético de Madrid",
     "Ath Bilbao": "Athletic Bilbao", "Athletic Club": "Athletic Bilbao", "Betis": "Real Betis Balompié",
     "Real Betis": "Real Betis Balompié", "Sociedad": "Real Sociedad", "Celta": "Celta de Vigo",
-    "Alaves": "Deportivo Alavés", "Vallecano": "Rayo Vallecano", "Espanol": "RCD Espanyol Barcelona",
+    "Celta Vigo": "Celta de Vigo", "Alaves": "Deportivo Alavés", "Vallecano": "Rayo Vallecano", "Espanol": "RCD Espanyol Barcelona",
     "Espanyol": "RCD Espanyol Barcelona", "Osasuna": "CA Osasuna",
     "Inter": "Inter Milan", "Internazionale": "Inter Milan", "Milan": "AC Milan", "Roma": "Associazione Sportiva Roma", "AS Roma": "Associazione Sportiva Roma",
     "Verona": "Hellas Verona", "Spal": "SPAL", "SPAL Ferrara": "SPAL", "Lazio": "Società Sportiva Lazio S.p.A.", "SS Lazio": "Società Sportiva Lazio S.p.A.",
@@ -150,6 +150,13 @@ BUILTIN_CLUB_ALIASES: dict[str, str] = {
     "Sporting": "Sporting CP", "Sporting Lisbon": "Sporting CP", "Benfica": "SL Benfica",
     "Porto": "FC Porto", "Ajax": "Ajax Amsterdam", "PSV": "PSV Eindhoven", "Celtic": "Celtic FC",
     "Galatasaray": "Galatasaray SK", "Shakhtar": "Shakhtar Donetsk",
+    # openfootball spells clubs out in full
+    "Internazionale Milano": "Inter Milan", "Racing de Lens": "RC Lens", "Racing Club de Lens": "RC Lens",
+    "Lens": "RC Lens", "Sport Lisboa e Benfica": "SL Benfica", "Sporting Clube de Braga": "SC Braga",
+    "Braga": "SC Braga", "Red Bull Salzburg": "Fußballclub Red Bull Salzburg",
+    "Salzburg": "Fußballclub Red Bull Salzburg", "RB Salzburg": "Fußballclub Red Bull Salzburg",
+    "FC København": "FC Copenhagen", "København": "FC Copenhagen", "Copenhagen": "FC Copenhagen",
+    "FK Crvena Zvezda": "Red Star Belgrade", "Crvena Zvezda": "Red Star Belgrade", "Red Star": "Red Star Belgrade",
 }
 
 

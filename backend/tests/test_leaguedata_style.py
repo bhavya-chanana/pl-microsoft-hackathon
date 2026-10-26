@@ -435,3 +435,18 @@ def test_build_fills_elo_from_clubelo(fake_cfg, monkeypatch):
     assert (m1["home_elo"], m1["away_elo"]) == (1800.0, 1700.0)
     m2 = next(m for m in build_mod.load_table(fake_cfg, "matches") if m["date"] != "2023-08-12")
     assert m2["home_elo"] is None and m2["away_elo"] == 1800.0
+
+
+def test_resumed_league_fixture_merges_across_dates_but_cup_ties_do_not():
+    def m(league, date, src):
+        return src, Match(match_key=f"{src}-{date}", league=league, season=SEASON, date=date, home_id="a", away_id="b",
+                          home_goals=1, away_goals=2)
+
+    def mk(league, season, date, home, away):
+        return f"{league}:{season}:{date}:{home}-{away}"
+
+    rows = [m(EPL, "2024-04-14", "understat"), m(EPL, "2024-04-25", "transfermarkt"),
+            m(League.UCL, "2023-10-03", "transfermarkt"), m(League.UCL, "2024-03-12", "transfermarkt")]
+    final = build_mod._cluster_keys(rows, mk, build_mod._precedence)
+    assert final[("understat", "understat-2024-04-14")] == final[("transfermarkt", "transfermarkt-2024-04-25")]
+    assert final[("transfermarkt", "transfermarkt-2023-10-03")] != final[("transfermarkt", "transfermarkt-2024-03-12")]

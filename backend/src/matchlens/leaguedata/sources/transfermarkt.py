@@ -42,7 +42,7 @@ import csv
 import gzip
 import io
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Iterator, Sequence
 from typing import Any
 
@@ -203,6 +203,7 @@ def normalize(cfg: Config, *, leagues: Sequence[League] | None = None,
         club_name[g["home_club_id"]] = g["home_club_name"]
         club_name[g["away_club_id"]] = g["away_club_name"]
 
+    shootouts = _shootouts(cfg, {g["game_id"] for g in games if g["competition_id"] == "CL"})
     matches: list[Match] = []
     managers: dict[str, Manager] = {}
     by_game: dict[str, tuple[str, str, str]] = {}  # game_id -> (match_key, home club id, away club id)
@@ -218,11 +219,18 @@ def normalize(cfg: Config, *, leagues: Sequence[League] | None = None,
             mgr[side] = mid
             if mid and mid not in managers:
                 managers[mid] = Manager(manager_id=mid, name=name)
+        score = {"home_goals": int(float(g["home_club_goals"])), "away_goals": int(float(g["away_club_goals"]))}
+        if (so := shootouts.get(g["game_id"])) is not None:
+            # Transfermarkt folds the shoot-out into the score; rebuild it from the goal events.
+            h, a = g["home_club_id"], g["away_club_id"]
+            score = {"home_goals": so["goals90"][h], "away_goals": so["goals90"][a],
+                     "home_goals_aet": so["goals"][h], "away_goals_aet": so["goals"][a],
+                     "home_pens": so["pens"][h], "away_pens": so["pens"][a]}
         matches.append(Match(
             match_key=key, league=league, season=season, date=g["date"],
             stage=cl_stage(g["round"]) if league == League.UCL else None,
             home_id=f"{SOURCE}:{g['home_club_id']}", away_id=f"{SOURCE}:{g['away_club_id']}",
-            home_goals=int(float(g["home_club_goals"])), away_goals=int(float(g["away_club_goals"])),
+            **score,
             home_formation=normalize_formation(g["home_club_formation"]),
             away_formation=normalize_formation(g["away_club_formation"]),
             home_manager_id=mgr["home"], away_manager_id=mgr["away"],
@@ -255,6 +263,25 @@ def normalize(cfg: Config, *, leagues: Sequence[League] | None = None,
 
     return {"matches": matches, "lineups": lineups, "match_events": events, "players": players,
             "player_valuations": valuations, "clubs": clubs, "managers": list(managers.values())}
+
+
+def _shootouts(cfg: Config, game_ids: set[str]) -> dict[str, dict[str, Counter]]:
+    """Per game decided on penalties: goals by club at 90 minutes and overall, and shoot-out kicks scored."""
+    if not game_ids:
+        return {}
+    goals90: dict[str, Counter] = defaultdict(Counter)
+    goals: dict[str, Counter] = defaultdict(Counter)
+    pens: dict[str, Counter] = defaultdict(Counter)
+    for r in _stream(cfg, "game_events"):
+        gid = r["game_id"]
+        if gid not in game_ids:
+            continue
+        if r["type"] == "Shootout":
+            pens[gid][r["club_id"]] += "scored" in r["description"].lower()
+        elif r["type"] == "Goals":
+            goals[gid][r["club_id"]] += 1
+            goals90[gid][r["club_id"]] += (_int(r["minute"]) or 0) <= 90
+    return {gid: {"goals90": goals90[gid], "goals": goals[gid], "pens": pens[gid]} for gid in pens}
 
 
 def _events(cfg: Config, by_game: dict[str, tuple[str, str, str]]):

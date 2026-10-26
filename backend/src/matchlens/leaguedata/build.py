@@ -48,7 +48,7 @@ from pydantic import BaseModel
 
 from matchlens.leaguedata import schema
 from matchlens.leaguedata.config import Config
-from matchlens.leaguedata.schema import TABLES, IdLink, Match, SourceIds
+from matchlens.leaguedata.schema import TABLES, IdLink, League, Match, SourceIds
 from matchlens.leaguedata.sources import SOURCES
 
 log = logging.getLogger(__name__)
@@ -336,15 +336,22 @@ class _Resolution:
 
 def _cluster_keys(rows: list[tuple[str, Match]], mk: Callable[..., str], precedence: Callable[[str], int]
                   ) -> dict[tuple[str, str], str]:
-    """(source, old match_key) -> final canonical match_key, merging dates one day apart."""
+    """(source, old match_key) -> final canonical match_key, merging dates one day apart.
+
+    A league plays each home/away pairing once a season, so there every date is one fixture: an abandoned
+    game resumed days later is dated differently by each source (Udinese-Roma 2024-04-14 / 04-25).
+    """
     groups: dict[tuple[str, str, str, str], list[tuple[str, str, Match]]] = defaultdict(list)
     for src, m in rows:
         groups[(m.league.value, m.season, m.home_id, m.away_id)].append((src, m.match_key, m))
     final: dict[tuple[str, str], str] = {}
-    for items in groups.values():
+    for (league, *_), items in groups.items():
         items.sort(key=lambda it: it[2].date)
         clusters: list[list[tuple[str, str, Match]]] = []
         for it in items:
+            if clusters and league != League.UCL:
+                clusters[-1].append(it)
+                continue
             if clusters:
                 first = _date.fromisoformat(clusters[-1][0][2].date)
                 if _date.fromisoformat(it[2].date) - first <= timedelta(days=1):
