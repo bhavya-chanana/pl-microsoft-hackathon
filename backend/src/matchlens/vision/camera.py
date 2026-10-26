@@ -4,7 +4,8 @@ The main camera stays in one place and pans, tilts and zooms. That makes the
 change between two of its frames a homography too, for the stands as much as
 the pitch, so a calibration carries from frame to frame:
 
-1. **Anchor.** A frame a person labelled (four or more pitch landmarks) starts it.
+1. **Anchor.** A frame a person labelled (four or more pitch landmarks) starts it,
+   and sets the calibration afresh when the run reaches it.
 2. **Track.** Corners on the pitch are followed into the next frame (pyramidal
    Lucas-Kanade); a RANSAC homography over them, players voted out, moves the
    last calibration on.
@@ -20,11 +21,18 @@ the pitch, so a calibration carries from frame to frame:
 4. **Relocate.** After a cut back to the main camera there is no previous frame.
    Calibrated frames are kept as keyframes (SIFT features over the whole frame,
    since the stands and boards hold still for a panning camera, with their
-   homography); the new frame is matched against them, and the few best matches
-   each give a guess to fit. The best fit wins.
+   homography), and so is every labelled frame from the outset, so a cut to a
+   part of the pitch the run has not reached yet can still be found; the new
+   frame is matched against them, and the few best matches each give a guess to fit. The best fit wins, if it is as good as a keyframe:
+   a weak start would be tracked onwards, wrong, until the next cut.
 
-A frame whose fit leaves too few markings on a line is not calibrated, unless
-it is tracked from a calibrated one: then it coasts on the tracked guess for up
+Lines alone can be fooled: squash the whole pitch onto one painted line, or
+mirror it, and every marking sits on paint. So a calibration must also look like
+the main camera (``plausible``): the pitch the right way round, the middle of the
+frame on or near it, and a believable width of pitch across the frame.
+
+A frame whose fit leaves too few markings on a line, or is not plausible, is not
+calibrated, unless it is tracked from a calibrated one: then it coasts on the tracked guess for up
 to two seconds (a close view of open grass has no lines to fit).
 
 Sizes are tuned at ``REF_WIDTH`` pixels across and scale with the frame.
@@ -53,6 +61,7 @@ MIN_VISIBLE = 60  # model points in view needed to fit
 PITCH_EXTENT = (-20.0, -20.0, 125.0, 88.0)  # metres
 PITCH_PX_PER_M = 10
 MIN_SCORE = 0.5  # share of the visible markings on a line for a calibration to stand
+MIN_SPAN_M, MAX_SPAN_M = 3.0, 150.0  # metres of pitch across the middle of a main-camera frame
 PRIOR = 0.1  # pull towards the guess, per point, per 1% of the frame
 MAX_COAST = 50  # frames
 # Tracking.
@@ -60,7 +69,7 @@ MAX_CORNERS, CORNER_QUALITY, CORNER_SPACING = 500, 0.01, 8
 MIN_TRACKED = 25
 RANSAC_PX = 2.0
 # Keyframes.
-KEY_SCORE = 0.7
+KEY_SCORE = 0.7  # also what a relocation must reach to stand
 KEY_SPACING_M = 6.0
 KEY_ZOOM = 1.25
 MAX_KEYFRAMES = 60
@@ -165,12 +174,38 @@ class FrameLines:
         return d
 
 
+def _view(h: np.ndarray, shape: tuple[int, ...]) -> tuple[np.ndarray, float]:
+    rows, cols = shape[:2]
+    left, centre, right = to_pitch(h, np.array([[0, rows / 2], [cols / 2, rows / 2], [cols, rows / 2]]))
+    return centre, float(np.linalg.norm(right - left))
+
+
+def plausible(h: np.ndarray, shape: tuple[int, ...]) -> bool:
+    """Whether ``h`` could be the main camera for a frame of ``shape``: not mirrored or squashed flat,
+    looking at the pitch, and taking in a believable width of it."""
+    with np.errstate(all="ignore"):
+        if not np.isfinite(h).all() or abs(np.linalg.det(h)) < 1e-12:
+            return False
+        centre, span = _view(h, shape)
+        if not np.isfinite(centre).all() or not MIN_SPAN_M < span < MAX_SPAN_M:
+            return False
+        x0, y0, x1, y1 = PITCH_EXTENT
+        if not (x0 < centre[0] < x1 and y0 < centre[1] < y1):
+            return False
+        # Pitch x runs right and y towards the camera (down the frame): a turn the same way.
+        (a, b, c), front = project(h, centre + np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]))
+        (ux, uy), (vx, vy) = b - a, c - a
+        return bool(front.all() and ux * vy - uy * vx > 0)
+
+
 def fit(guess: np.ndarray, frame: FrameLines, how: str) -> Calibration | None:
     """Pull the pitch markings, projected with ``guess``, onto the frame's painted lines."""
     rows, cols = frame.field.shape
     norm = np.array([[2.0 / cols, 0, -1], [0, 2.0 / rows, -1], [0, 0, 1]])
     h = guess / guess[2, 2]
     for loss_px in LOSS_PX:
+        if not plausible(h, frame.field.shape):
+            return None
         points = frame.visible(h)
         if len(points) < MIN_VISIBLE:
             return None
@@ -195,6 +230,8 @@ def fit(guess: np.ndarray, frame: FrameLines, how: str) -> Calibration | None:
                                x_scale=0.01, max_nfev=200)
         h = homography(result.x)
         h /= h[2, 2]
+    if not plausible(h, frame.field.shape):
+        return None
     points = frame.visible(h)
     if len(points) < MIN_VISIBLE:
         return None
@@ -225,12 +262,6 @@ class _Key:
     homography: np.ndarray
     centre: np.ndarray  # pitch metres under the frame's centre
     span: float  # metres across the middle of the frame
-
-
-def _view(h: np.ndarray, shape: tuple[int, ...]) -> tuple[np.ndarray, float]:
-    rows, cols = shape[:2]
-    left, centre, right = to_pitch(h, np.array([[0, rows / 2], [cols / 2, rows / 2], [cols, rows / 2]]))
-    return centre, float(np.linalg.norm(right - left))
 
 
 class Keyframes:
@@ -294,6 +325,14 @@ class CameraTracker:
         self._last: _Last | None = None
         self._since_attempt = RELOCATE_EVERY
 
+    def seed(self, bgr: np.ndarray, h: np.ndarray) -> None:
+        """Keep a labelled frame as a keyframe before the run starts."""
+        cal = fit(h, FrameLines(bgr), "anchor")
+        if cal is not None and cal.score >= MIN_SCORE:
+            h = cal.homography
+        if plausible(h, bgr.shape):
+            self.keyframes.add(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY), h)
+
     def reset(self) -> None:
         """Forget the previous frame (a cut, or a jump in the clip); keep the keyframes."""
         self._last = None
@@ -325,13 +364,13 @@ class CameraTracker:
         fits = [c for c in (fit(g, frame, how) for g in guesses) if c is not None]
         cal = max(fits, key=lambda c: c.score, default=None)
         guess = guesses[0]
-        if cal is not None and cal.score >= MIN_SCORE:
+        if cal is not None and cal.score >= (KEY_SCORE if how == "relocated" else MIN_SCORE):
             self._last = _Last(gray, frame.field, cal.homography, 0)
             self._since_attempt = RELOCATE_EVERY
             if cal.score >= KEY_SCORE:
                 self.keyframes.add(gray, cal.homography)
             return cal
-        if how == "tracked" and last is not None and last.coasting < MAX_COAST:
+        if how == "tracked" and last is not None and last.coasting < MAX_COAST and plausible(guess, bgr.shape):
             self._last = _Last(gray, frame.field, guess, last.coasting + 1)
             score, visible = (cal.score, cal.visible) if cal is not None else (0.0, 0)
             return Calibration(homography=guess / guess[2, 2], score=score, visible=visible, how="coasted")

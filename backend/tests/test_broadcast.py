@@ -9,7 +9,14 @@ import pytest
 cv2 = pytest.importorskip("cv2")
 pytest.importorskip("scipy")
 
-from matchlens.vision.camera import CameraTracker, FrameLines, fit, project, to_pitch  # noqa: E402
+from matchlens.vision.camera import (  # noqa: E402
+    CameraTracker,
+    FrameLines,
+    fit,
+    plausible,
+    project,
+    to_pitch,
+)
 from matchlens.vision.lines import distance_map  # noqa: E402
 from matchlens.vision.markings import landmarks, model_points, polylines  # noqa: E402
 from matchlens.vision.views import classify, look  # noqa: E402
@@ -96,6 +103,17 @@ def test_camera_model_looks_at_the_pitch():
     assert np.allclose(to_pitch(h, centre), [[52.5, 34.0]], atol=1e-6)
 
 
+def test_squashed_or_mirrored_cameras_are_not_plausible():
+    h = camera(pan=5)
+    shape = (SIZE[1], SIZE[0])
+    assert plausible(h, shape)
+    # The whole pitch squashed onto one line of the frame: every marking would sit on that line.
+    assert not plausible(np.c_[h[:, 0], h[:, 0] * 1.01, h[:, 2]], shape)
+    # The pitch flipped end to end, as if filmed from the far side.
+    assert not plausible(h @ np.array([[-1.0, 0, 105], [0, 1, 0], [0, 0, 1]]), shape)
+    assert not plausible(camera(pan=5, focal=40), shape)  # far too wide for the main camera
+
+
 def test_lines_found_where_the_markings_are(ground):
     h = camera(pan=-12)
     frame = FrameLines(render(ground, h))
@@ -163,7 +181,7 @@ def test_main_camera_frames_and_cuts(ground):
 
 def test_clip_end_to_end(tmp_path, ground):
     """A clip with a cut away and back: sorted, calibrated from one labelled frame, checked on others."""
-    from matchlens.vision.broadcast import Labelled, calibrate, errors, frames
+    from matchlens.vision.broadcast import Labelled, calibrate, errors, frames, keep
 
     shots = [camera(pan=-12 + 0.5 * i) for i in range(16)] + [None] * 8 + [camera(pan=4 + 0.5 * i) for i in range(12)]
     crowd = np.random.default_rng(2).integers(0, 255, (54, 96, 3), dtype=np.uint8).repeat(10, 0).repeat(10, 1)
@@ -173,9 +191,10 @@ def test_clip_end_to_end(tmp_path, ground):
         writer.write(render(ground, h, seed=i) if h is not None else crowd)
     writer.release()
 
-    views = classify(frames(clip, SIZE[0]))
+    images: dict[int, np.ndarray] = {}
+    views = classify(keep(frames(clip, SIZE[0]), {2}, images))
     assert views.main.tolist() == [h is not None for h in shots]
-    results = calibrate(clip, views, {2: shots[2]}, factor=1.0)
+    results = calibrate(clip, views, {2: shots[2]}, images, factor=1.0)
     assert all((r is not None) == (h is not None) for r, h in zip(results, shots, strict=True))
     assert results[24].how == "relocated"
     names = list(landmarks())
@@ -186,3 +205,25 @@ def test_clip_end_to_end(tmp_path, ground):
                        np.array([landmarks()[n] for n, s in zip(names, seen, strict=True) if s]))
         metres, px = errors(results[i].homography, lab)
         assert np.median(px) < 2.0 and np.median(metres) < 0.5, i
+
+
+def test_labelled_frames_let_a_cut_find_the_other_end(tmp_path, ground):
+    """After a cut to a part of the pitch the run has not seen, only a labelled frame there finds it."""
+    from matchlens.vision.broadcast import calibrate, frames, keep
+
+    shots = [camera(pan=-30 + 0.5 * i) for i in range(10)] + [None] * 8 + [camera(pan=30 + 0.5 * i) for i in range(10)]
+    crowd = np.random.default_rng(2).integers(0, 255, (54, 96, 3), dtype=np.uint8).repeat(10, 0).repeat(10, 1)
+    clip = tmp_path / "clip.avi"
+    writer = cv2.VideoWriter(str(clip), cv2.VideoWriter_fourcc(*"MJPG"), 25, SIZE)
+    for i, h in enumerate(shots):
+        writer.write(render(ground, h, seed=i) if h is not None else crowd)
+    writer.release()
+    images: dict[int, np.ndarray] = {}
+    views = classify(keep(frames(clip, SIZE[0]), {2, 24}, images))
+
+    alone = calibrate(clip, views, {2: shots[2]}, images, factor=1.0)
+    assert alone[18] is None  # nothing calibrated looks like the far end
+    both = calibrate(clip, views, {2: shots[2], 24: shots[24]}, images, factor=1.0, until=20)
+    assert both[18] is not None and both[18].how == "relocated"
+    assert reprojection_px(both[18].homography, shots[18]) < 2.0
+    assert both[21:] == [None] * (len(shots) - 21)  # stopped after frame 20
