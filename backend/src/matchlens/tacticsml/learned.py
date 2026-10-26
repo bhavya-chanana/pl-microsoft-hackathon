@@ -78,12 +78,26 @@ def _manifest_hash(manifest: dict) -> str:
     return hashlib.sha256("|".join(sorted(hashes)).encode()).hexdigest()
 
 
+def _check_entry(entry: Any, what: str) -> None:
+    if not (isinstance(entry, dict) and isinstance(entry.get("file"), str) and isinstance(entry.get("sha256"), str)):
+        raise ValueError(f"manifest {what} needs string 'file' and 'sha256'")
+    if Path(entry["file"]).name != entry["file"]:
+        raise ValueError(f"manifest {what} file {entry['file']!r} must be a bare file name")
+
+
 def _read_manifest(d: Path, verify: bool = True) -> dict:
+    """The manifest of weight directory ``d``; ``ValueError`` (or ``OSError``) when it is unusable."""
     manifest = json.loads((d / MANIFEST).read_text())
-    files = [m for m in manifest["members"]] + ([manifest["cvae"]] if manifest.get("cvae") else [])
-    if not manifest["members"]:
+    if not isinstance(manifest, dict):
+        raise ValueError("manifest is not a JSON object")
+    members, cvae = manifest.get("members"), manifest.get("cvae")
+    if not isinstance(members, list) or not members:
         raise ValueError("manifest lists no ensemble members")
-    for m in files:
+    for m in members:
+        _check_entry(m, "member")
+    if cvae is not None:
+        _check_entry(cvae, "cvae")
+    for m in members + ([cvae] if cvae else []):
         path = d / m["file"]
         if not path.is_file():
             raise FileNotFoundError(path)
@@ -94,15 +108,18 @@ def _read_manifest(d: Path, verify: bool = True) -> dict:
 
 
 def weights_available(path: Path | str | None = None) -> bool:
-    """True when a complete, uncorrupted weight set can be loaded."""
-    d = Path(path) if path is not None else weights_dir()
-    if d is None or not (d / MANIFEST).is_file():
-        return False
+    """True when a complete weight set can be loaded: valid manifest, matching hashes, readable npz files.
+
+    Never raises; the registry relies on that to fall back to the baseline.
+    """
     try:
-        _read_manifest(d)
+        d = Path(path) if path is not None else weights_dir()
+        if d is None or not (d / MANIFEST).is_file():
+            return False
+        LearnedModel.load(d)  # cheap (a few MB); catches garbage npz files whose hash still matches
         return True
-    except (OSError, ValueError, KeyError) as exc:
-        log.warning("tactical weights in %s unusable: %s", d, exc)
+    except Exception as exc:  # noqa: BLE001 - any defect means "use the baseline"
+        log.warning("tactical weights unusable: %s: %s", type(exc).__name__, exc)
         return False
 
 

@@ -390,3 +390,35 @@ def test_propose_ranks_sampled_moves_with_the_critic(exported, demo_match, monke
         gains = [p.gain["objective"] for p in props]
         assert gains == sorted(gains, reverse=True) and gains[0] > 0
         assert all(1 <= len(p.moves) <= 7 for p in props)
+
+
+# ---------------------------------------------------------------- broken weight directories
+
+@pytest.mark.parametrize("text", ["[]", "{}", "null", "not json", '{"members": ["a"]}', '{"members": []}',
+                                  '{"members": [{"file": "a.npz"}]}',
+                                  '{"members": [{"file": "../x.npz", "sha256": "0"}]}',
+                                  '{"members": [{"file": "a.npz", "sha256": "0"}], "cvae": 3}'])
+def test_weights_available_survives_a_bad_manifest(text, tmp_path):
+    (tmp_path / "manifest.json").write_text(text)
+    assert learned.weights_available(tmp_path) is False
+
+
+def test_weights_available_rejects_a_garbage_npz_with_a_matching_hash(tmp_path):
+    import hashlib
+
+    blob = b"garbage, not a zip"
+    (tmp_path / "gat_seed0.npz").write_bytes(blob)
+    digest = hashlib.sha256(blob).hexdigest()
+    (tmp_path / "manifest.json").write_text(json.dumps(
+        {"members": [{"file": "gat_seed0.npz", "sha256": digest, "seed": 0}], "cvae": None}))
+    assert learned.weights_available(tmp_path) is False
+
+
+def test_registry_falls_back_on_a_bad_weight_dir(tmp_path, clean_registry):
+    from matchlens.tacticsml.baseline import BaselineModel
+
+    (tmp_path / "manifest.json").write_text("[]")
+    clean_registry.setenv(learned.ENV_WEIGHTS, str(tmp_path))
+    clean_registry.setenv("MATCHLENS_EVALUATOR", "auto")
+    registry.get_tactical_model.cache_clear()
+    assert isinstance(registry.get_tactical_model(), BaselineModel)
