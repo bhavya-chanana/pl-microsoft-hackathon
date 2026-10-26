@@ -77,7 +77,7 @@ export function MatchCentre() {
               </TabsTrigger>
             </TabsList>
             <TabsContent value="timeline">
-              <div tabIndex={0} aria-label={copy.timeline.heading} className="max-h-96 overflow-y-auto rounded-lg border bg-card px-4">
+              <div aria-label={copy.timeline.heading} className="rounded-lg border bg-card px-4">
                 <MatchTimeline />
               </div>
             </TabsContent>
@@ -94,7 +94,7 @@ export function MatchCentre() {
       </div>
       <aside
         aria-label={copy.feed.heading}
-        className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:h-[calc(100dvh-6rem)]"
+        className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:pr-1 lg:[scrollbar-gutter:stable]"
       >
         <div className="flex flex-col gap-4 rounded-lg border bg-card p-4 shadow-raised">
           <CatchupDialog />
@@ -104,11 +104,11 @@ export function MatchCentre() {
         </div>
         <ProfilePanel className="rounded-lg border bg-card p-4" />
         {wide ? (
-          <section aria-labelledby="feed-heading" className="flex min-h-0 flex-1 flex-col gap-3">
+          <section aria-labelledby="feed-heading" className="flex flex-col gap-3">
             <h2 id="feed-heading" className="font-display text-lg font-semibold">
               {copy.feed.heading}
             </h2>
-            <div tabIndex={0} aria-labelledby="feed-heading" className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-4">
+            <div aria-labelledby="feed-heading" className="pb-4">
               <InsightFeed />
             </div>
           </section>
