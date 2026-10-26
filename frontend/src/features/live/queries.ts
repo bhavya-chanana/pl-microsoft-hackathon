@@ -1,11 +1,13 @@
 "use client";
 
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { z } from "zod";
 
-import { getJson } from "@/lib/api";
+import { ApiError, getJson, postJson } from "@/lib/api";
 import {
+  BoardCreated,
+  type BoardRequest,
   Catchup,
   type CatchupWindow,
   CoachBrief,
@@ -21,10 +23,15 @@ import {
   ScriptCheck,
   PlayerStats,
   Recap,
+  RolloutView,
+  type RolloutVariant,
   RunSummary,
+  TacticsBoard,
   TeamStats,
 } from "@/lib/contract";
 import { profileQuery } from "@/features/profile/profile-store";
+
+import { FIXTURE_BOARD_PREFIX } from "@/features/tactics/constants";
 
 import { useLive } from "./live-store";
 
@@ -46,7 +53,12 @@ export const queryKeys = {
   pulse: ["pulse"] as const,
   scenarios: ["scenarios"] as const,
   scriptCheck: ["script-check"] as const,
+  tacticsBoard: (id: string) => ["tactics-board", id] as const,
+  rollout: (id: string, tacticId: string, variant: RolloutVariant) => ["rollout", id, tacticId, variant] as const,
 };
+
+/** Boards with the fixture id prefix are answered from bundled sample data (the `?fixture=1` demo), not the backend. */
+const isFixture = (id: string) => id.startsWith(FIXTURE_BOARD_PREFIX);
 
 /** Refresh live queries when new insights land, at most once a second. */
 function useInsightRefresh(prefix: string) {
@@ -231,5 +243,48 @@ export function useScriptCheck() {
     },
     refetchInterval: 5_000,
     placeholderData: keepPreviousData,
+  });
+}
+
+/** Starts a Tactics Board; the backend answers 202 with the frozen situation and builds the tactics in the background. */
+export function useCreateBoard(fixture: boolean) {
+  return useMutation({
+    mutationFn: async (request: BoardRequest) =>
+      fixture
+        ? (await import("@/features/tactics/fixtures")).createFixtureBoard(request)
+        : postJson("tactics/boards", request, BoardCreated),
+  });
+}
+
+/** A board, polled every 750 ms until every tactic is scored (or the build failed). */
+export function useTacticsBoard(boardId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.tacticsBoard(boardId ?? ""),
+    queryFn: async ({ signal }) =>
+      boardId && isFixture(boardId)
+        ? (await import("@/features/tactics/fixtures")).fixtureBoard(boardId)
+        : getJson(`tactics/boards/${boardId}`, TacticsBoard, undefined, signal),
+    enabled: Boolean(boardId),
+    refetchInterval: (query) => {
+      const { data, error } = query.state;
+      if (data?.status === "done" || data?.status === "failed") return false;
+      if (error instanceof ApiError && error.status === 404) return false;
+      return 750;
+    },
+    staleTime: 0,
+  });
+}
+
+/** One simulated branch (5 Hz frames, events, intent drawings). A rollout never changes once made. */
+export function useRollout(boardId: string | null, tacticId: string | null, variant: RolloutVariant, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.rollout(boardId ?? "", tacticId ?? "", variant),
+    queryFn: async ({ signal }) =>
+      boardId && isFixture(boardId)
+        ? (await import("@/features/tactics/fixtures")).fixtureRollout(tacticId ?? "", variant)
+        : getJson(`tactics/boards/${boardId}/rollouts/${tacticId}`, RolloutView, { variant }, signal),
+    enabled: Boolean(boardId && tacticId) && enabled,
+    staleTime: Infinity,
+    retry: false,
   });
 }

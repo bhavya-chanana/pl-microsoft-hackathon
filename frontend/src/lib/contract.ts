@@ -601,3 +601,197 @@ export const ScriptCheck = z.object({
 export type ScriptCheck = z.infer<typeof ScriptCheck>;
 
 export const Kickoff = z.object({ match_id: z.string(), run_id: z.string(), title: z.string(), speed: z.number() });
+
+/* ------------------------------------------------------------------ *
+ * Tactics board. Mirrors backend/src/matchlens/tactics/{models,intent}.py.
+ * Coordinates are absolute pitch metres (105 x 68), as in tracking frames.
+ * ------------------------------------------------------------------ */
+
+export const BOARD_RISKS = ["safe", "balanced", "bold"] as const;
+export const BOARD_SOURCES = ["live", "moment", "elapsed"] as const;
+export const ROLLOUT_VARIANTS = ["typical", "best", "worst"] as const;
+export const TACTIC_STATUSES = ["thinking", "evaluating", "ready", "rejected"] as const;
+
+export const BoardRisk = z.enum(BOARD_RISKS);
+export const RolloutVariant = z.enum(ROLLOUT_VARIANTS);
+export type BoardRisk = z.infer<typeof BoardRisk>;
+export type RolloutVariant = z.infer<typeof RolloutVariant>;
+
+/** What a board is built from: the live moment, a key moment from the feed, or any match time. */
+export const BoardSource = z.object({
+  kind: z.enum(BOARD_SOURCES),
+  insight_id: z.string().optional(),
+  elapsed: z.number().optional(),
+});
+export type BoardSource = z.infer<typeof BoardSource>;
+
+export const BoardRequest = z.object({
+  source: BoardSource,
+  team_id: z.string(),
+  prompt: z.string().max(400).optional(),
+  n: z.number().int().min(3).max(5),
+  horizon_s: z.number().min(5).max(10),
+  risk: BoardRisk,
+  language: z.string(),
+});
+export type BoardRequest = z.infer<typeof BoardRequest>;
+
+export const PlayerSpot = z.object({
+  player_id: z.string(),
+  name: z.string(),
+  team_id: z.string(),
+  role: z.string(),
+  x: z.number(),
+  y: z.number(),
+  tags: z.array(z.string()).default([]),
+});
+export type PlayerSpot = z.infer<typeof PlayerSpot>;
+
+export const Situation = z.object({
+  match_id: z.string(),
+  elapsed: z.number(),
+  minute_label: z.string(),
+  period: z.number(),
+  score: z.record(z.string(), z.number()),
+  possession_team_id: z.string(),
+  carrier_id: z.string().nullable(),
+  ball: z.tuple([z.number(), z.number()]),
+  ball_zone: z.string(),
+  phase: z.string(),
+  coaching_team_id: z.string(),
+  players: z.array(PlayerSpot),
+  frame: Frame,
+});
+export type Situation = z.infer<typeof Situation>;
+
+export const Interval = z.object({ value: z.number(), low: z.number(), high: z.number() });
+export type Interval = z.infer<typeof Interval>;
+
+/** Monte-Carlo summary of the rollouts of one tactic (or the baseline). Probabilities are 0..1. */
+export const OutcomeStats = z.object({
+  rollouts: z.number(),
+  horizon_s: z.number(),
+  p_shot: Interval,
+  mean_xg: z.number(),
+  p_goal: Interval,
+  p_box_entry: Interval,
+  p_turnover: Interval,
+  p_concede_shot: Interval,
+  xt_delta: z.number(),
+  time_to_shot_s: z.number().nullable(),
+  terminals: z.record(z.string(), z.number()),
+});
+export type OutcomeStats = z.infer<typeof OutcomeStats>;
+
+export const RoleDirective = z.object({
+  player_id: z.string(),
+  action: z.string(),
+  zone: z.string().nullable(),
+  target_player_id: z.string().nullable(),
+  start_s: z.number(),
+  end_s: z.number(),
+});
+export type RoleDirective = z.infer<typeof RoleDirective>;
+
+export const BallStep = z.object({
+  action: z.string(),
+  from_player_id: z.string().nullable(),
+  to_player_id: z.string().nullable(),
+  to_zone: z.string().nullable(),
+});
+
+export const TacticIntent = z.object({
+  team_id: z.string(),
+  title: z.string(),
+  idea: z.string(),
+  mechanism: z.string(),
+  directives: z.array(RoleDirective),
+  ball_plan: z.array(BallStep),
+  press: z
+    .object({ trigger: z.string(), cover_shadow_on: z.string().nullable(), intensity: z.number() })
+    .nullable(),
+  style_changes: z.array(z.object({ knob: z.string(), delta: z.number() })),
+  rest_defence: z.number(),
+  cites: z.array(z.string()),
+});
+export type TacticIntent = z.infer<typeof TacticIntent>;
+
+export const TacticStatus = z.enum(TACTIC_STATUSES);
+export type TacticStatus = z.infer<typeof TacticStatus>;
+
+export const TacticResult = z.object({
+  tactic_id: z.string(),
+  persona: z.string(),
+  intent: TacticIntent,
+  outcome: OutcomeStats.nullable().default(null),
+  /** Metric (an OutcomeStats field name) to change against the baseline; probabilities as 0..1 differences. */
+  lift: z.record(z.string(), z.number()).default({}),
+  utility: z.number().nullable().default(null),
+  rank: z.number().nullable().default(null),
+  status: TacticStatus,
+  problems: z.array(z.string()).default([]),
+  confidence: z.enum(["low", "medium", "high"]).nullable().default(null),
+});
+export type TacticResult = z.infer<typeof TacticResult>;
+
+export const Verdict = z.object({
+  headline: z.string(),
+  text: z.string(),
+  recommended_tactic_id: z.string().nullable(),
+  cited_metrics: z.array(z.string()),
+});
+export type Verdict = z.infer<typeof Verdict>;
+
+export const TacticsBoard = z.object({
+  board_id: z.string(),
+  status: z.enum(["thinking", "evaluating", "done", "failed"]),
+  situation: Situation,
+  prompt: z.string().nullable(),
+  risk: BoardRisk,
+  horizon_s: z.number(),
+  baseline: OutcomeStats.nullable().default(null),
+  tactics: z.array(TacticResult).default([]),
+  verdict: Verdict.nullable().default(null),
+  evaluator: z.string(),
+  model_label: z.string(),
+  recorded: z.boolean().default(false),
+  errors: z.array(z.string()).default([]),
+});
+export type TacticsBoard = z.infer<typeof TacticsBoard>;
+
+export const BoardCreated = z.object({ board_id: z.string(), situation: Situation });
+export type BoardCreated = z.infer<typeof BoardCreated>;
+
+/** An intent stroke over a rollout (named apart from the telestrator `Drawing`). */
+export const TacticDrawing = z.object({
+  kind: z.enum(["path", "zone", "lane", "shot", "arrow"]),
+  team_id: z.string().nullable(),
+  points: z.array(z.tuple([z.number(), z.number()])),
+  label: z.string().nullable().default(null),
+});
+export type TacticDrawing = z.infer<typeof TacticDrawing>;
+
+export const RolloutEvent = z.object({
+  event_id: z.string(),
+  elapsed: z.number(),
+  type: z.string(),
+  team_id: z.string().nullable().default(null),
+  player_id: z.string().nullable().default(null),
+  related_player_id: z.string().nullable().default(null),
+  outcome: z.string().default(""),
+});
+export type RolloutEvent = z.infer<typeof RolloutEvent>;
+
+export const RolloutView = z.object({
+  tactic_id: z.string(),
+  variant: RolloutVariant,
+  seed: z.number(),
+  frames: z.array(Frame),
+  events: z.array(RolloutEvent),
+  drawings: z.array(TacticDrawing),
+  terminal: z.string(),
+});
+export type RolloutView = z.infer<typeof RolloutView>;
+
+/** The do-nothing branch every tactic is compared with. */
+export const BASELINE_ID = "baseline";

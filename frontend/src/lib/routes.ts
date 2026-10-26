@@ -6,6 +6,7 @@ export const routes = {
   coach: "/coach",
   multiverse: "/multiverse",
   lab: "/lab",
+  tactics: "/tactics",
 } as const;
 
 export const serverRoutes = {

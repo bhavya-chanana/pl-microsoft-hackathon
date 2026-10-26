@@ -9,14 +9,14 @@ type XY = { x: number; y: number };
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
-function arrowHead(from: XY, to: XY, size: number) {
+export function arrowHead(from: XY, to: XY, size: number) {
   const angle = Math.atan2(to.y - from.y, to.x - from.x);
   const left = { x: to.x - size * Math.cos(angle - 0.45), y: to.y - size * Math.sin(angle - 0.45) };
   const right = { x: to.x - size * Math.cos(angle + 0.45), y: to.y - size * Math.sin(angle + 0.45) };
   return `M ${left.x} ${left.y} L ${to.x} ${to.y} L ${right.x} ${right.y}`;
 }
 
-function linePath(points: XY[]) {
+export function linePath(points: XY[]) {
   return points.map((p, i) => `${i ? "L" : "M"} ${p.x} ${p.y}`).join(" ");
 }
 

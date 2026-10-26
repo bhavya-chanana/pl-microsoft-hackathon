@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, ClipboardList, FlaskConical, LayoutGrid, MonitorPlay, Radio } from "lucide-react";
+import { Bot, ClipboardList, FlaskConical, LayoutGrid, MonitorPlay, Radio, Route } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -16,6 +16,7 @@ const NAV = [
   { href: routes.multiverse, label: copy.nav.multiverse, short: "Multiverse", icon: LayoutGrid },
   { href: routes.broadcast, label: copy.nav.broadcast, short: "Broadcast", icon: MonitorPlay },
   { href: routes.coach, label: copy.nav.coach, short: "Coach", icon: ClipboardList },
+  { href: routes.tactics, label: copy.nav.tactics, short: "Tactics", icon: Route },
   { href: routes.lab, label: copy.nav.lab, short: "Lab", icon: FlaskConical },
   { href: routes.agents, label: copy.nav.agents, short: "Agents", icon: Bot },
 ] as const;

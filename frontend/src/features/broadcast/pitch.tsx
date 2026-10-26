@@ -15,7 +15,7 @@ const H = 68;
 const TAP_RADIUS_PX = 22;
 
 /** Chalk markings for a 105 x 68 m pitch, drawn once. */
-const Markings = memo(function Markings() {
+export const Markings = memo(function Markings() {
   return (
     <g className="fill-none stroke-chalk" strokeWidth={0.3}>
       <rect x={0} y={0} width={W} height={H} />
