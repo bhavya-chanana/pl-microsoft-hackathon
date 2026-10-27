@@ -87,7 +87,8 @@ def test_board_lifecycle(client, session):
     assert sorted(t["rank"] for t in ready) == [1, 2, 3]
     assert len({t["intent"]["mechanism"] for t in ready}) >= 3
     assert board["verdict"] and board["verdict"]["headline"]
-    assert board["verdict"]["recommended_tactic_id"] in {t["tactic_id"] for t in ready}
+    rec = board["verdict"]["recommended_tactic_id"]  # a short run rarely separates from the baseline
+    assert rec in {t["tactic_id"] for t in ready} or (rec is None and board["verdict"]["headline"] == "No clear winner")
     assert set(ready[0]["lift"]) >= {"p_shot", "mean_xg", "p_box_entry", "p_turnover", "p_concede_shot", "xt_delta"}
     assert board["evaluator"] and board["model_label"] and board["recorded"] is False
     assert isinstance(board["situation"]["ball"], list)

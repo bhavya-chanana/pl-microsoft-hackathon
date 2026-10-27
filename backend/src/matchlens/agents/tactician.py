@@ -46,6 +46,7 @@ from matchlens.domain.models import MatchMeta
 from matchlens.domain.pitch import distance, to_relative
 from matchlens.simulator.style import SimStyle
 from matchlens.tactics import playbook
+from matchlens.tactics.evaluate import clear_winner
 from matchlens.tactics.intent import ZONES, Action, BallAction, Mechanism, PressTrigger, TacticIntent
 from matchlens.tactics.models import OutcomeStats, Situation, TacticResult, Verdict
 from matchlens.tactics.validate import check_intent
@@ -591,6 +592,7 @@ def verdict_payload(
 ) -> dict[str, Any]:
     names = {t: meta.team(t).name if meta else t for t in situation.score}
     scored = [r for r in ranked if r.outcome is not None][:top]
+    winner = clear_winner(scored, baseline)
     return {
         "task": "tactics_verdict",
         "language": language,
@@ -604,6 +606,7 @@ def verdict_payload(
                    "coaching_team_id": situation.coaching_team_id},
         "baseline": baseline.model_dump() if baseline is not None else None,
         "ranked": [_row(r) for r in scored],
+        "clear_winner_id": winner.tactic_id if winner else None,
         "allowed_metrics": sorted(set(OUTCOME_METRICS) | {m for r in scored for m in r.lift}),
         "names": sorted({p.name for p in situation.players} | set(names.values())
                         | {t for t in situation.score}),
@@ -719,6 +722,10 @@ def check_verdict(draft: VerdictDraft, payload: dict[str, Any]) -> list[str]:
     ids = {r["tactic_id"] for r in payload.get("ranked") or []}
     if draft.recommended_tactic_id is not None and draft.recommended_tactic_id not in ids:
         problems.append(f"recommended_tactic_id {draft.recommended_tactic_id} is not one of the ranked tactics")
+    winner = payload.get("clear_winner_id")
+    if draft.recommended_tactic_id is not None and draft.recommended_tactic_id != winner:
+        problems.append("recommended_tactic_id must be clear_winner_id, or null when no idea clearly beats the "
+                        "baseline")
     allowed_metrics = set(payload.get("allowed_metrics") or [])
     cited = {m.split(".")[0] for m in draft.cited_metrics}
     unknown = [m for m in draft.cited_metrics if m.split(".")[0] not in allowed_metrics]
@@ -759,6 +766,22 @@ _VERDICT_TEXT = {
            "{bps}%), अपेक्षित गोल {xg} (आधार {bxg}), और शॉट खाने की संभावना {cs}% (आधार {bcs}%)। भरोसा: {conf}। "
            "{k} सिमुलेशन ({h} सेकंड) पर आधारित; सिमुलेशन एक मॉडल है, भविष्यवाणी नहीं।"),
 }
+_NO_WINNER_TEXT = {
+    "en": ("No clear winner",
+           "None of the {count} ideas clearly beats doing nothing: the best-ranked, {title} ({mechanism}), gives a "
+           "shot chance of {ps}% against {bps}% if nothing changes and a {cs}% chance of conceding a shot "
+           "(baseline {bcs}%), but the ranges overlap. Based on {k} simulations of {h} s; the simulator is a "
+           "model, not a prediction."),
+    "es": ("Sin ganador claro",
+           "Ninguna de las {count} ideas supera claramente a no cambiar nada: la mejor clasificada, {title} "
+           "({mechanism}), da una probabilidad de tiro de {ps}% frente a {bps}% si no se cambia nada y {cs}% de "
+           "conceder un tiro (base {bcs}%), pero los rangos se solapan. Basado en {k} simulaciones de {h} s; el "
+           "simulador es un modelo, no una prediccion."),
+    "hi": ("कोई स्पष्ट विजेता नहीं",
+           "{count} विचारों में से कोई भी कुछ न बदलने से साफ़ बेहतर नहीं है: सबसे ऊपर {title} ({mechanism}) में शॉट की "
+           "संभावना {ps}% (कुछ न बदलने पर {bps}%) और शॉट खाने की संभावना {cs}% (आधार {bcs}%) है, पर दायरे आपस में "
+           "मिलते हैं। {k} सिमुलेशन ({h} सेकंड) पर आधारित; सिमुलेशन एक मॉडल है, भविष्यवाणी नहीं।"),
+}
 _NO_VERDICT = {
     "en": ("No clear winner", "None of the ideas could be simulated, so there is nothing to recommend yet."),
     "es": ("Sin ganador claro", "Ninguna idea se pudo simular, asi que todavia no hay recomendacion."),
@@ -774,12 +797,15 @@ def offline_verdict(payload: dict[str, Any]) -> VerdictDraft:
     if not rows or not base:
         head, text = _NO_VERDICT[lang]
         return VerdictDraft(headline=head, text=text, recommended_tactic_id=None, cited_metrics=[])
-    best, out = rows[0], rows[0]["outcome"]
+    winner_id = payload.get("clear_winner_id")
+    winner = next((r for r in rows if r["tactic_id"] == winner_id), None)
+    best = winner or rows[0]
+    out = best["outcome"]
 
     def pct(stats: dict[str, Any], key: str) -> int:
         return round(stats[key]["value"] * 100)
 
-    head, body = _VERDICT_TEXT[lang]
+    head, body = _VERDICT_TEXT[lang] if winner else _NO_WINNER_TEXT[lang]
     values = {
         "title": best["title"], "mechanism": best["mechanism"].replace("_", " "), "count": len(rows),
         "ps": pct(out, "p_shot"), "bps": pct(base, "p_shot"), "xg": f"{out['mean_xg']:.2f}",
@@ -788,7 +814,7 @@ def offline_verdict(payload: dict[str, Any]) -> VerdictDraft:
         "h": f"{out['horizon_s']:g}",
     }
     return VerdictDraft(headline=head.format(**values)[:100], text=body.format(**values),
-                        recommended_tactic_id=best["tactic_id"],
+                        recommended_tactic_id=winner["tactic_id"] if winner else None,
                         cited_metrics=["p_shot", "mean_xg", "p_concede_shot"])
 
 

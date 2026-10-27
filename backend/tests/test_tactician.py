@@ -321,7 +321,9 @@ def ranked_pair(team: str):
     a = a.model_copy(update={"outcome": outcome(p_shot=0.42, xg=0.17, concede=0.15)})
     b = result(blank(team, title="Third-man run", mechanism=Mechanism.THIRD_MAN), "positional", 0.1, rank=2,
                lift={"p_shot": 0.02}, confidence="low")
-    return [a, b], outcome(p_shot=0.30, xg=0.11, concede=0.2)
+    # The baseline's shot-chance range (0.25-0.31) sits below A's (0.32-0.52): A is a clear winner.
+    base = outcome(p_shot=0.30, xg=0.11, concede=0.2)
+    return [a, b], base.model_copy(update={"p_shot": Interval(value=0.30, low=0.25, high=0.31)})
 
 
 def test_verdict_accepts_a_grounded_answer(meta, situation):

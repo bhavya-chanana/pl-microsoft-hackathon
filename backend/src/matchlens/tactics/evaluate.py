@@ -202,6 +202,19 @@ def confidence(stats: OutcomeStats, baseline: OutcomeStats) -> Literal["low", "m
     return "low"
 
 
+def clear_gain(stats: OutcomeStats, baseline: OutcomeStats) -> bool:
+    """True when an idea beats doing nothing by more than the simulation noise: its shot chance is clearly
+    higher, or its chance of conceding a shot clearly lower (the intervals do not overlap)."""
+    return stats.p_shot.low > baseline.p_shot.high or stats.p_concede_shot.high < baseline.p_concede_shot.low
+
+
+def clear_winner(ranked: list[TacticResult], baseline: OutcomeStats | None) -> TacticResult | None:
+    """The best-ranked result with a clear gain over the baseline, or None when everything is within noise."""
+    if baseline is None:
+        return None
+    return next((r for r in ranked if r.outcome is not None and clear_gain(r.outcome, baseline)), None)
+
+
 def rank(results: list[TacticResult], baseline: OutcomeStats, risk: Risk) -> list[TacticResult]:
     """Results with lift, utility, rank and confidence filled in, best first.
 

@@ -171,7 +171,9 @@ Write, in the language given by "language":
 - text: three to five sentences. Say which tactic to try and why, using the outcome statistics; name the
   trade-off honestly (what it risks, how sure we are, where intervals overlap the baseline, or why a
   lower-ranked but safer idea is also worth a look). Mention players and mechanisms by name where it helps.
-- recommended_tactic_id: the tactic_id of your pick, normally rank 1; null when nothing clearly beats the baseline.
+- recommended_tactic_id: only the payload's "clear_winner_id" (the best idea whose range clearly beats doing nothing), or
+  null when it is null. Never recommend any other tactic_id, even rank 1; when it is null, say plainly that no idea
+  clearly beats the baseline.
 - cited_metrics: the metric keys from "allowed_metrics" that your text relies on.
 Numbers: use ONLY numbers that appear in the JSON, copied exactly. Write a probability as a whole-number percentage
 (0.42 as 42%) or with one decimal, and mean_xg and xt_delta with two decimals. Quote an interval bound only for a

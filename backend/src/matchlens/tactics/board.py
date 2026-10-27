@@ -335,7 +335,19 @@ def _fallback_verdict(final: list[TacticResult], baseline: OutcomeStats | None, 
     if not scored or baseline is None:
         return Verdict(headline="No clear winner", cited_metrics=[], recommended_tactic_id=None,
                        text="None of the ideas could be simulated, so there is nothing to recommend yet.")
-    best = scored[0]
+    winner = evaluate.clear_winner(scored, baseline)
+    if winner is None:
+        top = scored[0]
+        out = top.outcome
+        assert out is not None
+        return Verdict(
+            headline="No clear winner", recommended_tactic_id=None, cited_metrics=["p_shot", "p_concede_shot"],
+            text=(f"None of the {len(scored)} ideas clearly beats doing nothing: the best-ranked, {top.intent.title}, "
+                  f"gives a shot chance of {out.p_shot.value:.0%} against {baseline.p_shot.value:.0%} if nothing "
+                  f"changes and a {out.p_concede_shot.value:.0%} chance of conceding a shot (baseline "
+                  f"{baseline.p_concede_shot.value:.0%}), but the ranges overlap. Based on {out.rollouts} simulations "
+                  f"of {out.horizon_s:g} s; the simulator is a model, not a prediction."))
+    best = winner
     out = best.outcome
     assert out is not None
     return Verdict(
