@@ -117,6 +117,11 @@ PHRASES: dict[str, dict[str, tuple[str, str]]] = {
         "hi": ("{minute} पर सुधार", "अपडेट: {previous_name} की जगह अब {value_name}।"),
         "es": ("Corrección en el {minute}", "Actualizado: {previous_name} pasa a ser {value_name}."),
     },
+    "correction_goal": {
+        "en": ("Goal at {corrected_minute} re-credited to {value_name}", "The data feed first credited {previous_name}."),
+        "hi": ("{corrected_minute} का गोल अब {value_name} के नाम", "डेटा फ़ीड ने पहले {previous_name} को श्रेय दिया था।"),
+        "es": ("Gol del {corrected_minute} acreditado a {value_name}", "El feed de datos lo atribuyó primero a {previous_name}."),
+    },
     "kickoff": {
         "en": ("Kick-off", "{home} v {away} is under way."),
         "hi": ("किक-ऑफ़", "{home} बनाम {away} शुरू।"),
@@ -157,6 +162,9 @@ PHRASES["card"] = PHRASES["card_yellow"]  # old recorded signals without the car
 
 def phrase_key(pack: Pack) -> str:
     sig = pack["signal"]
+    if sig["type"] == "correction" and sig["facts"].get("corrected_event_type") == "goal" \
+            and sig["facts"].get("corrected_minute_label"):
+        return "correction_goal"
     if sig["type"] == "card":
         return "card_red" if sig["facts"].get("card") in ("red", "second_yellow") else "card_yellow"
     if sig["type"] == "period":
@@ -204,6 +212,7 @@ def _vars(pack: Pack, lang: str) -> _Safe:
         on_name=names.get(str(facts.get("on")), "-"), off_name=names.get(str(facts.get("off")), "-"),
         previous_name=names.get(str(facts.get("previous")), str(facts.get("previous", "-"))),
         value_name=names.get(str(facts.get("value")), str(facts.get("value", "-"))),
+        corrected_minute=facts.get("corrected_minute_label", "-"),
         card_name=CARD_NAMES.get(str(facts.get("card")), CARD_NAMES["yellow"])[lang],
         outcome=OUTCOMES.get(str(facts.get("outcome")), {}).get(lang, str(facts.get("outcome", "-"))),
         on_pitch=facts.get("players_on_pitch", "-"),

@@ -93,6 +93,9 @@ class _Computed:
     clock: float = 0.0
     elapsed: float = 0.0
     status: str = "pre_match"  # pre_match | live | half_time | full_time
+    last_event_period: int = 0  # for minutes played: the previous event's period and clock
+    last_event_clock: float = 0.0
+    duel: tuple[str, str] | None = None  # open contest: (presser id, carrier id)
     period_kickoffs: set[str] = field(default_factory=set)  # event ids of kick-offs that start a half
     possession_team: str | None = None
     possession_since: float = 0.0
@@ -371,6 +374,7 @@ class MatchEngine:
                     "previous": str(reason.attrs.get("previous", "")),
                     "value": str(reason.attrs.get("value", "")),
                     "corrected_event_type": target.type.value if target else None,
+                    "corrected_minute_label": target.minute_label if target else None,
                     "updated_signals": ",".join(s.signal_id for s in changed),
                     "removed_signals": ",".join(removed),
                 },
@@ -428,6 +432,8 @@ class MatchEngine:
         w = self.config.momentum
         th = self.config.thresholds
         self._tick(e)
+        self._credit_minutes(e)
+        self._resolve_duel(e)
         c.period, c.clock, c.elapsed = e.period, e.clock, e.elapsed
         team = c.teams.get(e.team_id) if e.team_id else None
         player = c.players.get(e.player_id) if e.player_id else None
@@ -501,6 +507,8 @@ class MatchEngine:
                 assert team and player and e.start
                 team.pressures += 1
                 player.pressures += 1
+                if e.related_player_id in c.players:
+                    c.duel = (player.player_id, str(e.related_player_id))
                 rx, _ = self._rel(e.team_id, e.start.x, e.start.y)
                 if rx >= 52.5:
                     self._pressure(e)
@@ -652,6 +660,31 @@ class MatchEngine:
             case _:
                 if e.team_id and e.type in (EventType.FREE_KICK, EventType.THROW_IN, EventType.GOAL_KICK):
                     self._set_possession(e.team_id, e.elapsed)
+
+    def _credit_minutes(self, e: Event) -> None:
+        """Playing time: the clock time since the previous event, for everyone on the pitch, while the match is
+        live and within one period (the clock restarts for the second half, so nothing is added across it)."""
+        c = self.c
+        if c.status == "live" and c.last_event_period == e.period and e.clock > c.last_event_clock:
+            dt = e.clock - c.last_event_clock
+            for p in c.players.values():
+                if p.on_pitch:
+                    p.seconds_played += dt
+        c.last_event_period, c.last_event_clock = e.period, e.clock
+
+    def _resolve_duel(self, e: Event) -> None:
+        """A duel opens on a PRESSURE event (the presser against the ball carrier) and is settled by the next
+        event: the presser wins it with a TACKLE of their own; a foul by the presser, or anything else (the
+        carrier kept or moved the ball), is won by the carrier."""
+        c = self.c
+        if c.duel is None:
+            return
+        presser, carrier = c.duel
+        c.duel = None
+        winner = presser if e.type == EventType.TACKLE and e.player_id == presser else carrier
+        for pid in (presser, carrier):
+            c.players[pid].duels_total += 1
+        c.players[winner].duels_won += 1
 
     def _set_possession(self, team_id: str | None, elapsed: float) -> None:
         c = self.c
