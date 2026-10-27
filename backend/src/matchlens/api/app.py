@@ -135,7 +135,7 @@ def _session():
 
 
 class ReplayRequest(BaseModel):
-    seed: int = 7
+    seed: int = Field(default=7, ge=0, le=1_000_000)
     speed: float = Field(default=1.0, gt=0, le=60)
     start_minute: float = Field(default=0.0, ge=0, le=100)
 
@@ -185,6 +185,14 @@ async def health() -> dict[str, Any]:
 
 def _profile(mode: Mode, language: Language, club_id: str | None, player_id: str | None,
              metric: str | None) -> FanProfile:
+    """The fan's view of the loaded match. A club or player from another match (the browser keeps the
+    profile across matches) is ignored, not applied: it would only hide insights."""
+    s = manager.session
+    if s is not None:
+        if club_id not in (s.meta.home.team_id, s.meta.away.team_id):
+            club_id = None
+        if player_id not in s.meta.players:
+            player_id = None
     return FanProfile(mode=mode, language=language, club_id=club_id, player_id=player_id, metric=metric)
 
 
@@ -411,7 +419,11 @@ async def timeline(
     type: list[str] | None = Query(default=None),
 ) -> list[dict[str, Any]]:
     s = _session()
-    types = {EventType(t) for t in type} if type else None
+    try:
+        types = {EventType(t) for t in type} if type else None
+    except ValueError as exc:
+        bad = sorted({t for t in type or [] if t not in EventType._value2member_map_})
+        raise HTTPException(422, f"unknown event type {bad}; use one of {[e.value for e in EventType]}") from exc
     rows = s.engine.events(team_id=team_id, player_id=player_id, types=types)
     if types is None:
         return [r for r in s.timeline() if (not team_id or r["team_id"] == team_id)

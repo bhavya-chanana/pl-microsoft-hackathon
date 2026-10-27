@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useGoalCall } from "@/features/broadcast/goal-takeover";
 import { playerName } from "@/lib/match";
+import { ProfileReconciler } from "@/features/profile/profile-reconciler";
 import { OnboardingSheet } from "./onboarding";
 import { useEffect, type ReactNode } from "react";
 
@@ -119,6 +120,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Drawers />
       <GoalToaster />
       <OnboardingSheet />
+      <ProfileReconciler />
     </>
   );
 }

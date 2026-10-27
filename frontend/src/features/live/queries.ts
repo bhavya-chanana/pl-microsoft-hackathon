@@ -153,11 +153,14 @@ export function usePlayerEvents(playerId: string | null) {
 }
 
 export function useTeamStats(teamId: string | null) {
+  const runId = useLive((s) => s.runId);
   return useQuery({
-    queryKey: queryKeys.team(teamId ?? ""),
+    queryKey: [...queryKeys.team(teamId ?? ""), runId],
     queryFn: ({ signal }) => getJson(`teams/${teamId}`, TeamStats, undefined, signal),
     enabled: Boolean(teamId),
-    refetchInterval: 5_000,
+    // A 404 means this team is not in the loaded match (stale ids); asking again will not help.
+    retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+    refetchInterval: (query) => (query.state.error instanceof ApiError && query.state.error.status === 404 ? false : 5_000),
   });
 }
 
