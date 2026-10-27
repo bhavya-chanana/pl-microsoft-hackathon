@@ -106,6 +106,10 @@ class TacticsBoard(_Model):
     errors: list[str] = Field(default_factory=list)
     requested: int = 3  # how many ideas the coach asked for
     shortfall: str | None = None  # plain English (the board's fallback text is English only) when fewer are shown
+    # Offline only: the brief was matched to built-in recipes. Mechanisms it named that are on the board, and
+    # one plain-English sentence for the coach; both empty when a model wrote the ideas or there is no brief.
+    prompt_matched: list[str] = Field(default_factory=list)
+    prompt_note: str | None = None
 
 
 class Drawing(_Model):

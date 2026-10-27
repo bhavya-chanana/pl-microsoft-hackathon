@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { BOARD_RISKS, type BoardRisk } from "@/lib/contract";
@@ -15,6 +15,8 @@ export const HORIZON_RANGE = { min: 5, max: 10 } as const;
 
 export type PromptSettings = {
   prompt: string;
+  /** The Custom goal is chosen: the brief is the coach's own words, typed in the box under the goals. */
+  custom: boolean;
   risk: BoardRisk;
   n: number;
   horizon: number;
@@ -27,8 +29,16 @@ type Props = PromptSettings & {
 };
 
 /** The brief for the board: free text, quick starts, how bold to be, how many ideas and how far ahead. */
-export function ScenarioPrompt({ prompt, risk, n, horizon, onChange, extra }: Props) {
+export function ScenarioPrompt({ prompt, custom: customOn, risk, n, horizon, onChange, extra }: Props) {
   const id = useId();
+  const brief = useRef<HTMLTextAreaElement>(null);
+  const wasCustom = useRef(customOn);
+  // Choosing Custom puts the cursor in the brief; coming back to a page with it already chosen does not.
+  useEffect(() => {
+    if (customOn && !wasCustom.current) brief.current?.focus();
+    wasCustom.current = customOn;
+  }, [customOn]);
+  const needsText = customOn && prompt.trim() === "";
   const tooLong = prompt.length > MAX_PROMPT;
   return (
     <fieldset className="flex min-w-0 flex-col gap-4">
@@ -41,13 +51,15 @@ export function ScenarioPrompt({ prompt, risk, n, horizon, onChange, extra }: Pr
         <ul aria-labelledby={`${id}-goal`} className="grid gap-3 sm:grid-cols-2 min-[1100px]:grid-cols-4">
           {g.goals.map((goal) => {
             const custom = goal.text === "";
-            const active = custom ? prompt !== "" && !g.goals.some((x) => x.text && x.text === prompt) : prompt === goal.text;
+            const active = custom ? customOn : !customOn && prompt === goal.text;
             return (
               <li key={goal.label}>
                 <button
                   type="button"
                   aria-pressed={active}
-                  onClick={() => onChange({ prompt: goal.text })}
+                  onClick={() =>
+                    onChange(custom ? { custom: true, prompt: g.goals.some((x) => x.text && x.text === prompt) ? "" : prompt } : { custom: false, prompt: goal.text })
+                  }
                   className={cn(
                     "flex min-h-16 w-full flex-col items-start justify-center gap-0.5 rounded-2xl px-4 py-3 text-left ring-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                     active ? "bg-raised ring-2 ring-primary" : "ring-border hover:bg-raised",
@@ -60,6 +72,33 @@ export function ScenarioPrompt({ prompt, risk, n, horizon, onChange, extra }: Pr
             );
           })}
         </ul>
+        {customOn && (
+          <div className="flex flex-col gap-2">
+            <label htmlFor={`${id}-prompt`} className="text-sm font-medium">
+              {g.customLabel}
+            </label>
+            <textarea
+              ref={brief}
+              id={`${id}-prompt`}
+              rows={3}
+              value={prompt}
+              maxLength={MAX_PROMPT + 100}
+              onChange={(e) => onChange({ prompt: e.target.value })}
+              placeholder={t.placeholder}
+              aria-invalid={tooLong}
+              aria-describedby={`${id}-help ${id}-count`}
+              className="w-full max-w-2xl resize-y rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <div className="flex max-w-2xl items-start justify-between gap-3">
+              <p id={`${id}-help`} className={cn("text-xs", needsText ? "text-warning" : "text-muted-foreground")}>
+                {needsText ? g.customNeeded : g.customHelp}
+              </p>
+              <span id={`${id}-count`} className={cn("shrink-0 text-xs tabular-nums", tooLong ? "text-destructive" : "text-muted-foreground")}>
+                {t.length(prompt.length, MAX_PROMPT)}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       <details className="group rounded-2xl border px-4 py-1 open:pb-4">
@@ -69,31 +108,6 @@ export function ScenarioPrompt({ prompt, risk, n, horizon, onChange, extra }: Pr
         </summary>
         <div className="mt-3 flex flex-col gap-4">
           {extra}
-      <div className="flex flex-col gap-2">
-        <label htmlFor={`${id}-prompt`} className="text-sm font-medium">
-          {t.label}
-        </label>
-        <textarea
-          id={`${id}-prompt`}
-          rows={3}
-          value={prompt}
-          maxLength={MAX_PROMPT + 100}
-          onChange={(e) => onChange({ prompt: e.target.value })}
-          placeholder={t.placeholder}
-          aria-invalid={tooLong}
-          aria-describedby={`${id}-help ${id}-count`}
-          className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-        <div className="flex items-start justify-between gap-3">
-          <p id={`${id}-help`} className="text-xs text-muted-foreground">
-            {t.help}
-          </p>
-          <span id={`${id}-count`} className={cn("shrink-0 text-xs tabular-nums", tooLong ? "text-destructive" : "text-muted-foreground")}>
-            {t.length(prompt.length, MAX_PROMPT)}
-          </span>
-        </div>
-      </div>
-
       <div className="flex flex-col gap-2">
         <span id={`${id}-risk`} className="text-sm font-medium">
           {t.risk}

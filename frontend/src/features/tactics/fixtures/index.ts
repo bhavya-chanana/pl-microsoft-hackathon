@@ -283,6 +283,8 @@ export function fixtureBoard(boardId: string): TacticsBoard {
     model_label: "Sample data",
     recorded: true,
     errors: [],
+    prompt_matched: [],
+    prompt_note: null,
   };
 }
 

@@ -44,7 +44,7 @@ from matchlens.domain.models import (
 from matchlens.domain.pitch import to_relative
 from matchlens.simulator.fork import RolloutTrace, SimSnapshot, snapshot_from_frame
 from matchlens.simulator.style import SimStyle
-from matchlens.tactics import evaluate, playbook, rollout
+from matchlens.tactics import brief, evaluate, playbook, rollout
 from matchlens.tactics.drawings import intent_drawings, rollout_drawings
 from matchlens.tactics.intent import _LANE_Y, _THIRD_X, TacticIntent
 from matchlens.tactics.models import (
@@ -401,6 +401,8 @@ class _Record:
     cancel: threading.Event = field(default_factory=threading.Event)
     errors: list[str] = field(default_factory=list)
     cite_keys: set[str] | None = None
+    steer: bool = False  # offline with a brief: built-in recipes are chosen to fit it
+    matched: list[str] = field(default_factory=list)  # mechanisms the brief names
     task: asyncio.Task[None] | None = None
     finished: bool = False
     started: float = field(default_factory=time.monotonic)
@@ -485,6 +487,9 @@ class BoardService:
         rec = _Record(board=board, request=request, meta=session.meta, snap=snap, styles=styles,
                       provider_context=context, base_seed=rollout.snapshot_digest(snap), k=default_k(),
                       clients=clients, evaluator=evaluator)
+        # No model to write ideas from the brief: honour it by choosing among the built-in recipes.
+        rec.steer = bool((request.prompt or "").strip()) and not clients.settings.online and not board.recorded
+        rec.matched = brief.match_brief(request.prompt) if rec.steer else []
         self._boards[board.board_id] = rec
         while len(self._boards) > self.max_boards:
             _, old = self._boards.popitem(last=False)
@@ -664,8 +669,11 @@ class BoardService:
                 rec.errors.append(f"recipes: {type(exc).__name__}")
                 recipes = []
             mechanisms: set[str] = set()
+            cards = rec.request.n if rec.steer else MAX_RECIPE_CARDS
+            if rec.steer:
+                recipes = brief.steer(recipes, rec.matched)
             for intent in recipes:
-                if len(mechanisms) < MAX_RECIPE_CARDS and intent.mechanism.value not in mechanisms:
+                if len(mechanisms) < cards and intent.mechanism.value not in mechanisms:
                     mechanisms.add(intent.mechanism.value)
                     await admit("recipe", intent)
             if tactician is not None:
@@ -732,6 +740,12 @@ class BoardService:
             final = tactician.select_diverse(ranked, rec.request.n)
         else:
             final = ranked[: rec.request.n]
+        if rec.steer and rec.matched:  # the brief's ideas are always on the board, best first
+            top = [r for r in ranked if r.intent.mechanism.value in rec.matched][: rec.request.n]
+            taken = {r.tactic_id for r in top}
+            rest = [r for r in ranked if r.tactic_id not in taken]
+            room = rec.request.n - len(top)
+            final = top + (tactician.select_diverse(rest, room) if tactician is not None else rest[:room])
         final = evaluate.rank(list(final), baseline, board.risk)
         for r in rec.results.values():
             if r.status == "rejected":
@@ -741,7 +755,8 @@ class BoardService:
         rec.intents = {tid: i for tid, i in rec.intents.items() if tid in kept or tid in rec.user}
         for r in final:
             rec.results[r.tactic_id] = r
-        self._publish(rec, status="evaluating", shortfall=_shortfall(rec.errors, len(final), rec.request.n))
+        self._publish(rec, status="evaluating", shortfall=_shortfall(rec.errors, len(final), rec.request.n),
+                      **self._brief_fields(rec, final))
 
         remaining = default_deadline_s() - (time.monotonic() - rec.started)
         verdict: Verdict | None = None
@@ -757,6 +772,23 @@ class BoardService:
         if verdict is None:
             verdict = self._template_verdict(tactician, rec, final, baseline)
         self._publish(rec, status="done", verdict=verdict)
+
+    @staticmethod
+    def _brief_fields(rec: _Record, final: list[TacticResult]) -> dict[str, Any]:
+        """What the board says about an offline brief: the mechanisms it matched and one honest sentence."""
+        if not rec.steer:
+            return {}
+        shown = [m for m in rec.matched if any(r.intent.mechanism.value == m for r in final)]
+        if shown:
+            names = ", ".join(m.replace("_", " ") for m in shown)
+            note = f"Matched your brief to built-in recipes ({names}). New ideas need the live model."
+        elif rec.matched:
+            asked = ", ".join(m.replace("_", " ") for m in rec.matched)
+            note = (f"Your brief asks for {asked}, which does not fit this moment, so these are the standard "
+                    "ideas. New ideas need the live model.")
+        else:
+            note = "No built-in recipe fits your brief, so these are the standard ideas. New ideas need the live model."
+        return {"prompt_matched": shown, "prompt_note": note}
 
     @staticmethod
     def _template_verdict(tactician: Any, rec: _Record, final: list[TacticResult],

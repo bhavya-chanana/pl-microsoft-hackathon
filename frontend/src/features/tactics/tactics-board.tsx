@@ -161,7 +161,7 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
 
   const [source, setSource] = useState<BoardSource>({ kind: "live" });
   const [pickedTeam, setPickedTeam] = useState<string | null>(null);
-  const [settings, setSettings] = useState<PromptSettings>({ prompt: "", risk: "balanced", n: 4, horizon: 10 });
+  const [settings, setSettings] = useState<PromptSettings>({ prompt: "", custom: false, risk: "balanced", n: 4, horizon: 10 });
   const [boardId, setBoardId] = useState<string | null>(null);
   const [editing, setEditing] = useState(true);
   const [pickedBranch, setPickedBranch] = useState<string | null>(null);
@@ -178,7 +178,8 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
   const tooLong = settings.prompt.length > MAX_PROMPT;
   const matchOver = useLive((s) => s.state?.status === "full_time");
   const reviewingOver = !fixture && matchOver && source.kind === "live";
-  const canBuild = Boolean(teamId) && !tooLong && !create.isPending && !reviewingOver;
+  const needsBrief = settings.custom && settings.prompt.trim() === "";
+  const canBuild = Boolean(teamId) && !tooLong && !needsBrief && !create.isPending && !reviewingOver;
 
   const build = () => {
     if (!teamId) return;
@@ -402,6 +403,7 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
                           </li>
                         ))}
                     </ul>
+                    {board?.prompt_note && board.status !== "thinking" && <p className="mt-2 text-sm text-muted-foreground">{board.prompt_note}</p>}
                     {board?.shortfall && board.status !== "thinking" && (
                       <p className="mt-2 text-sm text-muted-foreground">
                         {board.requested ? `Showing ${board.tactics.length} of ${board.requested} ideas. ` : ""}

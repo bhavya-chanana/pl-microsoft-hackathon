@@ -766,6 +766,10 @@ export const TacticsBoard = z.object({
   errors: z.array(z.string()).default([]),
   requested: z.number().optional(),
   shortfall: z.string().nullable().optional(),
+  /** Built-in recipes the free-text brief matched when no model could read it (empty: none, or no brief). */
+  prompt_matched: z.array(z.string()).default([]),
+  /** One sentence on how an offline backend read the brief (null: no brief, or a model wrote the ideas). */
+  prompt_note: z.string().nullable().default(null),
 });
 export type TacticsBoard = z.infer<typeof TacticsBoard>;
 
