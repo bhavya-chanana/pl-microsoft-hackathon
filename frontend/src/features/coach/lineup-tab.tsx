@@ -176,7 +176,7 @@ function PitchFrame({ horizontal, label, children }: { horizontal: boolean; labe
   return (
     <div
       className="relative mx-auto w-full overflow-hidden rounded-2xl border bg-turf"
-      style={horizontal ? { aspectRatio: "105 / 68", width: "min(100%, calc(clamp(360px, calc(100dvh - 270px), 640px) * 105 / 68))" } : { aspectRatio: "3 / 4", width: "min(100%, calc(clamp(360px, calc(100dvh - 330px), 640px) * 3 / 4))" }}
+      style={horizontal ? { aspectRatio: "105 / 68", width: "min(100%, calc(clamp(360px, calc(100dvh - 345px), 640px) * 105 / 68))" } : { aspectRatio: "3 / 4", width: "min(100%, calc(clamp(360px, calc(100dvh - 360px), 640px) * 3 / 4))" }}
     >
       <PitchLines horizontal={horizontal} />
       <div role="group" aria-label={label} className="absolute inset-0">

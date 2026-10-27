@@ -177,7 +177,7 @@ function MomentCard({ item, language }: { item: FeedItem; language: Language }) 
       </header>
       <h3 className="text-xl leading-7 font-semibold">{item.headline}</h3>
       {item.body && <p className="line-clamp-2 max-w-prose text-[15px] text-muted-foreground">{item.body}</p>}
-      {item.key_numbers.length > 0 && (
+      {item.key_numbers.length > 0 && item.signal_type !== "card" && (
         <dl className="flex flex-wrap gap-x-5 gap-y-1">
           {item.key_numbers.slice(0, 3).map((n) => (
             <div key={n.label} className="flex items-baseline gap-1.5">

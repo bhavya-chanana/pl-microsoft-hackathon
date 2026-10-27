@@ -494,7 +494,7 @@ export const copy = {
     heading: "Tactics",
     intro:
       "Freeze a moment, ask for ideas, and watch each one played out ten seconds at a time. Every tactic is tried against the same situation many times, so you see what usually happens, not just what could.",
-    fixtureBanner: "Showing sample data, not a live match.",
+    fixtureBanner: "Example board with sample teams, not the live match.",
     // Controls
     setup: "Set the scene",
     moment: {

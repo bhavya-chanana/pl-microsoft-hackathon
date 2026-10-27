@@ -97,7 +97,7 @@ function Header({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
     <>
     <div ref={sentinel} aria-hidden className="h-px" />
     <div className={cn("sticky top-[var(--stack-h)] z-30 border-b transition-colors print:hidden", stuck ? "glass-strong" : "bg-background/90")}>
-      <div className="mx-auto flex max-w-7xl flex-wrap items-end justify-between gap-x-4 px-4 md:px-6 xl:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col px-4 md:px-6 min-[1100px]:flex-row min-[1100px]:items-end min-[1100px]:justify-between min-[1100px]:gap-x-4 xl:px-8">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5">
         {meta && teamId && (
           <div role="radiogroup" aria-label={copy.coachPage.team} className="flex gap-2">
