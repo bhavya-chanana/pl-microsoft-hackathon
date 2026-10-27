@@ -16,6 +16,8 @@ Configuration (environment or backend/.env):
     MATCHLENS_REASONING_FAST     reasoning effort for live agents (default low)
     MATCHLENS_REASONING_STRONG   reasoning effort for recaps (default high)
     MATCHLENS_REASONING_CREATIVE reasoning effort for persona calls (default medium)
+    MATCHLENS_REASONING_SCENARIO reasoning effort for the Scenario agent on the strong model (default medium:
+                                 high takes over two minutes on gpt-5-mini, past the Lab's wait)
     MATCHLENS_MODEL_CREATIVE_REASONING  1|0: whether the creative deployment is a reasoning model. Azure
                                  deployment names are arbitrary, so set this when the name is not gpt-5.../o3...
     MATCHLENS_CREATIVE_TEMPERATURE  sampling temperature for persona calls (default 0.9), sent ONLY when the
@@ -86,6 +88,7 @@ class LlmSettings:
     strong_reasoning: str = "high"
     creative_model: str = ""  # "" means the strong model
     creative_reasoning: str = "medium"
+    scenario_reasoning: str = "medium"
     creative_temperature: float = 0.9
     creative_is_reasoning: bool | None = None  # MATCHLENS_MODEL_CREATIVE_REASONING; None: decide by name
 
@@ -117,6 +120,7 @@ class LlmSettings:
             strong_reasoning=os.getenv("MATCHLENS_REASONING_STRONG", "high"),
             creative_model=os.getenv("MATCHLENS_MODEL_CREATIVE", ""),
             creative_reasoning=os.getenv("MATCHLENS_REASONING_CREATIVE", "medium"),
+            scenario_reasoning=os.getenv("MATCHLENS_REASONING_SCENARIO", "medium"),
             creative_temperature=float(os.getenv("MATCHLENS_CREATIVE_TEMPERATURE", "0.9")),
             creative_is_reasoning=_flag(os.getenv("MATCHLENS_MODEL_CREATIVE_REASONING")),
         )
@@ -187,6 +191,10 @@ class ModelClients:
             return {}
         effort = self.settings.strong_reasoning if strong else self.settings.fast_reasoning
         return {"reasoning": {"effort": effort}}
+
+    def scenario_options(self) -> dict[str, Any]:
+        """Strong-model options for the Scenario agent: its own effort, so a fan waits seconds, not minutes."""
+        return {"reasoning": {"effort": self.settings.scenario_reasoning}} if self.settings.online else {}
 
     def creative_options(self) -> dict[str, Any]:
         """Run options for persona calls.

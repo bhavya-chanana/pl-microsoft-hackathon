@@ -26,7 +26,7 @@ from matchlens.agents.contracts import FanProfile, Language, Mode
 from matchlens.agents.llm import build_clients
 from matchlens.agents.pipeline import AgentTeam, InsightPipeline
 from matchlens.agents.pundit import MAX_QUESTION
-from matchlens.agents.scenario import MAX_PROMPT, write_storyline
+from matchlens.agents.scenario import MAX_PROMPT, SCENARIO_TIMEOUT_S, write_storyline
 from matchlens.agents.scenario import roster as scenario_roster
 from matchlens.agents.services import CATCHUP_WINDOWS, FanServices, narration_text, personalise_feed
 from matchlens.api.kb_routes import router as kb_router
@@ -479,16 +479,24 @@ async def scenario_presets() -> dict[str, Any]:
     return {"presets": presets(), "roster": scenario_roster(default_match_meta())}
 
 
+DRAFT_FAILURES = {
+    "timeout": (504, f"the Scenario agent took longer than {SCENARIO_TIMEOUT_S:.0f}s"),
+    "no_answer": (502, "the Scenario agent did not answer"),
+    "unplayable": (422, "the storyline could not be made playable"),
+}
+
+
 @app.post("/api/scenarios/draft")
 async def draft_scenario(req: ScenarioDraftRequest) -> dict[str, Any]:
     """Turn a match described in words into a storyline (strong model), checked before it is offered."""
     rt = _runtime()
     if not rt.clients.settings.online:
         raise HTTPException(503, "writing a match from a description needs the live models; pick a preset")
-    story, problems = await write_storyline(rt.team, default_match_meta(), req.prompt, req.language.value)
-    if story is None:
-        raise HTTPException(422, {"message": "the storyline could not be made playable", "problems": problems})
-    return {"storyline": story.model_dump(mode="json")}
+    written = await write_storyline(rt.team, default_match_meta(), req.prompt, req.language.value)
+    if written.story is None:
+        status, message = DRAFT_FAILURES[written.failure or "no_answer"]
+        raise HTTPException(status, {"message": message, "reason": written.failure, "problems": written.problems})
+    return {"storyline": written.story.model_dump(mode="json")}
 
 
 @app.post("/api/scenarios/kickoff")
