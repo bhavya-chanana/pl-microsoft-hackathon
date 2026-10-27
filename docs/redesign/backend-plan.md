@@ -155,10 +155,10 @@ Contract: additive. Tell implementer to show `shortfall` under the board.
 ## Status
 | Task | Status | Commit |
 |------|--------|--------|
-| P1-a | planned | |
-| P1-b | planned | |
-| P1-c | planned | |
-| P1-d | planned | |
+| P1-a | approved | (see git log, INTERPRET:) |
+| P1-b | approved | (same commit as P1-a) |
+| P1-c | assigned | |
+| P1-d | assigned | |
 | P2-a | planned | |
 | P2-b | planned | |
 | P2-c | planned | |

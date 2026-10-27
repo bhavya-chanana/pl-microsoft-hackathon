@@ -1,12 +1,13 @@
 "use client";
 
-import { Code2, Compass, History, MessageCircleQuestion, Moon, Newspaper, Radio, Search, Sparkles, ChartColumn, ClipboardList, Route } from "lucide-react";
+import { Code2, Compass, History, Pause, Play, RotateCcw, SlidersHorizontal, MessageCircleQuestion, Moon, Newspaper, Radio, Search, Sparkles, ChartColumn, ClipboardList, Route } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { useReplayControl, useReplayStatus } from "@/features/stream/use-replay";
 import { copy } from "@/lib/copy";
 import { routes } from "@/lib/routes";
 
@@ -51,6 +52,8 @@ export function CommandPalette() {
   const showDev = useShell((s) => s.showDev);
   const { resolvedTheme, setTheme } = useTheme();
   const [query, setQuery] = useState("");
+  const status = useReplayStatus();
+  const control = useReplayControl();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -94,6 +97,26 @@ export function CommandPalette() {
           <CommandItem onSelect={go(routes.coachTactics)}>
             <Route aria-hidden />
             {copy.palette.buildIdeas}
+          </CommandItem>
+          <CommandItem onSelect={run(() => useShell.getState().setStream(true))} keywords={["stream", "feed", "source", "speed", "language", "listen", "settings"]}>
+            <SlidersHorizontal aria-hidden />
+            {copy.stream.title}
+          </CommandItem>
+          <CommandItem onSelect={run(() => useShell.getState().setStream(true))} keywords={["faster", "slower", "playback"]}>
+            <SlidersHorizontal aria-hidden />
+            {copy.stream.changeSpeed}
+          </CommandItem>
+          <CommandItem onSelect={run(() => control.mutate({ paused: !status.data?.paused }))} keywords={["pause", "resume", "play"]}>
+            {status.data?.paused ? <Play aria-hidden /> : <Pause aria-hidden />}
+            {status.data?.paused ? copy.stream.resumeCmd : copy.stream.pauseCmd}
+          </CommandItem>
+          <CommandItem onSelect={run(() => useShell.getState().setStream(true))} keywords={["past", "recorded", "video", "archive"]}>
+            <History aria-hidden />
+            {copy.stream.replayCmd}
+          </CommandItem>
+          <CommandItem onSelect={run(() => useShell.getState().setRestartOpen(true))} keywords={["restart", "again", "reset"]}>
+            <RotateCcw aria-hidden />
+            {copy.stream.restart}
           </CommandItem>
           <CommandItem onSelect={run(() => setTheme(resolvedTheme === "light" ? "dark" : "light"))}>
             <Moon aria-hidden />

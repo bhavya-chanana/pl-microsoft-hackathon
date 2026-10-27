@@ -35,7 +35,7 @@ function detail(run: RunSummary, showing: boolean): string {
 }
 
 /** The match archive: reopen a stored replay, or play a recorded match (demo only). */
-export function PastMatches({ className }: { className?: string }) {
+export function PastMatches({ className, bare }: { className?: string; bare?: boolean }) {
   const client = useQueryClient();
   const current = useLive((s) => s.runId);
   const runs = useRuns();
@@ -61,8 +61,8 @@ export function PastMatches({ className }: { className?: string }) {
   const busy = open.isPending || play.isPending;
 
   return (
-    <section aria-labelledby="archive-heading" className={cn("flex flex-col gap-4 rounded-lg border bg-card p-4", className)}>
-      <div className="flex flex-col gap-0.5">
+    <section aria-labelledby="archive-heading" className={cn("flex flex-col gap-4", !bare && "rounded-lg border bg-card p-4", className)}>
+      <div className={cn("flex flex-col gap-0.5", bare && "sr-only")}>
         <h2 id="archive-heading" className="inline-flex items-center gap-2 font-display text-lg font-semibold">
           <History aria-hidden className="size-4 text-muted-foreground" />
           {T.heading}

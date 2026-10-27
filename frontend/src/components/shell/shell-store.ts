@@ -5,6 +5,11 @@ import { create } from "zustand";
 type ShellStore = {
   paletteOpen: boolean;
   devOpen: boolean;
+  /** Stream settings sheet, the restart confirmation, the chosen start minute and the commentary switch. */
+  streamOpen: boolean;
+  restartOpen: boolean;
+  startMinute: number;
+  listen: boolean;
   /** Developer tools show only when NEXT_PUBLIC_DEV_TOOLS=1. */
   showDev: boolean;
   catchupOpen: boolean;
@@ -18,12 +23,20 @@ type ShellStore = {
   setPundit: (open: boolean) => void;
   setPalette: (open: boolean) => void;
   setDev: (open: boolean) => void;
+  setStream: (open: boolean) => void;
+  setRestartOpen: (open: boolean) => void;
+  setStartMinute: (minute: number) => void;
+  setListen: (on: boolean) => void;
   setShowDev: (show: boolean) => void;
 };
 
 export const useShell = create<ShellStore>()((set) => ({
   paletteOpen: false,
   devOpen: false,
+  streamOpen: false,
+  restartOpen: false,
+  startMinute: 0,
+  listen: false,
   showDev: process.env.NEXT_PUBLIC_DEV_TOOLS === "1",
   catchupOpen: false,
   recapOpen: false,
@@ -35,5 +48,9 @@ export const useShell = create<ShellStore>()((set) => ({
   setPundit: (punditOpen) => set({ punditOpen }),
   setPalette: (paletteOpen) => set({ paletteOpen }),
   setDev: (devOpen) => set({ devOpen }),
+  setStream: (streamOpen) => set({ streamOpen }),
+  setRestartOpen: (restartOpen) => set({ restartOpen }),
+  setStartMinute: (startMinute) => set({ startMinute }),
+  setListen: (listen) => set({ listen }),
   setShowDev: (showDev) => set({ showDev }),
 }));

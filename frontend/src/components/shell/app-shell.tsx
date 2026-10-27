@@ -17,12 +17,15 @@ import { PlayerSheet } from "@/features/player/player-sheet";
 import { PunditPanel } from "@/features/pundit/pundit-panel";
 import { useShell } from "./shell-store";
 import { CommandPalette } from "./command-palette";
+import { StreamHost } from "@/features/stream/stream-host";
+
 import { DevDrawer } from "./dev-drawer";
 import { MatchHeader } from "./match-header";
 import { TabBar } from "./tab-bar";
 import { TopBar } from "./top-bar";
 import { ProfileMenu } from "./profile-menu";
 import { CommandChip } from "./command-palette";
+import { StreamButton } from "./stream-button";
 
 /** Team colours from the match data, normalised to a readable lightness on dark. */
 function useTeamColours() {
@@ -97,6 +100,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <MatchHeader hero={hero} />
       {/* Mobile has no top bar: search and profile sit in the header's top-right corner. */}
       <div className="fixed top-0 right-2 z-50 flex h-11 items-center gap-1 md:hidden">
+        <StreamButton />
         <CommandChip />
         <ProfileMenu />
       </div>
@@ -111,6 +115,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <TabBar />
       <CommandPalette />
       <DevDrawer />
+      <StreamHost />
       <Drawers />
       <GoalToaster />
       <OnboardingSheet />

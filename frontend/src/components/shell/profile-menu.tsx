@@ -1,13 +1,12 @@
 "use client";
 
-import { ChevronDown, Code2, User } from "lucide-react";
+import { ChevronDown, Code2, SlidersHorizontal, User } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ListenToggle } from "@/features/companion/narration";
 import { useCoach } from "@/features/coach/coach-store";
 import { ClubChip, Field, MoreFields, StyleAndLanguage } from "@/features/profile/profile-panel";
 import { usePrefs } from "@/features/profile/prefs-store";
@@ -72,6 +71,10 @@ export function ProfileMenu() {
             </ToggleGroupItem>
           </ToggleGroup>
         </Field>
+        <Button variant="secondary" className="h-11 justify-start gap-3 px-3" onClick={() => useShell.getState().setStream(true)}>
+          <SlidersHorizontal aria-hidden />
+          {copy.stream.open}
+        </Button>
         <div className="flex flex-col border-t pt-1">
           <SwitchRow label={copy.profile.coachView} checked={coachMode} onChange={setCoachMode} />
           <SwitchRow label={copy.profile.notifications} checked={notify} onChange={setNotify} />
@@ -83,7 +86,6 @@ export function ProfileMenu() {
           </summary>
           <div className="flex flex-col gap-3 pt-2">
             {!coachMode && <MoreFields />}
-            {!coachMode && <ListenToggle />}
             {showDev && (
               <Button variant="ghost" className="h-11 justify-start gap-3 px-2" onClick={() => setDev(true)}>
                 <Code2 aria-hidden />

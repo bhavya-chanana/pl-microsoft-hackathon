@@ -4,6 +4,7 @@ import { Volume2, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { Toggle } from "@/components/ui/toggle";
+import { useShell } from "@/components/shell/shell-store";
 import { useFeed, useHealth } from "@/features/live/queries";
 import { profileQuery, useFanProfile } from "@/features/profile/profile-store";
 import type { FanProfile, FeedItem, Language } from "@/lib/contract";
@@ -150,11 +151,12 @@ export function Narrator({ enabled }: { enabled: boolean }) {
 
 const noSubscribe = () => () => {};
 
-/** The Listen switch for the Match Centre. */
+/** The Listen switch. The reading itself is done by one Narrator mounted in the app shell. */
 export function ListenToggle() {
-  const [enabled, setEnabled] = useState(false);
+  const enabled = useShell((s) => s.listen);
+  const setEnabled = useShell((s) => s.setListen);
   const supported = useSyncExternalStore(noSubscribe, () => "speechSynthesis" in window || "Audio" in window, () => true);
-  const azure = useNarration(enabled);
+  const azure = useHealth().data?.speech === "azure";
 
   const voice = azure ? copy.narration.azureVoice : copy.narration.browserVoice;
   return (

@@ -107,7 +107,7 @@ export function ClubChip() {
 
 /** Style (Casual or Analyst) and language. */
 export function StyleAndLanguage() {
-  const { mode, language, setMode, setLanguage } = useProfile();
+  const { mode, setMode } = useProfile();
   return (
     <>
       <Field label={copy.profile.style} id="mode-label">
@@ -126,20 +126,28 @@ export function StyleAndLanguage() {
           ))}
         </ToggleGroup>
       </Field>
-      <Field label={copy.profile.language} id="language-label">
-        <Select items={copy.languages} value={language} onValueChange={(value) => value && setLanguage(value as Language)}>
-          <SelectTrigger aria-labelledby="language-label" className={trigger}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {LANGUAGES.map((l) => (
-              <SelectItem key={l} value={l} lang={l}>
-                {copy.languages[l]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
+      <LanguageField />
     </>
+  );
+}
+
+/** The language picker (commentary, insights and the pundit). */
+export function LanguageField() {
+  const { language, setLanguage } = useProfile();
+  return (
+    <Field label={copy.profile.language} id="language-label">
+      <Select items={copy.languages} value={language} onValueChange={(value) => value && setLanguage(value as Language)}>
+        <SelectTrigger aria-labelledby="language-label" className={trigger}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {LANGUAGES.map((l) => (
+            <SelectItem key={l} value={l} lang={l}>
+              {copy.languages[l]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
   );
 }
