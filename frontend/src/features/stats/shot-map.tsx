@@ -1,6 +1,9 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
+
+import { Button } from "@/components/ui/button";
 
 import { Segmented } from "@/components/ui/segmented";
 import { useLive } from "@/features/live/live-store";
@@ -136,6 +139,7 @@ function ShotMarks({
             }}
           >
             <circle r={markSize(shot.xg) * radius + 1} fill="transparent" />
+            {tip?.pinned && tip.id === id && <circle r={markSize(shot.xg) * radius + 1.1} className="fill-none stroke-foreground" strokeWidth={0.45} />}
             <Mark outcome={shot.event.outcome} r={markSize(shot.xg) * radius} className="stroke-current" />
             {goal && (
               <text y={0.9 * radius} textAnchor="middle" fontSize={2.4 * radius} fontWeight={700} className="pointer-events-none fill-background">
@@ -165,6 +169,41 @@ function Tooltip({ shot, meta, box }: { shot: PlottedShot; meta: MatchMeta; box:
         {shot.xg !== null && ` · ${S.xg(shot.xg)}`}
       </p>
     </div>
+  );
+}
+
+/** The pinned shot in words, with ‹ › to step through every shot in the order they happened. */
+function ShotDetail({ shots, id, meta, onStep, onClose }: { shots: PlottedShot[]; id: string; meta: MatchMeta; onStep: (id: string) => void; onClose: () => void }) {
+  const i = shots.findIndex((x) => x.event.event_id === id);
+  if (i < 0) return null;
+  const shot = shots[i];
+  const e = shot.event;
+  const bits = ["body_part", "situation", "shot_type"].flatMap((k) => (typeof e.attrs[k] === "string" ? [String(e.attrs[k]).replaceAll("_", " ")] : []));
+  const go = (d: number) => onStep(shots[(i + d + shots.length) % shots.length].event.event_id);
+  return (
+    <section aria-label={S.detail} className="flex items-center gap-2 rounded-xl bg-raised p-2 ring-1 ring-border">
+      <Button variant="ghost" size="icon" className="size-11 shrink-0" aria-label={S.prev} onClick={() => go(-1)}>
+        <ChevronLeft aria-hidden />
+      </Button>
+      <div role="status" className="flex min-w-0 flex-1 flex-col text-center">
+        <p className="truncate text-base font-medium">
+          <span aria-hidden className={cn("mr-2 inline-block size-2.5 rounded-full", shot.side === "home" ? "bg-home" : "bg-away")} />
+          {playerName(meta, e.player_id)} <span className="text-muted-foreground tabular-nums">{e.minute_label}</span>
+        </p>
+        <p className="truncate text-[13px] text-muted-foreground">
+          {S.outcomes[e.outcome] ?? e.outcome.replaceAll("_", " ")}
+          {shot.xg !== null && ` · ${S.xg(shot.xg)}`}
+          {bits.length > 0 && ` · ${bits.join(", ")}`}
+          {` · ${i + 1} / ${shots.length}`}
+        </p>
+      </div>
+      <Button variant="ghost" size="icon" className="size-11 shrink-0" aria-label={S.next} onClick={() => go(1)}>
+        <ChevronRight aria-hidden />
+      </Button>
+      <Button variant="ghost" className="h-11 px-3 text-[13px]" onClick={onClose}>
+        {S.close}
+      </Button>
+    </section>
   );
 }
 
@@ -235,10 +274,11 @@ export function ShotMapPanel({ className }: { className?: string }) {
             <HalfPitch />
             <ShotMarks shots={shots} meta={meta} active={active} goalNumber={goalNumber} tip={tip} setTip={setTip} />
           </svg>
-          {tip && shots.find((x) => x.event.event_id === tip.id) && (
+          {tip && !tip.pinned && shots.find((x) => x.event.event_id === tip.id) && (
             <Tooltip shot={shots.find((x) => x.event.event_id === tip.id)!} meta={meta} box={{ x: -3, y: -3, w: W + 6, h: VIEW_H + 3 }} />
           )}
           </div>
+          {tip?.pinned && <ShotDetail shots={shots} id={tip.id} meta={meta} onStep={(id) => setTip({ id, pinned: true })} onClose={() => setTip(null)} />}
           <figcaption className="flex flex-col gap-1.5">
             <Legend />
             <p className="flex gap-4 text-xs">
@@ -275,7 +315,7 @@ export function ShotMapPanel({ className }: { className?: string }) {
                   spread={1.7}
                 />
               </svg>
-              {tip && shots.find((x) => x.event.event_id === tip.id) && (
+              {tip && !tip.pinned && shots.find((x) => x.event.event_id === tip.id) && (
                 <Tooltip shot={shots.find((x) => x.event.event_id === tip.id)!} meta={meta} box={ZOOM} />
               )}
             </div>

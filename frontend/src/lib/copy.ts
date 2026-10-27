@@ -137,6 +137,10 @@ export const copy = {
     noTracking: "Needs tracking data",
   },
   shotMap: {
+    detail: "Shot detail",
+    prev: "Previous shot",
+    next: "Next shot",
+    close: "Close",
     heading: "Shot map",
     help: "Every shot so far, both teams attacking the same goal. Bigger marks are better chances (xG).",
     empty: "No shots yet. They appear here as they happen.",
