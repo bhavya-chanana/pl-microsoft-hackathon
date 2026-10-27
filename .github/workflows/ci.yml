@@ -16,6 +16,7 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: backend
@@ -29,8 +30,8 @@ jobs:
       - run: uv sync --locked
       # The vision tests need numpy, OpenCV and SciPy but not PyTorch, so add just those (pinned as in pyproject).
       - run: >
-          uv run --with numpy==2.5.4 --with opencv-python-headless==5.0.0.93 --with scipy==1.18.1
-          pytest -q
+          uv run --with numpy==2.5.4 --with opencv-python-headless==5.0.0.93 --with scipy==1.18.1 --with pytest-timeout
+          pytest -v --timeout=120
 
   frontend:
     runs-on: ubuntu-latest
