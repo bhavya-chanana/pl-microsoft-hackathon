@@ -112,7 +112,7 @@ export function TeamComparison() {
     <section aria-labelledby="team-stats" className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <span className={cn("font-display text-lg font-semibold", sideTone.home.text)}>{meta.home.short_name}</span>
-        <h3 id="team-stats" className="text-sm font-medium">
+        <h3 id="team-stats" className="sr-only">
           {copy.stats.team}
         </h3>
         <span className={cn("font-display text-lg font-semibold", sideTone.away.text)}>{meta.away.short_name}</span>

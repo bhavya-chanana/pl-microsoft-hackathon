@@ -59,7 +59,7 @@ export function Caption({ onAir }: { onAir: Record<string, string | null> }) {
   }
   const side = overlay && meta ? (overlay.team_id === meta.home.team_id ? "home" : overlay.team_id === meta.away.team_id ? "away" : null) : null;
   return (
-    <div className="min-h-10 md:min-h-11" aria-live="polite">
+    <div aria-live="polite">
       <AnimatePresence mode="wait" initial={false}>
         {overlay && text && (
           <m.div
@@ -68,7 +68,7 @@ export function Caption({ onAir }: { onAir: Record<string, string | null> }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
-            className="flex items-center gap-3 rounded-xl bg-raised px-3 py-1.5"
+            className="flex min-h-10 items-center gap-3 rounded-xl bg-raised px-3 py-1.5 md:min-h-11"
           >
             <span aria-hidden className={cn("h-6 w-1 shrink-0 rounded-full", side ? sideTone[side].bg : "bg-subtle")} />
             <div className="flex min-w-0 items-baseline gap-x-3">
