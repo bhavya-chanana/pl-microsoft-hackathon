@@ -763,6 +763,8 @@ export const TacticsBoard = z.object({
   model_label: z.string(),
   recorded: z.boolean().default(false),
   errors: z.array(z.string()).default([]),
+  requested: z.number().optional(),
+  shortfall: z.string().nullable().optional(),
 });
 export type TacticsBoard = z.infer<typeof TacticsBoard>;
 

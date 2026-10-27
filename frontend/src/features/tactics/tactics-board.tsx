@@ -402,6 +402,12 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
                           </li>
                         ))}
                     </ul>
+                    {board?.shortfall && board.status !== "thinking" && (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {board.requested ? `Showing ${board.tactics.length} of ${board.requested} ideas. ` : ""}
+                        {board.shortfall}
+                      </p>
+                    )}
                   </section>
                   {board && (
                     <details className="group rounded-lg border bg-card p-3">

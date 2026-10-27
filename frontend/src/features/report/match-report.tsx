@@ -209,6 +209,9 @@ function Scorers({ meta, timeline, only }: { meta: MatchMeta; timeline: MatchEve
 
 /** Shots and chances created, split by half. */
 function ByHalf({ meta, timeline }: { meta: MatchMeta; timeline: MatchEvent[] }) {
+  const hs = useTeamStats(meta.home.team_id).data;
+  const as = useTeamStats(meta.away.team_id).data;
+  const pct = (v: number | undefined) => (v === undefined ? null : Math.round(v));
   const rows = [1, 2].map((period) => {
     const pick = (side: "home" | "away") => {
       const shots = timeline.filter((e) => e.type === "shot" && e.period === period && sideOf(meta, e.team_id) === side);
@@ -234,6 +237,16 @@ function ByHalf({ meta, timeline }: { meta: MatchMeta; timeline: MatchEvent[] })
               <td key={side} className="py-2 text-right tabular-nums">
                 <div className="font-semibold">{r[side].goals} <span className="font-normal text-muted-foreground">goals</span></div>
                 <div className="text-[13px] text-muted-foreground">{r[side].shots} shots, xG {r[side].xg.toFixed(2)}</div>
+                {(() => {
+                  const t = side === "home" ? hs : as;
+                  const poss = pct(t?.possession_pct_by_half?.[String(r.period)]);
+                  const tilt = pct(t?.field_tilt_pct_by_half?.[String(r.period)]);
+                  return poss === null && tilt === null ? null : (
+                    <div className="text-[13px] text-muted-foreground">
+                      {[poss !== null && `${poss}% possession`, tilt !== null && `${tilt}% territory`].filter(Boolean).join(", ")}
+                    </div>
+                  );
+                })()}
               </td>
             ))}
           </tr>
