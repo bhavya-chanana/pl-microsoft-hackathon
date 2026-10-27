@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { briefKey, useCoach } from "@/features/coach/coach-store";
 import { useAnalystWording } from "@/features/coach/use-analyst";
 import { useLive } from "@/features/live/live-store";
-import { usePlayersStats, useRatings, useTeamStats } from "@/features/live/queries";
+import { useCoachBrief, usePlayersStats, useRatings, useTeamStats } from "@/features/live/queries";
 import { useProfile } from "@/features/profile/profile-store";
 import { ShotMapPanel } from "@/features/stats/shot-map";
 import type { MatchEvent, MatchMeta, PlayerStats } from "@/lib/contract";
@@ -201,7 +201,7 @@ function Scorers({ meta, timeline }: { meta: MatchMeta; timeline: MatchEvent[] }
   return (
     <div className="flex flex-wrap gap-x-6 gap-y-0.5 text-[13px] text-muted-foreground">
       {(["home", "away"] as const).map((side) => (
-        <p key={side}>
+        <p key={side} className={cn(!goals.some((e) => sideOf(meta, e.team_id) === side) && "hidden")}>
           <span className={cn("font-medium", sideTone[side].text)}>{meta[side].short_name}</span> <span className="sr-only">{R.scorers}: </span>
           {goals
             .filter((e) => sideOf(meta, e.team_id) === side)
@@ -257,7 +257,10 @@ export function MatchReport() {
   const finished = useLive((s) => s.status === "finished" || s.status === "archived");
   const language = useProfile((s) => s.language);
   const teamId = useCoach((s) => s.teamId) ?? meta?.home.team_id ?? null;
-  const brief = useCoach((s) => (teamId ? s.briefs[briefKey(teamId, language)]?.brief : undefined));
+  const stored = useCoach((s) => (teamId ? s.briefs[briefKey(teamId, language)]?.brief : undefined));
+  // The report fetches its own brief, so it never asks the coach to visit the Brief tab first.
+  const fetched = useCoachBrief(finished ? null : teamId, language);
+  const brief = fetched.data ?? stored;
   const { resolvedTheme, setTheme } = useTheme();
   const analyst = useAnalystWording();
   if (!meta || !state) return null;
@@ -267,7 +270,14 @@ export function MatchReport() {
     const back = resolvedTheme ?? "dark";
     setTheme("light");
     window.addEventListener("afterprint", () => setTheme(back), { once: true });
-    setTimeout(() => window.print(), 150);
+    // Print only once the light theme is really applied (and painted), or the snapshot stays dark.
+    const started = Date.now();
+    const go = () => {
+      const applied = document.documentElement.classList.contains("light");
+      if (!applied && Date.now() - started < 1500) return void setTimeout(go, 50);
+      requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => window.print(), 100)));
+    };
+    go();
   };
   const copyLink = async () => {
     try {
@@ -319,6 +329,8 @@ export function MatchReport() {
                   </li>
                 ))}
               </ol>
+            ) : fetched.isPending ? (
+              <p className="text-sm text-muted-foreground">{R.loadingActions}</p>
             ) : (
               <p className="text-sm text-muted-foreground">{R.noActions}</p>
             )}
