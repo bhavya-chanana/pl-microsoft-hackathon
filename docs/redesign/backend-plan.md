@@ -110,6 +110,26 @@ the shot correction, add a test if not.
 Tests: replay demo → exactly one correction insight, text names the goal minute and both players.
 Contract: none.
 
+### P2-d  Signal handlers see the match as of the signal (flaky cassette test)  (RUNTIME:)
+Found while reviewing P2-a/b: `tests/test_cassette.py::test_live_replay_is_served_entirely_from_the_recording`
+fails intermittently under CPU load with a cassette miss `rewrite|shot_speed_badge:ml-demo-001-e01350|r0`.
+Pre-existing, not caused by this work: under equal load (14 parallel runs × 3) the merge base 8839190 failed 9/21
+and the working tree 7/21; it never fails on an idle machine (20/20 serial passes).
+Root cause: `runtime/session.py:127-128` starts each signal handler with `asyncio.create_task`, so
+`InsightPipeline.handle` builds its pack (`signal_pack(session.engine, signal)`, `agents/pipeline.py:455`) whenever
+the task first runs. Under load the feed loop has already ingested later events (here the GOAL right after the
+79' shot), so the pack's score is 2-2 instead of 1-2. The recorded draft says 1-2, the check against the late pack
+fails, and the rewrite is not in the recording. In production the same race lets a live insight quote a score or
+minute from after its own moment. The tasks are also not referenced, so they can be garbage-collected mid-run
+(asyncio docs).
+Fix: start handler tasks eagerly (`asyncio.eager_task_factory(loop, coro)`, Python 3.12), so the synchronous
+prefix (coordinator decision, pack) runs in feed order before the next event is ingested; keep the tasks in a set
+with a done-callback discard.
+Tests: a deterministic repro. A handler that records `engine.score()` at its first line, with a feed of a shot then
+a goal at the same instant, must see the pre-goal score. Then the cassette live-replay test 10× under
+`pytest -p no:randomly` plus parallel load passes.
+Contract: none.
+
 ### P3-a  Player minutes and duels  (INTERPRET:)
 Fix:
 - Minutes: accumulate playing seconds per player in `_apply`: on each event while `status == "live"` and in the same
@@ -157,11 +177,12 @@ Contract: additive. Tell implementer to show `shortfall` under the board.
 |------|--------|--------|
 | P1-a | approved | 95120da |
 | P1-b | approved | 95120da |
-| P1-c | approved | AGENTS: (see log) |
-| P1-d | approved | TACTICS: (see log) |
-| P2-a | assigned | |
-| P2-b | assigned | |
-| P2-c | planned | |
+| P1-c | approved | 98fb995 |
+| P1-d | approved | 043e352 |
+| P2-a | approved | RUNTIME: |
+| P2-b | approved | AGENTS: |
+| P2-c | assigned | |
+| P2-d | assigned | |
 | P3-a | planned | |
 | P3-b | planned | |
 | P3-c | planned | |
