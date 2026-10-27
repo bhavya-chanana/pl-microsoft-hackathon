@@ -12,10 +12,11 @@ Two groups of models live here:
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matchlens.factcheck.verify import (
     Claim,
@@ -95,8 +96,18 @@ class AgentClaim(_Strict):
 
 class KeyNumber(_Strict):
     label: str = Field(description="Short label, max 24 characters")
-    value: str = Field(description="Value exactly as in the data, formatted for display")
+    value: str = Field(description="The number only, without the unit")
     unit: str | None
+
+    @model_validator(mode="after")
+    def _unit_once(self) -> KeyNumber:
+        """The unit lives in ``unit``: drop a trailing copy of it from ``value`` ("12.7 m" -> "12.7")."""
+        if self.unit and self.unit.strip():
+            pattern = r"(?<![A-Za-z])\s*" + re.escape(self.unit.strip()) + r"\s*$"
+            stripped = re.sub(pattern, "", self.value, flags=re.IGNORECASE)
+            if stripped.strip():
+                self.value = stripped.strip()
+        return self
 
 
 # --------------------------------------------------------------- specialist drafts

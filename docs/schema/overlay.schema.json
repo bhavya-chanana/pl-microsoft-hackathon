@@ -29,7 +29,7 @@
           "type": "string"
         },
         "value": {
-          "description": "Value exactly as in the data, formatted for display",
+          "description": "The number only, without the unit",
           "title": "Value",
           "type": "string"
         },
