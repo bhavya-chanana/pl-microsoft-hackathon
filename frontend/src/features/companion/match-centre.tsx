@@ -25,7 +25,7 @@ import { MatchPulse } from "./match-pulse";
 export function MatchCentre() {
   const analyst = useProfile((s) => s.mode === "analyst");
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 pt-4 pb-44 min-[1100px]:pb-28 md:px-6 md:pt-6 xl:px-8">
+    <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 pt-4 pb-44 min-[1100px]:pb-32 md:px-6 md:pt-6 xl:px-8">
       <h1 className="sr-only">{copy.nav.live}</h1>
       <StoryLine />
       <div className="grid items-start gap-4 min-[1100px]:grid-cols-12 min-[1100px]:gap-6">

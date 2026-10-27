@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleDot, Info, RectangleVertical, Share2, Star, Target, Video, Zap } from "lucide-react";
+import { ArrowLeftRight, ChevronRight, Goal, Info, RectangleVertical, Share2, Star, Target, Video, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -52,7 +52,7 @@ function Evidence({ insightId }: { insightId: string }) {
               <span
                 className={cn(
                   "text-xs font-medium",
-                  r.verdict === "supported" ? "text-verified" : r.verdict === "contradicted" ? "text-blocked" : "text-rewritten",
+                  r.verdict === "supported" ? "text-verified" : "text-muted-foreground",
                 )}
               >
                 {copy.verdicts[r.verdict] ?? r.verdict}
@@ -94,7 +94,7 @@ const REPLAYABLE = new Set([
 /** The few moment types that deserve a full card; everything else is a quiet row. */
 export const BIG_MOMENTS = new Set(["goal", "card", "big_chance"]);
 
-const BIG_ICON: Record<string, typeof Zap> = { goal: CircleDot, card: RectangleVertical, big_chance: Target };
+const BIG_ICON: Record<string, typeof Zap> = { goal: Goal, card: RectangleVertical, big_chance: Target, substitution: ArrowLeftRight };
 
 function useMomentActions(item: FeedItem) {
   const play = useReplay((s) => s.play);
@@ -172,7 +172,7 @@ function MomentCard({ item, language }: { item: FeedItem; language: Language }) 
       <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1.5", side ? sideTone[side].bg : "bg-border")} />
       <header className="flex items-center gap-3">
         <span className="font-display text-[40px] leading-10 font-bold tnum">{item.minute_label}</span>
-        <Icon aria-hidden className={cn("size-6", side ? sideTone[side].text : "text-muted-foreground")} />
+        <Icon aria-hidden className={cn("size-6", item.signal_type === "card" ? "fill-amber-400 text-amber-400" : side ? sideTone[side].text : "text-muted-foreground")} />
         <span className="text-[13px] font-medium text-muted-foreground">{signalLabels[item.signal_type] ?? item.signal_type}</span>
       </header>
       <h3 className="text-xl leading-7 font-semibold">{item.headline}</h3>
@@ -219,17 +219,30 @@ function MomentRow({ item, language }: { item: FeedItem; language: Language }) {
   const side = sideOf(meta, item.team_id);
   const [details, setDetails] = useState(false);
   return (
-    <motion.article lang={language} layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border-b py-3 last:border-0">
-      <div className="flex items-start gap-3">
+    <motion.article lang={language} layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border-b last:border-0">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`${item.minute_label} ${item.headline}. ${copy.feed.details}`}
+        onClick={() => setDetails(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setDetails(true);
+          }
+        }}
+        className="group flex cursor-pointer items-start gap-3 rounded-lg py-3 outline-none hover:bg-raised/60 focus-visible:ring-2 focus-visible:ring-ring"
+      >
         <span className="w-12 shrink-0 pt-px font-display text-lg leading-6 font-semibold text-muted-foreground tnum">{item.minute_label}</span>
         <span aria-hidden className={cn("mt-2 size-2 shrink-0 rounded-full", side ? sideTone[side].bg : "bg-subtle")} />
         <div className="min-w-0 flex-1">
           <p className="text-[15px] leading-6 font-medium">{item.headline}</p>
           {item.body && <p className="line-clamp-1 text-[14px] text-muted-foreground">{item.body}</p>}
         </div>
-        <Button variant="ghost" size="icon" className="size-11 shrink-0 text-muted-foreground" aria-label={copy.feed.details} onClick={() => setDetails(true)}>
-          <Info aria-hidden />
-        </Button>
+        <span aria-hidden className="mt-0.5 flex shrink-0 items-center gap-1 text-[13px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+          {copy.feed.details}
+          <ChevronRight className="size-4" />
+        </span>
       </div>
       <DetailsSheet item={item} open={details} onOpenChange={setDetails} />
     </motion.article>

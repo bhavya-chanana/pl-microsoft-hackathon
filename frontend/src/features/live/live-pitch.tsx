@@ -59,7 +59,7 @@ function Caption({ onAir }: { onAir: Record<string, string | null> }) {
   }
   const side = overlay && meta ? (overlay.team_id === meta.home.team_id ? "home" : overlay.team_id === meta.away.team_id ? "away" : null) : null;
   return (
-    <div className="min-h-14" aria-live="polite">
+    <div className="min-h-11" aria-live="polite">
       <AnimatePresence mode="wait" initial={false}>
         {overlay && text && (
           <motion.div
@@ -68,12 +68,12 @@ function Caption({ onAir }: { onAir: Record<string, string | null> }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
-            className="flex items-center gap-3 rounded-xl bg-raised px-3 py-2"
+            className="flex items-center gap-3 rounded-xl bg-raised px-3 py-1.5"
           >
-            <span aria-hidden className={cn("h-8 w-1 shrink-0 rounded-full", side ? sideTone[side].bg : "bg-subtle")} />
-            <div className="min-w-0">
+            <span aria-hidden className={cn("h-6 w-1 shrink-0 rounded-full", side ? sideTone[side].bg : "bg-subtle")} />
+            <div className="flex min-w-0 items-baseline gap-x-3">
               <p className="truncate text-[15px] font-semibold">{text.headline}</p>
-              <p className="flex flex-wrap gap-x-3 text-[13px] text-muted-foreground">
+              <p className="flex min-w-0 gap-x-3 text-[13px] text-muted-foreground max-md:hidden">
                 {text.body && <span className="truncate">{text.body}</span>}
                 {(signalType === "momentum_swing" && !analyst ? [] : overlay.stats.slice(0, 3)).map((st) => (
                   <span key={st.label} className="tnum">
@@ -188,7 +188,7 @@ export function LivePitch() {
         </span>
       </div>
       {replay ? (
-        <p className="min-h-14 rounded-xl bg-raised px-3 py-2 text-[15px] font-semibold">
+        <p className="min-h-11 rounded-xl bg-raised px-3 py-2 text-[15px] font-semibold">
           {label}
           {playerName(meta, replay.moment.player_ids[0], true) && `, ${playerName(meta, replay.moment.player_ids[0], true)}`}
           <span className="ml-2 text-muted-foreground tnum">{replay.moment.minute_label}</span>

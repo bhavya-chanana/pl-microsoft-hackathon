@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -58,20 +59,26 @@ export function OnboardingSheet() {
           <DialogTitle className="text-2xl font-semibold">{copy.onboarding.title}</DialogTitle>
           <DialogDescription>{copy.onboarding.help}</DialogDescription>
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div role="radiogroup" aria-label={copy.onboarding.title} className="grid grid-cols-3 gap-2">
           {clubs.map((c) => (
             <button
               key={String(c.id)}
               type="button"
-              aria-pressed={clubId === c.id}
+              role="radio"
+              aria-checked={clubId === c.id}
               onClick={() => setClub(c.id)}
               className={cn(
-                "flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl p-2 text-center text-sm font-medium ring-1 transition-colors",
+                "relative flex h-28 flex-col items-center justify-start gap-2 rounded-2xl px-2 pt-4 text-center text-sm font-medium ring-1 transition-colors",
                 clubId === c.id ? "bg-raised ring-2 ring-primary" : "ring-border hover:bg-raised",
               )}
             >
               <span aria-hidden className={cn("size-9 rounded-full", c.tone)} />
-              {c.name}
+              <span className="line-clamp-2 min-h-10 leading-5">{c.name}</span>
+              {clubId === c.id && (
+                <span aria-hidden className="absolute top-1.5 right-1.5 grid size-5 place-items-center rounded-full bg-primary text-primary-foreground">
+                  <Check className="size-3.5" />
+                </span>
+              )}
             </button>
           ))}
         </div>

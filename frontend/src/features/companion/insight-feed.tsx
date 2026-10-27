@@ -68,10 +68,10 @@ export function InsightFeed({
     return <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{copy.feed.empty}</p>;
   }
   return (
-    <ol className={cn("flex gap-3", carousel ? "snap-x snap-mandatory overflow-x-auto overscroll-x-contain pb-2 md:grid md:snap-none md:grid-cols-2 md:overflow-visible md:pb-0 min-[1100px]:grid-cols-1" : "flex-col")} aria-label={copy.feed.heading}>
+    <ol className={cn("flex gap-3", carousel ? "snap-x snap-mandatory overflow-x-auto overscroll-x-contain pb-2 md:snap-none md:flex-col md:overflow-visible md:pb-0" : "flex-col")} aria-label={copy.feed.heading}>
       <AnimatePresence initial={false}>
         {items.map((item) => (
-          <li key={item.insight_id} className={cn(carousel && "w-[85%] shrink-0 snap-start md:w-auto")}>
+          <li key={item.insight_id} className={cn(carousel && "w-[85%] shrink-0 snap-start md:w-full")}>
             <InsightCard item={item} language={language} />
           </li>
         ))}

@@ -148,7 +148,7 @@ export function MatchHeader({ hero }: { hero: boolean }) {
       {/* Collapsed state */}
       <motion.div
         style={{ opacity: barOpacity }}
-        className="absolute inset-x-0 top-0 mx-auto flex h-[var(--hdr-min)] max-w-7xl items-center justify-center gap-3 px-4 pr-24 md:pr-4"
+        className="absolute inset-x-0 top-0 mx-auto flex h-[var(--hdr-min)] max-w-7xl items-center justify-center gap-3 px-4 pr-28 md:pr-4"
       >
         {meta && home && away && hs !== null && as !== null ? (
           <>

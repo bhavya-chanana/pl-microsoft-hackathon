@@ -71,12 +71,13 @@ export function MomentsPage() {
           <History aria-hidden />
           {copy.catchup.cta}
         </Button>
-        <Button variant="secondary" className="h-11 px-5" onClick={() => setRecap(true)} disabled={!meta}>
+        <Button variant="ghost" className="h-11 px-4 text-muted-foreground underline-offset-4 hover:underline" onClick={() => setRecap(true)} disabled={!meta}>
           {copy.recap.cta}
         </Button>
       </div>
-      <div className="sticky top-[var(--stack-h)] z-30 -mx-4 flex flex-col gap-2 bg-background px-4 py-2 md:-mx-6 md:px-6">
+      <div className="sticky top-[var(--stack-h)] z-30 -mx-4 flex items-center gap-3 bg-background px-4 py-2 md:-mx-6 md:px-6">
         <Segmented
+          className="min-w-0 shrink-0"
           label={copy.momentsPage.heading}
           value={view}
           onChange={setView}
@@ -86,7 +87,7 @@ export function MomentsPage() {
           ]}
         />
         {view === "highlights" && (
-          <div role="group" aria-label={copy.momentsPage.filters} className="-mx-4 flex gap-2 overflow-x-auto overscroll-x-contain px-4 md:mx-0 md:px-0">
+          <div role="group" aria-label={copy.momentsPage.filters} className="flex min-w-0 flex-1 gap-2 overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
             {KINDS.map((k) => (
               <Chip key={k} active={kind === k} onClick={() => setKind(k)}>
                 {copy.momentsPage.kinds[k]}
