@@ -173,16 +173,18 @@ Contract: additive. Tell implementer to show `shortfall` under the board.
 - Momentum scale explanation in the UI: frontend copy (bar already shows -100..100 in analyst mode).
 
 ## Status
+All non-deferred tasks approved. Final full suite: 519 passed, 31 skipped (baseline 449 passed).
+
 | Task | Status | Commit |
 |------|--------|--------|
 | P1-a | approved | 95120da |
 | P1-b | approved | 95120da |
 | P1-c | approved | 98fb995 |
 | P1-d | approved | 043e352 |
-| P2-a | approved | RUNTIME: |
-| P2-b | approved | AGENTS: |
-| P2-c | assigned | |
-| P2-d | assigned | |
-| P3-a | planned | |
-| P3-b | planned | |
-| P3-c | planned | |
+| P2-a | approved | b43eb55 |
+| P2-b | approved | 18e0600 |
+| P2-c | approved | dd256f2 |
+| P2-d | approved | b37b034 |
+| P3-a | approved | dd256f2 |
+| P3-b | approved | fb9a5a1 |
+| P3-c | approved | 1b1a161, 857b9a7 |
