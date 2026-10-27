@@ -137,8 +137,8 @@
   --tier-bronze: oklch(0.6 0.1 50);
   /* Telestrator chalk and the Match Pulse rhythm bands. */
   --telestrator: oklch(0.9 0.17 100);
-  --pulse-control: oklch(0.62 0.1 195);
-  --pulse-chaos: oklch(0.6 0.2 350);
+  --pulse-control: oklch(0.55 0.16 250);
+  --pulse-chaos: oklch(0.62 0.14 70);
 
   --elevation-1: 0 1px 2px oklch(0.3 0.03 255 / 0.06), 0 2px 8px oklch(0.3 0.03 255 / 0.05);
   --glass-fill: oklch(1 0 0 / 0.6);
@@ -411,4 +411,16 @@
   --rating-ok: #ff963f;
   --rating-poor: #ff3939;
   --rating-ink: #000;
+}
+
+/* When the match supplies team colours, text in a team's colour follows them too (not the fixed blue and amber). */
+@supports (color: oklch(from red l c h)) {
+  :root[data-team-colours] {
+    --team-home-text: oklch(from var(--team-home) clamp(0.42, calc(l - 0.2), 0.55) c h);
+    --team-away-text: oklch(from var(--team-away) clamp(0.42, calc(l - 0.2), 0.55) c h);
+  }
+  :root.dark[data-team-colours] {
+    --team-home-text: var(--team-home);
+    --team-away-text: var(--team-away);
+  }
 }

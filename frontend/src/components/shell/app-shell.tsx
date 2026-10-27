@@ -38,7 +38,9 @@ function useTeamColours() {
     const norm = (c: string) => `oklch(from ${c} clamp(0.66, l, 0.8) min(c, 0.17) h)`;
     root.style.setProperty("--team-home", norm(meta.home.colour));
     root.style.setProperty("--team-away", norm(meta.away.colour));
+    root.dataset.teamColours = "";
     return () => {
+      delete root.dataset.teamColours;
       root.style.removeProperty("--team-home");
       root.style.removeProperty("--team-away");
     };
