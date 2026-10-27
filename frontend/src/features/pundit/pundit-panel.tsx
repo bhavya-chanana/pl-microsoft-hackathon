@@ -3,6 +3,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { MessageCircleQuestion, SendHorizontal, Square, Video, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -11,6 +12,7 @@ import { FactCheckBadge } from "@/features/companion/fact-check-badge";
 import { useReplay } from "@/features/broadcast/replay-store";
 import { useLive } from "@/features/live/live-store";
 import { profileQuery, useFanProfile } from "@/features/profile/profile-store";
+import { canSpeak, problemOf, speakInBrowser, stopBrowserVoice, unlockVoice, useVoice } from "@/features/companion/voice";
 import { ApiError, postJson } from "@/lib/api";
 import { type Language, PunditAnswer } from "@/lib/contract";
 import { copy, signalLabels } from "@/lib/copy";
@@ -18,26 +20,24 @@ import { sideOf, sideTone } from "@/lib/match";
 import { cn } from "@/lib/utils";
 
 const MAX_QUESTION = 200;
-const LOCALES = { en: "en-GB", hi: "hi-IN", es: "es-ES" } satisfies Record<Language, string>;
-
 const noSubscribe = () => () => {};
 
 /** Read one answer aloud with the browser's voice; the Listen switch owns the Azure voice. */
 function useReadAloud() {
-  const supported = useSyncExternalStore(noSubscribe, () => "speechSynthesis" in window, () => false);
+  const supported = useSyncExternalStore(noSubscribe, canSpeak, () => false);
   const [speaking, setSpeaking] = useState<string | null>(null);
-  useEffect(() => () => {
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-  }, []);
+  useEffect(() => () => stopBrowserVoice(), []);
   const toggle = (id: string, text: string, language: Language) => {
-    window.speechSynthesis.cancel();
+    stopBrowserVoice();
     if (speaking === id) return setSpeaking(null);
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = LOCALES[language];
-    utterance.onend = () => setSpeaking((s) => (s === id ? null : s));
-    utterance.onerror = utterance.onend;
+    unlockVoice();
     setSpeaking(id);
-    window.speechSynthesis.speak(utterance);
+    const clear = () => setSpeaking((s) => (s === id ? null : s));
+    void speakInBrowser(text, language, () => {
+      clear();
+      const problem = problemOf(useVoice.getState().status);
+      if (problem) toast.error(copy.narration.problem[problem]);
+    });
   };
   return { supported, speaking, toggle };
 }

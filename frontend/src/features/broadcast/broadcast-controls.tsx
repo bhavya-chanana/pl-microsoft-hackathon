@@ -1,14 +1,14 @@
 "use client";
 
-import { Link2, Volume2, VolumeX, X } from "lucide-react";
+import { Link2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { toast } from "sonner";
 
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Toggle } from "@/components/ui/toggle";
-import { Narrator } from "@/features/companion/narration";
+import { Narrator, useVoiceProblem, VoiceNote } from "@/features/companion/narration";
+import { SoundButton } from "@/features/companion/sound-button";
 import { copy } from "@/lib/copy";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -44,7 +44,7 @@ const HINT_KEY = "matchlens.broadcast.hint.v1";
  */
 export function BroadcastControls() {
   const active = useActive();
-  const [sound, setSound] = useState(false);
+  const [sound, setCommentary] = useState(false);
   const [hint, setHint] = useState(false);
   useEffect(() => {
     let first = false;
@@ -70,7 +70,8 @@ export function BroadcastControls() {
       toast.error(copy.broadcastControls.copyFailed);
     }
   };
-  const show = active || hint;
+  const problem = useVoiceProblem(sound);
+  const show = active || hint || problem;
   return (
     <div
       className={cn(
@@ -78,26 +79,32 @@ export function BroadcastControls() {
         show ? "opacity-100" : "pointer-events-none opacity-0",
       )}
     >
-      <div className="glass-strong flex items-center gap-1 rounded-full p-1.5">
-        <Link href={routes.explore} className={cn(buttonVariants({ variant: "ghost" }), "h-11 gap-2 rounded-full px-4")}>
+      <div className="glass-strong flex min-w-0 max-w-full items-center gap-0.5 rounded-full p-1.5 sm:gap-1">
+        <Link href={routes.explore} className={cn(buttonVariants({ variant: "ghost" }), "h-11 gap-2 rounded-full px-3 sm:px-4")}>
           <X aria-hidden />
           {copy.broadcastControls.exit}
         </Link>
-        <Button variant="ghost" className="h-11 gap-2 rounded-full px-4" onClick={() => void copyLink()}>
+        <Button variant="ghost" className="h-11 gap-2 rounded-full px-3 sm:px-4" onClick={() => void copyLink()}>
           <Link2 aria-hidden />
-          {copy.broadcastControls.copyLink}
+          <span className="sm:hidden">{copy.broadcastControls.copyLinkShort}</span>
+          <span className="max-sm:hidden">{copy.broadcastControls.copyLink}</span>
         </Button>
-        <Toggle
-          className="size-11 shrink-0 rounded-full"
-          pressed={sound}
-          onPressedChange={setSound}
-          aria-label={sound ? copy.broadcastControls.soundOn : copy.broadcastControls.sound}
-          title={sound ? copy.broadcastControls.soundOn : copy.broadcastControls.sound}
-        >
-          {sound ? <Volume2 aria-hidden /> : <VolumeX aria-hidden />}
-        </Toggle>
+        <SoundButton
+          enabled={sound}
+          compact
+          onChange={setCommentary}
+          labels={{
+            off: (
+              <>
+                <span className="sm:hidden">{copy.narration.button.offShort}</span>
+                <span className="max-sm:hidden">{copy.narration.button.off}</span>
+              </>
+            ),
+          }}
+        />
         <Narrator enabled={sound} />
       </div>
+      <VoiceNote enabled={sound} className="glass max-w-[min(32rem,calc(100vw-2rem))] rounded-2xl px-4 py-1.5" />
       {hint && (
         <p role="status" className="glass rounded-full px-4 py-1.5 text-[13px]">
           {copy.broadcastControls.hint}

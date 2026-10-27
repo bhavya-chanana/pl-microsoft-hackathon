@@ -1,6 +1,6 @@
 "use client";
 
-import { SlidersHorizontal, Volume2, VolumeX } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 import { AnimatePresence, m } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { StoreApi } from "zustand";
@@ -9,12 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Toggle } from "@/components/ui/toggle";
 import { BroadcastMonitor } from "@/features/broadcast/broadcast-monitor";
 import { useOverlayDirector } from "@/features/broadcast/use-overlay-director";
 import { Caption } from "@/features/live/live-pitch";
 import { FactCheckBadge } from "@/features/companion/fact-check-badge";
-import { Narrator } from "@/features/companion/narration";
+import { Narrator, VoiceNote } from "@/features/companion/narration";
+import { SoundButton } from "@/features/companion/sound-button";
 import { useLive } from "@/features/live/live-store";
 import { useCoachBrief, useFeed } from "@/features/live/queries";
 import {
@@ -183,16 +183,12 @@ function PaneTitle({ kind, audio, onAudio }: { kind: Kind; audio: boolean; onAud
           {copy.languages[profile.language]}
         </span>
       </h2>
-      <Toggle
-        variant="outline"
-        className="size-11 shrink-0"
-        pressed={audio}
-        onPressedChange={onAudio}
-        aria-label={audio ? copy.multiverse.audioOn : copy.multiverse.audio}
-        title={audio ? copy.multiverse.audioOn : copy.multiverse.audio}
-      >
-        {audio ? <Volume2 aria-hidden /> : <VolumeX aria-hidden />}
-      </Toggle>
+      <SoundButton
+        enabled={audio}
+        onChange={onAudio}
+        name={copy.multiverse.audio}
+        labels={{ off: copy.narration.button.listen, on: copy.narration.button.playing, speaking: copy.narration.button.playing }}
+      />
     </div>
   );
 }
@@ -230,6 +226,7 @@ function Pane({
         )}
       >
         <PaneTitle kind={kind} audio={audio} onAudio={onAudio} />
+        <VoiceNote enabled={audio} retry />
         <BroadcastMonitor compact autoReplay={index === 0} />
         <PaneCaption />
         <div className="min-h-32">{kind === "coach" ? <CoachTop /> : <FeedTop />}</div>
