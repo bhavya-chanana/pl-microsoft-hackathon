@@ -2,6 +2,24 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "redesign-backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && MATCHLENS_LLM=offline MATCHLENS_CASSETTE=demo/hero-match.json MATCHLENS_KB_DIR=/Users/bhavyachanana/code/pl-microsoft-hackathon/.claude/worktrees/tactics-brain/backend/data/local/leaguedata/kb uv run uvicorn matchlens.api.app:app --port 8765"
+      ],
+      "port": 8765
+    },
+    {
+      "name": "redesign-frontend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend && MATCHLENS_BACKEND_URL=http://localhost:8765 npx next dev --port 3020"
+      ],
+      "port": 3020
+    },
+    {
       "name": "matchlens-demo",
       "runtimeExecutable": "bun",
       "runtimeArgs": [
