@@ -76,7 +76,7 @@ class FanServices:
         engine = session.engine
         if team_id not in (session.meta.home.team_id, session.meta.away.team_id):
             raise ValueError("unknown team")
-        key = self._key(session, "coach", team_id, language)
+        key = self._key(session, "coach", engine.state()["status"], team_id, language)
         if (cached := await session.recorder.fan_cached(key)) is not None:
             return coach.CoachBrief.model_validate(cached)
         started = time.perf_counter()
