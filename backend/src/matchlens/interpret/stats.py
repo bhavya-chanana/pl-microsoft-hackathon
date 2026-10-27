@@ -82,6 +82,8 @@ class TeamStats:
     team_id: str
     goals: int = 0
     possession_s: float = 0.0
+    possession_s_by_period: dict[int, float] = field(default_factory=dict)
+    final_third_passes_by_period: dict[int, int] = field(default_factory=dict)
     passes: int = 0
     passes_completed: int = 0
     final_third_passes: int = 0

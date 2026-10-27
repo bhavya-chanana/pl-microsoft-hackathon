@@ -270,7 +270,36 @@ class MatchEngine:
         total = sum(t.possession_s for t in self.c.teams.values())
         out = self.c.teams[team_id].as_dict(total)
         out["shot_map"] = list(self.c.teams[team_id].shot_map)
+        out.update(self._half_split(team_id))
         return out
+
+    def _half_split(self, team_id: str) -> dict[str, object]:
+        """Possession and field tilt (share of the two sides' final-third passes) per half and overall.
+
+        Both sides' figures need each other, and are rounded so that home + away is exactly 100: the home
+        figure is rounded and the away figure is its complement. A half appears only once it has data.
+        """
+        home, away = self.meta.home.team_id, self.meta.away.team_id
+        th, ta = self.c.teams[home], self.c.teams[away]
+
+        def share(h: float, a: float) -> float | None:
+            if h + a <= 0:
+                return None
+            pct = round(h / (h + a) * 100, 1)
+            return pct if team_id == home else round(100 - pct, 1)
+
+        periods = sorted(set(th.possession_s_by_period) | set(ta.possession_s_by_period)
+                         | set(th.final_third_passes_by_period) | set(ta.final_third_passes_by_period))
+        poss, tilt = {}, {}
+        for p in periods:
+            v = share(th.possession_s_by_period.get(p, 0.0), ta.possession_s_by_period.get(p, 0.0))
+            if v is not None:
+                poss[str(p)] = v
+            v = share(th.final_third_passes_by_period.get(p, 0), ta.final_third_passes_by_period.get(p, 0))
+            if v is not None:
+                tilt[str(p)] = v
+        return {"possession_pct_by_half": poss, "field_tilt_pct": share(th.final_third_passes, ta.final_third_passes),
+                "field_tilt_pct_by_half": tilt}
 
     def score(self) -> dict[str, int]:
         return {tid: t.goals for tid, t in self.c.teams.items()}
@@ -482,6 +511,8 @@ class MatchEngine:
                     ex, ey = self._rel(e.team_id, e.end.x, e.end.y)
                     if ex >= 70:
                         team.final_third_passes += 1
+                        by = team.final_third_passes_by_period
+                        by[e.period] = by.get(e.period, 0) + 1
                         self._weigh(e, e.team_id, w.final_third_pass, "final_third_pass")
                     if ex >= 88.5 and 13.84 <= ey <= 54.16:
                         team.box_entries += 1
@@ -689,7 +720,10 @@ class MatchEngine:
     def _set_possession(self, team_id: str | None, elapsed: float) -> None:
         c = self.c
         if c.possession_team and c.possession_team in c.teams:
-            c.teams[c.possession_team].possession_s += max(0.0, elapsed - c.possession_since)
+            held = max(0.0, elapsed - c.possession_since)
+            team = c.teams[c.possession_team]
+            team.possession_s += held
+            team.possession_s_by_period[c.period] = team.possession_s_by_period.get(c.period, 0.0) + held
         c.possession_team = team_id
         c.possession_since = elapsed
 
