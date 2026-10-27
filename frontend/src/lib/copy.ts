@@ -437,6 +437,8 @@ export const copy = {
     empty: "No stored matches yet.",
     open: "Open",
     current: "Showing",
+    watch: "Watch",
+    loading: "Loading…",
     inPlay: "In play",
     opened: "Past match opened",
     status: { live: "Stopped", finished: "Full time", error: "Feed error" } as Record<string, string>,

@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { useShell } from "@/components/shell/shell-store";
 import { useLive } from "@/features/live/live-store";
+import { useFollowMatch } from "@/features/replay/follow-match";
 import { postJson } from "@/lib/api";
 import { ReplayStatus } from "@/lib/contract";
 import { copy } from "@/lib/copy";
@@ -32,24 +33,22 @@ export function useReplayControl() {
   });
 }
 
-/** Restart whatever match is loaded (the demo, a Lab script, a recorded feed or a past run) from the chosen minute; the caller confirms first. */
+/** Restart whatever match is loaded (the demo, a Lab script, a recorded feed or a past run); follows the new run to the Live page. */
 export function useRestart() {
   const client = useQueryClient();
-  const restart = useMutation({
-    mutationFn: () => {
+  const follow = useFollowMatch();
+  return useMutation({
+    mutationFn: async (options?: { startMinute?: number }) => {
       // The speed of a finished run means nothing, so only a live match sends it (the backend then uses 15x).
       const live = useLive.getState().status === "live";
       const speed = live ? client.getQueryData<ReplayStatus>(KEY)?.speed : undefined;
-      return postJson("replay/restart", { speed, start_minute: useShell.getState().startMinute }, Restarted);
+      const started = await postJson("replay/restart", { speed, start_minute: options?.startMinute ?? useShell.getState().startMinute }, Restarted);
+      await follow(started);
+      return started;
     },
-    onSuccess: () => {
-      useShell.getState().setRestartOpen(false);
-      void client.invalidateQueries();
-      toast.success(copy.replay.restarted);
-    },
+    onSuccess: () => toast.success(copy.replay.restarted),
     onError: () => toast.error(copy.replay.failed),
   });
-  return restart;
 }
 
 /** The same state in two lengths: the short pill text and the full line in the settings sheet. */
