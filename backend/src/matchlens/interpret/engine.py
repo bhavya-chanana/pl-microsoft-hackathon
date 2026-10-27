@@ -17,6 +17,7 @@ from __future__ import annotations
 import bisect
 from collections import deque
 from dataclasses import dataclass, field
+from typing import Any
 
 from matchlens.domain.models import (
     PITCH_LENGTH,
@@ -34,6 +35,24 @@ from matchlens.interpret.signals import Signal, SignalType
 from matchlens.interpret.stats import PlayerStats, TeamStats
 
 ON_TARGET = (Outcome.SAVED, Outcome.GOAL)
+
+
+def _swing_towards(then_index: float, index: float, h: float, a: float, band: float,
+                   delta_threshold: float) -> str | None:
+    """Which side a momentum swing favours ("home"/"away"), or None when it is not a real swing.
+
+    A swing needs a large move that ends on the side now on top, outside the "Even" band,
+    and recent events by that side; a move towards zero because the window emptied is decay.
+    """
+    delta = index - then_index
+    if abs(delta) < delta_threshold or abs(index) < band:
+        return None
+    if (index > 0) != (delta > 0):
+        return None
+    side_weight = h if index > 0 else a
+    if h + a <= 0 or side_weight <= 0:
+        return None
+    return "home" if index > 0 else "away"
 
 
 @dataclass
@@ -590,9 +609,15 @@ class MatchEngine:
                     team.players_on_pitch -= 1
                     player.red_card = True
                     player.on_pitch = False
+                # Only a dismissal changes how many players are on the pitch; a booking changes the card count.
+                card_facts: dict[str, Any] = {"card": e.outcome.value}
+                if red:
+                    card_facts["players_on_pitch"] = team.players_on_pitch
+                else:
+                    card_facts["player_yellow_cards"] = player.yellow_cards
                 self._signal(SignalType.CARD, e.event_id, e.elapsed, e.period, e.clock, team_id=e.team_id,
                              player_ids=[e.player_id], evidence_event_ids=[e.event_id],
-                             facts={"card": e.outcome.value, "players_on_pitch": team.players_on_pitch},
+                             facts=card_facts,
                              priority=1 if red else 3)
             case EventType.CORNER:
                 assert team
@@ -675,9 +700,13 @@ class MatchEngine:
             then = c.momentum[-6]
             delta = index - then.index
             key = "momentum_swing"
-            if abs(delta) >= th.momentum_swing_delta and now - c.last_spell.get(key, -1e9) > 360:
+            towards_side = _swing_towards(then.index, index, h, a, th.momentum_even_band, th.momentum_swing_delta)
+            if towards_side is not None and now - c.last_spell.get(key, -1e9) > 360:
                 c.last_spell[key] = now
-                towards = home if delta > 0 else away
+                towards = home if towards_side == "home" else away
+                previous = None
+                if abs(then.index) >= th.momentum_even_band:
+                    previous = home if then.index > 0 else away
                 top = sorted((w for w in window if w.team_id == towards), key=lambda w: -w.weight)[:6]
                 reasons: dict[str, int] = {}
                 for w in window:
@@ -686,6 +715,8 @@ class MatchEngine:
                 self._signal(SignalType.MOMENTUM_SWING, f"{int(now)}", now, e.period, e.clock,
                              team_id=towards, evidence_event_ids=[w.event_id for w in top],
                              facts={"from_index": then.index, "to_index": index, "delta": round(delta, 1),
+                                    "strength": round(abs(index)),
+                                    **({"previous_leader": previous} if previous else {}),
                                     "window_s": th.momentum_window_s,
                                     "since_minute_label": minute_label(then.period, then.clock),
                                     **{f"count_{k}": v for k, v in sorted(reasons.items())}},

@@ -52,10 +52,15 @@ PHRASES: dict[str, dict[str, tuple[str, str]]] = {
         "hi": ("{player} का शानदार बचाव", "{minute} पर {player} ने {xg_faced} xG का मौका रोका।"),
         "es": ("Gran parada de {player}", "{player} detuvo una ocasión de {xg_faced} xG en el {minute}."),
     },
-    "card": {
-        "en": ("{card_name} for {player}", "{team} now have {on_pitch} players on the pitch ({minute})."),
+    "card_yellow": {
+        "en": ("{card_name} for {player}", "{player} is booked ({minute})."),
+        "hi": ("{player} को {card_name}", "{minute} पर {player} को कार्ड दिखाया गया।"),
+        "es": ("{card_name} para {player}", "{player} es amonestado ({minute})."),
+    },
+    "card_red": {
+        "en": ("{card_name} for {player}", "{team} are down to {on_pitch} players ({minute})."),
         "hi": ("{player} को {card_name}", "{minute} पर {team} के मैदान में अब {on_pitch} खिलाड़ी हैं।"),
-        "es": ("{card_name} para {player}", "{team} juega ahora con {on_pitch} jugadores ({minute})."),
+        "es": ("{card_name} para {player}", "{team} se queda con {on_pitch} jugadores ({minute})."),
     },
     "substitution": {
         "en": ("{on_name} on for {off_name}", "{team} make a change at {minute}."),
@@ -63,9 +68,9 @@ PHRASES: dict[str, dict[str, tuple[str, str]]] = {
         "es": ("Entra {on_name} por {off_name}", "Cambio de {team} en el {minute}."),
     },
     "momentum_swing": {
-        "en": ("Momentum swings to {team}", "The momentum index moved from {from_index} to {to_index} since {since}."),
-        "hi": ("लय {team} की ओर", "{since} से मोमेंटम इंडेक्स {from_index} से {to_index} पर पहुँचा।"),
-        "es": ("El impulso cambia hacia {team}", "El índice de impulso pasó de {from_index} a {to_index} desde el {since}."),
+        "en": ("Momentum swings to {team}", "Since {since}, {team} have taken over: {strength} on a 0-100 scale in their favour."),
+        "hi": ("लय {team} की ओर", "{since} से {team} ने बढ़त ले ली है: 0-100 के पैमाने पर उनके पक्ष में {strength}।"),
+        "es": ("El impulso cambia hacia {team}", "Desde el {since}, {team} ha tomado el control: {strength} en una escala de 0-100 a su favor."),
     },
     "pressure_spell": {
         "en": ("{team} turning up the pressure", "{pressing_actions} pressing actions and {turnovers_won} turnovers won in a short spell."),
@@ -147,8 +152,13 @@ class _Safe(dict):  # leaves unknown placeholders readable instead of raising
         return "-"
 
 
+PHRASES["card"] = PHRASES["card_yellow"]  # old recorded signals without the card kind
+
+
 def phrase_key(pack: Pack) -> str:
     sig = pack["signal"]
+    if sig["type"] == "card":
+        return "card_red" if sig["facts"].get("card") in ("red", "second_yellow") else "card_yellow"
     if sig["type"] == "period":
         return str(sig["facts"].get("phase", "kickoff"))
     return sig["type"]
@@ -221,7 +231,7 @@ def key_numbers(pack: Pack) -> list[KeyNumber]:
     labels = {
         "xg": ("xG", None), "xg_faced": ("xG faced", None), "shot_speed_kmh": ("Shot speed", "km/h"),
         "speed_kmh": ("Top speed", "km/h"), "distance_km": ("Distance", "km"), "difficulty": ("Pass difficulty", "/100"),
-        "distance_m": ("Pass length", "m"), "to_index": ("Momentum", None), "pressing_actions": ("Pressing actions", None),
+        "distance_m": ("Pass length", "m"), "strength": ("Momentum", "/100"), "pressing_actions": ("Pressing actions", None),
         "turnovers_won": ("Turnovers won", None), "turnovers_per_min": ("Turnovers/min", None),
         "pass_share_pct": ("Pass share", "%"), "value": ("Career goals", None), "players_on_pitch": ("On pitch", None),
     }
