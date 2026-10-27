@@ -185,3 +185,99 @@ def test_the_tempo_line_does_not_contradict_the_momentum_line(played, tpm):
     assert f"{_count(tpm, 'turnover', 'en')} a minute" in text
 
 
+# ------------------------------------------------------------- cached answers: versioned, and no cached failures
+
+
+def _cached_session(played, run_id="pundit-cache"):
+    from matchlens.runtime.session import MatchSession
+    from matchlens.store.base import MemoryStore
+    from matchlens.store.repository import Repository
+    from matchlens.store.writer import WriteBehind
+
+    store = MemoryStore()
+    run(store.open())
+    repo = Repository(store, WriteBehind(store))
+    session = MatchSession(played.adapter, repo.recorder(run_id))
+    session.engine = played.engine
+    return session, repo
+
+
+def _live(client):
+    team = team_for(client)
+    team.label = "live-model"  # anything but "offline-templates"
+    return team
+
+
+def _stored(session, repo, key):
+    run(repo.flush())
+    return run(session.recorder.fan_cached(key))
+
+
+def test_an_answer_cached_under_an_older_version_is_not_served(played):
+    import hashlib
+    import json
+
+    from matchlens.agents import pundit
+
+    session, repo = _cached_session(played)
+    engine, question, profile = played.engine, "how many yellow cards in the match?", FanProfile()
+    old = [int(engine.c.elapsed // 60), len(engine.signals()), pundit._norm(question), profile.model_dump_json()]
+    old_key = hashlib.sha256(json.dumps(old).encode()).hexdigest()[:32]
+    stale = run(ask(team_for(ScriptedClient()), session, "who is winning?", profile)).model_dump(mode="json")
+    stale["answer"] = "STALE ANSWER FROM BEFORE THE FIX"
+    session.recorder.fan_output(old_key, "pundit", stale)
+    run(repo.flush())
+    assert run(session.recorder.fan_cached(old_key)) is not None  # the old entry really is in the store
+    assert pundit._key(engine, question, profile) != old_key
+    fresh = run(ask(team_for(ScriptedClient()), session, question, profile))
+    assert "STALE" not in fresh.answer and fresh.intent == "discipline"
+
+
+def test_a_blocked_live_answer_is_not_stored_but_a_verified_one_is(played):
+    from matchlens.agents.pundit import _key
+
+    yellow, _ = counts(played.engine)
+    question, profile = "how many yellow cards in the match?", FanProfile()
+    key = _key(played.engine, question, profile)
+
+    session, repo = _cached_session(played, "blocked")
+    wrong = lambda draft, payload: draft.model_copy(  # noqa: E731
+        update={"answer": f"There have been {yellow + 2} yellow cards.", "claims": []})
+    blocked = run(ask(_live(ScriptedClient(tamper={"pundit": wrong})), session, question, profile))
+    assert blocked.source == "data" and blocked.fact_check.status == FactCheckStatus.BLOCKED
+    assert _stored(session, repo, key) is None  # a retry may do better
+
+    failed_session, failed_repo = _cached_session(played, "failed")
+    failed = run(ask(_live(ScriptedClient(fail={"pundit"})), failed_session, question, profile))
+    assert failed.source == "data" and _stored(failed_session, failed_repo, key) is None
+
+    ok_session, ok_repo = _cached_session(played, "ok")
+    client = ScriptedClient()
+    good = run(ask(_live(client), ok_session, question, profile))
+    assert good.source == "agent" and good.fact_check.status == FactCheckStatus.VERIFIED
+    assert _stored(ok_session, ok_repo, key) is not None
+    calls = len(client.calls)
+    assert run(ask(_live(client), ok_session, question, profile)) == good and len(client.calls) == calls
+
+
+def test_offline_template_answers_stay_cached(played):
+    from matchlens.agents.pundit import _key
+
+    session, repo = _cached_session(played, "offline")
+    question, profile = "how many yellow cards in the match?", FanProfile()
+    answer = run(ask(team_for(ScriptedClient()), session, question, profile))
+    assert answer.source == "data"
+    assert _stored(session, repo, _key(played.engine, question, profile)) is not None
+
+
+def test_fan_service_keys_carry_the_output_version(played):
+    from matchlens.agents import services
+
+    fans = services.FanServices(team_for(ScriptedClient()))
+    session, _ = _cached_session(played, "svc")
+    key = fans._key(session, "recap", "p")
+    services.OUTPUT_VERSION += 1
+    try:
+        assert fans._key(session, "recap", "p") != key
+    finally:
+        services.OUTPUT_VERSION -= 1

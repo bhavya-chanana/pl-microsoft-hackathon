@@ -587,8 +587,14 @@ def template(pack: dict[str, Any], lang: str) -> PunditDraft:
 # ------------------------------------------------------------------ service
 
 
+# Bump when the router, pack, templates or prompt change what an answer says: answers cached under an
+# older version (Cosmos ``fan_outputs`` outlives the process) are then never served again.
+ANSWER_VERSION = 2
+
+
 def _key(engine: MatchEngine, question: str, profile: FanProfile) -> str:
-    raw = [int(engine.c.elapsed // 60), len(engine.signals()), _norm(question), profile.model_dump_json()]
+    raw = [ANSWER_VERSION, int(engine.c.elapsed // 60), len(engine.signals()), _norm(question),
+           profile.model_dump_json()]
     return hashlib.sha256(json.dumps(raw).encode()).hexdigest()[:32]
 
 
@@ -638,7 +644,9 @@ async def ask(team: Any, session: Any, question: str, profile: FanProfile) -> Pu
         profile=profile, fact_check=report, source=source, agents=agents,
         latency_ms=round((time.perf_counter() - started) * 1000, 1),
     )
-    session.recorder.fan_output(key, "pundit", result.model_dump(mode="json"))
+    # A live model that was blocked or failed may succeed on a retry, so that fallback is not remembered.
+    if source == "agent" or team.label == "offline-templates":
+        session.recorder.fan_output(key, "pundit", result.model_dump(mode="json"))
     session.recorder.agent_run({"kind": "pundit", "outcome": source, "model": team.label,
                                 "fact_check": report.status.value, "intent": intent,
                                 "latency_ms": result.latency_ms})

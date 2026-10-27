@@ -51,14 +51,18 @@ def _profile_context(session: MatchSession, profile: FanProfile) -> dict[str, An
     return out
 
 
+OUTPUT_VERSION = 2  # bump when catch-up, recap or coach-brief logic changes what they say
+
+
 class FanServices:
     def __init__(self, team: AgentTeam) -> None:
         self.team = team
         self.generated_by = "data" if team.label == "offline-templates" else "agent"
 
     def _key(self, session: MatchSession, *parts: Any) -> str:
-        # Coarse match position: answers stay valid within the same minute and signal count.
-        raw = [int(session.engine.c.elapsed // 60), len(session.engine.signals()), *parts]
+        # Coarse match position: answers stay valid within the same minute and signal count. The version
+        # retires outputs cached (in Cosmos, across restarts) before the logic behind them changed.
+        raw = [OUTPUT_VERSION, int(session.engine.c.elapsed // 60), len(session.engine.signals()), *parts]
         return hashlib.sha256(json.dumps(raw).encode()).hexdigest()[:32]
 
     def _store(self, session: MatchSession, key: str, kind: str, result: Catchup | Recap | coach.CoachBrief,
