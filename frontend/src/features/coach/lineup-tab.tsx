@@ -301,3 +301,33 @@ export function LineupTab() {
     </div>
   );
 }
+
+/** A small formation pitch with a rating badge per starter, for the match report. Names live on the Lineup tab. */
+export function LineupMini({ side }: { side: "home" | "away" }) {
+  const meta = useLive((s) => s.meta);
+  const ratings = useRatings().data;
+  const map = useMemo(() => new Map((ratings ?? []).map((r) => [r.player_id, r])), [ratings]);
+  if (!meta || !meta[side].starting_xi.length) return null;
+  const team = meta[side];
+  return (
+    <figure className="flex min-w-0 flex-col gap-2">
+      <figcaption className="flex items-center gap-2 text-sm font-medium">
+        <span aria-hidden className={cn("size-2.5 rounded-full", side === "home" ? "bg-home" : "bg-away")} />
+        <span className="truncate">{team.name}</span>
+        <span className="text-muted-foreground tabular-nums">{team.formation}</span>
+      </figcaption>
+      <div className="relative mx-auto w-full max-w-[260px] overflow-hidden rounded-xl border bg-turf" style={{ aspectRatio: "3 / 4" }}>
+        <PitchLines horizontal={false} />
+        {place(meta, team).map((spot) => {
+          const { x, y } = toXY(spot, "vertical");
+          const r = map.get(spot.id);
+          return (
+            <span key={spot.id} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${x}%`, top: `${y}%` }} title={meta.players[spot.id]?.name}>
+              {r ? <RatingBadge value={r.data_rating} size="sm" /> : <span aria-hidden className="block size-2.5 rounded-full bg-foreground/70" />}
+            </span>
+          );
+        })}
+      </div>
+    </figure>
+  );
+}

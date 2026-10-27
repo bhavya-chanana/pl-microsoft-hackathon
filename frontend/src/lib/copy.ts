@@ -967,6 +967,7 @@ export const copy = {
     possession: "Possession",
     scorers: "Scorers",
     byHalf: "By half",
+    lineups: "Lineups and ratings",
     firstHalf: "1st half",
     secondHalf: "2nd half",
     why: {

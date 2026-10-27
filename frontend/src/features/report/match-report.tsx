@@ -1,5 +1,6 @@
 "use client";
 
+import { LineupMini } from "@/features/coach/lineup-tab";
 import { ArrowLeftRight, Link2, Printer, RectangleVertical } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useMemo, useState } from "react";
@@ -358,6 +359,12 @@ export function MatchReport() {
         </div>
         <div className="flex flex-col gap-4">
           <ShotMapPanel className="break-inside-avoid print:shadow-none" />
+          <Section title={R.lineups}>
+            <div className="grid grid-cols-2 gap-4">
+              <LineupMini side="home" />
+              <LineupMini side="away" />
+            </div>
+          </Section>
           <Section title={R.subsCards}>
             <SubsCards meta={meta} timeline={timeline} />
           </Section>

@@ -6,6 +6,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { MomentumBar } from "@/features/broadcast/momentum-bar";
 import { FanPolls } from "@/features/fans/fan-polls";
 import { ActionButtons, FloatingActions } from "@/features/live/floating-actions";
+import { ScorersStrip, TopStats } from "@/features/live/live-extras";
 import { LivePitch } from "@/features/live/live-pitch";
 import { StoryLine } from "@/features/live/story-line";
 import { useCoach } from "@/features/coach/coach-store";
@@ -35,6 +36,7 @@ export function MatchCentre() {
         </div>
         <ActionButtons className="hidden shrink-0 md:flex" />
       </div>
+      <ScorersStrip />
       <div className="grid items-start gap-4 min-[1100px]:grid-cols-12 min-[1100px]:gap-6">
         <div className="contents min-[1100px]:col-span-8 min-[1100px]:flex min-[1100px]:flex-col min-[1100px]:gap-4">
           <div className="order-1 min-w-0 min-[1100px]:order-none">
@@ -42,6 +44,9 @@ export function MatchCentre() {
           </div>
           <div className="order-2 min-w-0 min-[1100px]:order-none">
             <MomentumBar />
+          </div>
+          <div className="order-2 min-w-0 min-[1100px]:order-none">
+            <TopStats />
           </div>
           <div className="order-4 min-w-0 min-[1100px]:order-none">
             <MatchPulse />
