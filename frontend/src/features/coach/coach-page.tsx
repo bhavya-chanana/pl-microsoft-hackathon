@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 import { LineupTab } from "./lineup-tab";
 import { Overview } from "./overview";
+import { useScrollActiveIntoView } from "@/lib/use-scroll-active";
 import { useCoach } from "./coach-store";
 
 export type Tab = "overview" | "lineup" | "stats" | "tactics" | "report";
@@ -32,9 +33,10 @@ const TABS: { id: Tab; label: string }[] = [
 /** Underline tab strip: 15px labels, a 2px team-colour line that slides to the active tab. */
 function CoachTabs({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
   const id = useId();
+  const strip = useScrollActiveIntoView<HTMLDivElement>(tab);
   return (
     <LayoutGroup id={id}>
-      <div role="tablist" aria-label={copy.coachPage.tabs} className="-mb-px flex max-w-full overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
+      <div ref={strip} role="tablist" aria-label={copy.coachPage.tabs} className="-mb-px flex max-w-full overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
         {TABS.map((t) => {
           const active = t.id === tab;
           return (

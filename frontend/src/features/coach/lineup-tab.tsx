@@ -1,5 +1,6 @@
 "use client";
 
+import { useScrollActiveIntoView } from "@/lib/use-scroll-active";
 import { ArrowDown, ArrowUp, RectangleVertical } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -256,6 +257,7 @@ export function LineupTab() {
   const wide = useMediaQuery("(min-width: 768px)");
   const ratings = useRatings().data;
   const [lens, setLens] = useState<Lens>("rating");
+  const lensStrip = useScrollActiveIntoView<HTMLDivElement>(lens);
   const ids = useMemo(() => (meta ? [...meta.home.starting_xi, ...meta.away.starting_xi] : []), [meta]);
   const stats = usePlayersStats(ids);
   const map = useMemo(() => new Map((ratings ?? []).map((r) => [r.player_id, r])), [ratings]);
@@ -281,7 +283,7 @@ export function LineupTab() {
           <TeamStrip key={s} meta={meta} side={s} ratings={map} />
         ))}
         {lenses.length > 1 && (
-          <div role="radiogroup" aria-label={copy.coachPage.lensLabel} title={copy.coachPage.legend} className="order-last flex w-full gap-2 overflow-x-auto sm:order-none sm:w-auto [scrollbar-width:none]">
+          <div ref={lensStrip} role="radiogroup" aria-label={copy.coachPage.lensLabel} title={copy.coachPage.legend} className="order-last flex w-full gap-2 overflow-x-auto sm:order-none sm:w-auto [scrollbar-width:none]">
             {lenses.map(([l, label]) => (
               <button key={l} type="button" role="radio" aria-checked={lens === l} onClick={() => setLens(l)} className={cn("h-11 shrink-0 rounded-full px-4 text-sm font-medium ring-1", lens === l ? "bg-foreground text-background ring-foreground" : "bg-raised text-muted-foreground ring-border hover:text-foreground")}>
                 {label}
