@@ -67,6 +67,7 @@ class MatchSession:
         # Fan polls and ratings; votes are stored with the run.
         self.fans = FanZone(self.meta, salt=self.run_id, sink=self.recorder.fan_vote)
         self._tally_pending = False
+        self._handler_tasks: set[asyncio.Task[None]] = set()
 
     @property
     def run_id(self) -> str:
@@ -125,7 +126,7 @@ class MatchSession:
                     self.publish({"type": "signal", "signal": payload})
                     rec.signal(payload)
                     for handler in self._signal_handlers:
-                        asyncio.create_task(self._safe(handler, sig))
+                        self._spawn_handler(handler, sig)
         except asyncio.CancelledError:
             raise
         except Exception:  # pragma: no cover - logged and surfaced to clients
@@ -155,6 +156,15 @@ class MatchSession:
         if frames:
             self.last_frame = frames[-1].model_dump(mode="json")
             self._resume_frame_elapsed = frames[-1].elapsed
+
+    def _spawn_handler(self, handler: SignalHandler, sig: Signal) -> None:
+        """Start a handler now, not at the next scheduling point: its synchronous prefix (the coordinator's
+        decision and the grounded pack) then sees the match as of the signal, before the feed ingests the
+        next event. The task is kept in a set so it cannot be garbage-collected while it runs."""
+        task = asyncio.eager_task_factory(asyncio.get_running_loop(), self._safe(handler, sig))
+        if not task.done():
+            self._handler_tasks.add(task)
+            task.add_done_callback(self._handler_tasks.discard)
 
     async def _safe(self, handler: SignalHandler, sig: Signal) -> None:
         try:
