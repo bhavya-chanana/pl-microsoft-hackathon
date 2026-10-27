@@ -10,7 +10,6 @@ import { useLive } from "@/features/live/live-store";
 import { useShell } from "@/components/shell/shell-store";
 import { useCoachBrief, usePulse, useRatings, useTeamStats } from "@/features/live/queries";
 import { XgTimeline } from "@/features/report/match-report";
-import { formatNumber } from "@/lib/match";
 import { useProfile } from "@/features/profile/profile-store";
 import type { CoachBrief, CoachItem, Confidence, MatchEvent, MatchMeta } from "@/lib/contract";
 import { copy } from "@/lib/copy";
