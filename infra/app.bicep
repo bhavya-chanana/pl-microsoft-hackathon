@@ -12,6 +12,8 @@ param matchSpeed string
 param backendImageName string
 param frontendImageName string
 param speechSku string
+param enableMaiSpeech bool
+param maiVoiceModel string
 
 var token = toLower(uniqueString(subscription().id, environmentName, location))
 var placeholderImage = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
@@ -60,6 +62,17 @@ module speech 'speech.bicep' = {
     token: token
     principalId: identity.properties.principalId
     sku: speechSku
+  }
+}
+
+// MAI voices (preview): tried first, with the speech resource above as the fallback. S0, Entra ID only.
+module maiSpeech 'speech-mai.bicep' = if (enableMaiSpeech) {
+  name: 'matchlens-speech-mai'
+  params: {
+    location: location
+    tags: tags
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 
@@ -129,6 +142,9 @@ resource backend 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'MATCHLENS_COSMOS_DATABASE', value: cosmos.outputs.databaseName }
             { name: 'MATCHLENS_SPEECH_REGION', value: speech.outputs.region }
             { name: 'MATCHLENS_SPEECH_RESOURCE_ID', value: speech.outputs.resourceId }
+            { name: 'MATCHLENS_MAI_SPEECH_REGION', value: enableMaiSpeech ? maiSpeech!.outputs.region : '' }
+            { name: 'MATCHLENS_MAI_SPEECH_RESOURCE_ID', value: enableMaiSpeech ? maiSpeech!.outputs.resourceId : '' }
+            { name: 'MATCHLENS_MAI_VOICE_MODEL', value: maiVoiceModel }
           ]
           probes: [
             {
@@ -198,3 +214,5 @@ output backendUrl string = backendUrl
 output cosmosEndpoint string = cosmos.outputs.endpoint
 output speechResourceId string = speech.outputs.resourceId
 output speechRegion string = speech.outputs.region
+output maiSpeechRegion string = enableMaiSpeech ? maiSpeech!.outputs.region : ''
+output maiSpeechResourceId string = enableMaiSpeech ? maiSpeech!.outputs.resourceId : ''

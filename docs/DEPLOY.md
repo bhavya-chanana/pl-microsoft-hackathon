@@ -132,3 +132,51 @@ open http://localhost:3100
   of storage (USD 0.285 per GB-month in Central India).
 - The recorded demo means a judge's visit costs no model calls unless they ask for something that was not recorded.
 - Recording the demo costs a few dollars of `gpt-5-mini` usage, once.
+
+## CI/CD with GitHub Actions
+
+Two workflows live in `.github/workflows/`:
+
+| Workflow | Runs on | Does |
+|---|---|---|
+| `ci.yml` | Pull requests, pushes to `main` | Backend tests, frontend lint, typecheck and build, Bicep compile, Docker builds of both images |
+| `deploy.yml` | Push to `main`, or by hand | Runs CI, then `azd deploy` (build both images, update both Container Apps), then checks `/api/backend/health` |
+
+Deploys sign in with OIDC (workload identity federation), so no Azure secret is stored in GitHub. The identity is
+deploy-only: **Contributor on `rg-matchlens-demo`** and **AcrPush on the registry**. It cannot create resources or
+assign roles, so a change under `infra/` is applied by hand with `azd up`; the workflow never runs `azd provision`.
+
+One-time setup (the repo is `bhavya-chanana/pl-microsoft-hackathon`; the subscription and names are this project's):
+
+```bash
+SUB=b3130593-5e91-433b-b228-ae4bafc945c3
+RG=rg-matchlens-demo
+APP_ID=$(az ad app create --display-name matchlens-github --query appId -o tsv)
+az ad sp create --id "$APP_ID"
+az ad app federated-credential create --id "$APP_ID" --parameters '{
+  "name": "github-production",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:bhavya-chanana/pl-microsoft-hackathon:environment:production",
+  "audiences": ["api://AzureADTokenExchange"]}'
+az role assignment create --assignee "$APP_ID" --role Contributor --scope /subscriptions/$SUB/resourceGroups/$RG
+az role assignment create --assignee "$APP_ID" --role AcrPush \
+  --scope /subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.ContainerRegistry/registries/cr7npbct7a7fan6
+```
+
+Then create a GitHub environment named `production` (add required reviewers for a manual approval before each
+deploy) and add these **variables** to it (none is a secret):
+
+| Variable | Value |
+|---|---|
+| `AZURE_CLIENT_ID` | `$APP_ID` from above |
+| `AZURE_TENANT_ID` | `b787360b-1914-402d-934c-25740601c6f9` |
+| `AZURE_SUBSCRIPTION_ID` | `b3130593-5e91-433b-b228-ae4bafc945c3` |
+| `AZURE_ENV_NAME` | `matchlens-demo` |
+| `AZURE_LOCATION` | `centralindia` |
+| `AZURE_RESOURCE_GROUP` | `rg-matchlens-demo` |
+| `AZURE_CONTAINER_REGISTRY_NAME` | `cr7npbct7a7fan6` |
+| `AZURE_CONTAINER_REGISTRY_ENDPOINT` | `cr7npbct7a7fan6.azurecr.io` |
+| `FRONTEND_URL` | the `FRONTEND_URL` that `azd up` printed |
+
+The workflows are only picked up once they are on GitHub; a push to `main` then deploys. Push a branch first to see
+`ci.yml` run on its own.
