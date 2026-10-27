@@ -1,0 +1,65 @@
+name: Deploy to Azure
+
+# Runs after a push to main (or by hand). Builds both images and updates the two Container Apps with `azd deploy`.
+# Signs in with OIDC, so no secret is stored in GitHub. The identity can only deploy: Contributor on the resource
+# group and AcrPush on the registry. It cannot create resources or assign roles, so infrastructure changes
+# (anything under infra/) are applied by hand with `azd up`. One-time setup: docs/DEPLOY.md, "CI/CD with GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Azure/setup-azd@v2
+
+      - name: Sign in (azd)
+        run: |
+          azd auth login \
+            --client-id "${{ vars.AZURE_CLIENT_ID }}" \
+            --federated-credential-provider github \
+            --tenant-id "${{ vars.AZURE_TENANT_ID }}"
+
+      # `azd env refresh` would read subscription-level deployments, which this identity cannot do, so describe the
+      # environment from the variables instead.
+      - name: Describe the azd environment
+        run: |
+          azd env new "$AZURE_ENV_NAME" --subscription "$AZURE_SUBSCRIPTION_ID" --location "$AZURE_LOCATION" --no-prompt
+          azd env set AZURE_RESOURCE_GROUP "${{ vars.AZURE_RESOURCE_GROUP }}"
+          azd env set AZURE_CONTAINER_REGISTRY_ENDPOINT "${{ vars.AZURE_CONTAINER_REGISTRY_ENDPOINT }}"
+          azd env set AZURE_CONTAINER_REGISTRY_NAME "${{ vars.AZURE_CONTAINER_REGISTRY_NAME }}"
+
+      - name: Deploy backend and frontend
+        run: azd deploy --no-prompt
+
+      - name: Smoke test
+        run: |
+          url="${{ vars.FRONTEND_URL }}"
+          for i in $(seq 1 12); do
+            if curl -fsS "$url/api/backend/health"; then echo; exit 0; fi
+            sleep 15
+          done
+          echo "Health check failed for $url" >&2
+          exit 1

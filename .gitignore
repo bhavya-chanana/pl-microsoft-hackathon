@@ -39,3 +39,5 @@ HANDOFF.md
 
 # Local run logs
 logs/
+# Local speech output
+*.mp3

@@ -35,9 +35,26 @@ def test_export_round_trips_and_is_reproducible(demo_match, tmp_path):
     assert entry["final_score"] == {"NBR": 3, "HBC": 2}
 
 
+def _assert_close(actual, expected, path="match"):
+    """Equal except for float noise: macOS and Linux differ in the last digit of some coordinates."""
+    if isinstance(expected, dict):
+        assert actual.keys() == expected.keys(), f"{path}: keys differ"
+        for key in expected:
+            _assert_close(actual[key], expected[key], f"{path}.{key}")
+    elif isinstance(expected, list):
+        assert len(actual) == len(expected), f"{path}: length differs"
+        for i, (a, e) in enumerate(zip(actual, expected)):
+            _assert_close(a, e, f"{path}[{i}]")
+    elif isinstance(expected, float):
+        assert actual == pytest.approx(expected, rel=1e-9, abs=1e-9), f"{path}: {actual} != {expected}"
+    else:
+        assert actual == expected, f"{path}: {actual!r} != {expected!r}"
+
+
 def test_published_hero_match_is_the_live_demo(demo_match):
     folder = ROOT / "dataset" / "ml-demo-001"
-    assert load_match(folder) == demo_match, "dataset is stale; re-run the export"
+    published = load_match(folder).model_dump(mode="json")
+    _assert_close(published, demo_match.model_dump(mode="json"))  # else the dataset is stale; re-run the export
 
 
 def test_dataset_rows_validate_against_schemas(demo_match):

@@ -156,6 +156,7 @@ class CassetteChatClient(BaseChatClient):
         self.enabled = True  # off while a different match is playing
         self.hits = 0
         self.misses = 0
+        self.missed: list[str] = []
 
     async def _respond(self, messages: list[Message], options: Any, kwargs: dict[str, Any]) -> ChatResponse:
         if not self.enabled:
@@ -177,6 +178,7 @@ class CassetteChatClient(BaseChatClient):
             return ChatResponse(messages=Message("assistant", [entry["text"]]),
                                 model=f"{entry.get('model') or 'model'} (recorded)")
         self.misses += 1
+        self.missed.append(key or "unkeyed request")
         if not self.live_misses:
             raise CassetteMiss(key or "unkeyed request")
         started = time.perf_counter()

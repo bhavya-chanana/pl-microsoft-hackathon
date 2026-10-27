@@ -179,7 +179,7 @@ async def health() -> dict[str, Any]:
         "agent_insight_ms_p95": _p95(agent_lat),
         "run_id": s.run_id if s else None,
         "store": manager.repo.stats(),
-        "speech": "azure" if runtime and runtime.narrator.available else None,
+        "speech": runtime.narrator.mode if runtime else None,
     }
 
 
