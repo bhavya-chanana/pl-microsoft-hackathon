@@ -16,7 +16,7 @@ import { formatNumber } from "@/lib/match";
 import { cn } from "@/lib/utils";
 
 const T = copy.playersTable;
-type SortKey = "name" | "position" | "rating" | "fans" | "goals" | "shots" | "xg" | "passes" | "defence" | "distance";
+type SortKey = "name" | "position" | "rating" | "fans" | "goals" | "shots" | "xg" | "passes" | "defence" | "distance" | "minutes" | "duels";
 const NUM_COLS: { key: SortKey; label: string; full: string }[] = [
   { key: "goals", label: T.goals, full: T.goalsFull },
   { key: "shots", label: T.shots, full: T.shots },
@@ -24,6 +24,8 @@ const NUM_COLS: { key: SortKey; label: string; full: string }[] = [
   { key: "passes", label: T.passes, full: T.passes },
   { key: "defence", label: T.defenceShort, full: T.defence },
   { key: "distance", label: T.distance, full: T.distance },
+  { key: "minutes", label: "Min", full: "Minutes played" },
+  { key: "duels", label: "Duels", full: "Duels won / total" },
 ];
 export type Team = "all" | "home" | "away";
 const LINES = ["GK", "DEF", "MID", "FWD"];
@@ -39,6 +41,8 @@ function num(key: SortKey, s: PlayerStats | undefined): number | null {
     case "passes": return s.passes;
     case "defence": return s.tackles + s.interceptions;
     case "distance": return s.distance_km;
+    case "minutes": return s.minutes ?? null;
+    case "duels": return s.duels_won ?? null;
     default: return null;
   }
 }
@@ -109,6 +113,8 @@ export function PlayersTable({ team }: { team: Team }) {
   }
   const hasVotes = rows.some((r) => r.fan_votes > 0);
   const showFans = !coachMode && hasVotes;
+  // Min and Duels are optional backend fields: leave the columns out until some player has them.
+  const cols = NUM_COLS.filter((c) => (c.key !== "minutes" && c.key !== "duels") || rows.some((r) => num(c.key, stats.get(r.player_id)) !== null));
   return (
     <div className="flex flex-col gap-3">
       <div className="min-w-0 overflow-x-auto rounded-2xl border bg-card">
@@ -118,7 +124,7 @@ export function PlayersTable({ team }: { team: Team }) {
               <Th label={T.player} k="name" sort={sort} dir={dir} onSort={onSort} className="sticky left-0 z-10 bg-card" />
               <Th label={T.pos} k="position" sort={sort} dir={dir} onSort={onSort} />
               <Th label={T.rating} k="rating" sort={sort} dir={dir} onSort={onSort} />
-              {NUM_COLS.map((c) => (
+              {cols.map((c) => (
                 <Th key={c.key} label={c.label} full={c.full} k={c.key} sort={sort} dir={dir} onSort={onSort} className="text-right" />
               ))}
               {showFans && <Th label={T.fans} k="fans" sort={sort} dir={dir} onSort={onSort} className="text-right" />}
@@ -147,11 +153,12 @@ export function PlayersTable({ team }: { team: Team }) {
                   <td className="border-t px-3">
                     <RatingBadge value={r.data_rating} size="md" />
                   </td>
-                  {NUM_COLS.map((c) => {
+                  {cols.map((c) => {
                     const v = num(c.key, stats.get(r.player_id));
+                    const st = stats.get(r.player_id);
                     return (
                       <td key={c.key} className={cn("border-t px-3 text-right tabular-nums", sort === c.key ? "font-semibold" : "text-muted-foreground")}>
-                        {v === null ? "–" : c.key === "xg" ? v.toFixed(2) : c.key === "distance" ? v.toFixed(1) : v}
+                        {v === null ? "–" : c.key === "xg" ? v.toFixed(2) : c.key === "distance" ? v.toFixed(1) : c.key === "duels" ? `${v}/${st?.duels_total ?? v}` : v}
                       </td>
                     );
                   })}
