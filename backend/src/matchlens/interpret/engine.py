@@ -93,6 +93,7 @@ class _Computed:
     clock: float = 0.0
     elapsed: float = 0.0
     status: str = "pre_match"  # pre_match | live | half_time | full_time
+    period_kickoffs: set[str] = field(default_factory=set)  # event ids of kick-offs that start a half
     possession_team: str | None = None
     possession_since: float = 0.0
     teams: dict[str, TeamStats] = field(default_factory=dict)
@@ -235,6 +236,11 @@ class MatchEngine:
     def event(self, event_id: str) -> Event | None:
         e = self._events.get(event_id)
         return self._effective(e) if e else None
+
+    def is_restart(self, event_id: str) -> bool:
+        """True for a kick-off that restarts play after a goal, as opposed to one that starts a half."""
+        e = self._events.get(event_id)
+        return e is not None and e.type == EventType.KICKOFF and event_id not in self.c.period_kickoffs
 
     def pass_quality(self, event_id: str) -> PassQuality | None:
         return self.c.pass_quality.get(event_id)
@@ -432,6 +438,7 @@ class MatchEngine:
             case EventType.KICKOFF:
                 if c.status in ("pre_match", "half_time"):
                     c.status = "live"
+                    c.period_kickoffs.add(e.event_id)
                     self._signal(SignalType.PERIOD, f"kickoff:{e.period}", e.elapsed, e.period, e.clock,
                                  evidence_event_ids=[e.event_id], facts={"phase": "kickoff", "period": e.period},
                                  priority=3)

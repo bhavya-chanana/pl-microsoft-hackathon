@@ -41,6 +41,8 @@ def event_payload(engine: MatchEngine, e: Event) -> dict[str, Any]:
     q = engine.pass_quality(e.event_id)
     if q:
         data["pass_quality"] = q.model_dump()
+    if e.type == EventType.KICKOFF:
+        data["restart"] = engine.is_restart(e.event_id)
     return data
 
 
@@ -206,7 +208,9 @@ class MatchSession:
     # ---------------------------------------------------------- snapshots
 
     def timeline(self) -> list[dict[str, Any]]:
-        return [event_payload(self.engine, e) for e in self.engine.events(types=TIMELINE_TYPES)]
+        """Fan timeline: restart kick-offs after a goal are left out; each half's own kick-off stays."""
+        return [event_payload(self.engine, e) for e in self.engine.events(types=TIMELINE_TYPES)
+                if not self.engine.is_restart(e.event_id)]
 
     def snapshot(self) -> dict[str, Any]:
         """Everything a client joining mid-match needs (FR-007)."""
