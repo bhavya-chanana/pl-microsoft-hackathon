@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 import type { FeedItem } from "@/lib/contract";
 
-import { BIG_MOMENTS, InsightCard } from "./insight-card";
+import { InsightCard } from "./insight-card";
 
 export function FeedSkeleton() {
   return (
@@ -61,7 +61,10 @@ export function InsightFeed({
   if (filter) items = items.filter(filter);
   if (highlights) {
     const latest = items[0];
-    items = items.filter((i) => i === latest || BIG_MOMENTS.has(i.signal_type));
+    const sure = items.filter((i) => i.signal_type === "goal" || i.signal_type === "card");
+    const chance = items.find((i) => i.signal_type === "big_chance");
+    const picked = new Set([...sure, ...(chance ? [chance] : []), ...(latest ? [latest] : [])]);
+    items = items.filter((i) => picked.has(i));
   }
   if (limit) items = items.slice(0, limit);
   if (!items.length) {

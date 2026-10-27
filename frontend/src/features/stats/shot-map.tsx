@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { Segmented } from "@/components/ui/segmented";
 import { useLive } from "@/features/live/live-store";
 import type { MatchEvent, MatchMeta } from "@/lib/contract";
 import { copy } from "@/lib/copy";
@@ -65,7 +66,7 @@ function Mark({ outcome, r, className }: { outcome: string; r: number; className
   }
 }
 
-const markSize = (xg: number | null) => 0.8 + Math.sqrt(xg ?? 0.05) * 2;
+const markSize = (xg: number | null) => 0.9 + Math.sqrt(xg ?? 0.05) * 2.2;
 
 function HalfPitch() {
   return (
@@ -107,11 +108,13 @@ export function ShotMapPanel({ className }: { className?: string }) {
   const meta = useLive((s) => s.meta);
   const timeline = useLive((s) => s.timeline);
   const [active, setActive] = useState<string | null>(null);
+  const [team, setTeam] = useState<"both" | Side>("both");
   if (!meta) return null;
-  const shots = timeline.filter((e) => e.type === "shot").flatMap((e) => plot(e, meta) ?? []);
+  const all = timeline.filter((e) => e.type === "shot").flatMap((e) => plot(e, meta) ?? []);
+  const shots = all.filter((s) => team === "both" || s.side === team);
   const latest = shots.slice(-LATEST).reverse();
   const goals = shots.filter((s) => s.event.outcome === "goal").length;
-  const count = (side: Side) => shots.filter((s) => s.side === side).length;
+  const count = (side: Side) => all.filter((s) => s.side === side).length;
 
   return (
     <section aria-labelledby="shot-map-heading" className={cn("flex flex-col gap-3 rounded-lg border bg-card p-4", className)}>
@@ -121,7 +124,18 @@ export function ShotMapPanel({ className }: { className?: string }) {
         </h2>
         <p className="max-w-prose text-xs text-muted-foreground">{S.help}</p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+      <Segmented<"both" | Side>
+        label={S.heading}
+        value={team}
+        onChange={setTeam}
+        className="min-w-0 max-w-sm"
+        options={[
+          { value: "both", label: copy.momentsPage.kinds.all },
+          { value: "home", label: <><span aria-hidden className="size-2.5 rounded-full bg-home" />{meta.home.short_name}</> },
+          { value: "away", label: <><span aria-hidden className="size-2.5 rounded-full bg-away" />{meta.away.short_name}</> },
+        ]}
+      />
+      <div className="grid gap-4 md:grid-cols-[minmax(0,34rem)_minmax(0,1fr)]">
         <figure className="flex flex-col gap-2">
           <svg
             viewBox={`-3 -3 ${W + 6} ${HALF + 5}`}

@@ -332,3 +332,32 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+@media print {
+  .fixed,
+  .match-ambient,
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+  #main {
+    padding: 0 !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  .match-report {
+    break-inside: avoid-page;
+  }
+  .sticky {
+    position: static !important;
+  }
+}
+
+@keyframes indeterminate {
+  0% {
+    left: -35%;
+  }
+  100% {
+    left: 100%;
+  }
+}

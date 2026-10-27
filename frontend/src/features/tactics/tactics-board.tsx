@@ -195,6 +195,7 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
   const tactics = useMemo(() => board?.tactics ?? [], [board]);
   const byId = useMemo(() => new Map(tactics.map((x) => [x.tactic_id, x])), [tactics]);
   const done = board?.status === "done";
+  const working = create.isPending || Boolean(boardId && board && !done && board.status !== "failed");
 
   const ordered = useMemo<TacticResult[]>(() => {
     if (!done) return tactics;
@@ -240,27 +241,42 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-display text-display font-semibold">{t.heading}</h1>
+          <h1 className="sr-only">{t.heading}</h1>
           {fixture && <Badge className="bg-rewritten/15 text-rewritten">{t.fixtureBanner}</Badge>}
         </div>
         <p className="max-w-prose text-sm text-muted-foreground">{t.intro}</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
+      <div className="flex flex-col gap-6">
         <form
           aria-label={t.setup}
-          className="flex min-w-0 flex-col gap-6 self-start rounded-lg border bg-card p-4 shadow-raised "
+          className="flex min-w-0 flex-col gap-5 rounded-2xl border bg-card p-4 shadow-raised sm:p-5"
           onSubmit={(e) => {
             e.preventDefault();
             if (canBuild) build();
           }}
         >
-          <MomentPicker source={source} onSource={setSource} moments={moments} maxElapsed={maxElapsed} teams={teams} teamId={teamId} onTeam={setPickedTeam} />
-          <ScenarioPrompt {...settings} onChange={(next) => setSettings((s) => ({ ...s, ...next }))} />
-          <Button type="submit" size="lg" className="h-11 gap-2 px-4" disabled={!canBuild}>
-            {create.isPending ? <LoaderCircle aria-hidden className="motion-safe:animate-spin" /> : <Hammer aria-hidden />}
-            {create.isPending ? t.generating : boardId ? t.rebuild : t.generate}
-          </Button>
+          <ScenarioPrompt
+            {...settings}
+            onChange={(next) => setSettings((s) => ({ ...s, ...next }))}
+            extra={<MomentPicker source={source} onSource={setSource} moments={moments} maxElapsed={maxElapsed} teams={teams} teamId={teamId} onTeam={setPickedTeam} />}
+          />
+          <div className="flex flex-col gap-3">
+            <Button type="submit" size="lg" className="h-12 w-full gap-2 px-6 text-base sm:w-fit" disabled={!canBuild || working}>
+              {working ? <LoaderCircle aria-hidden className="motion-safe:animate-spin" /> : <Hammer aria-hidden />}
+              {working ? t.generating : boardId ? t.rebuild : t.goalFirst.build}
+            </Button>
+            {working && (
+              <div role="status" aria-live="polite" className="flex flex-col gap-2">
+                <div className="relative h-1.5 w-full max-w-md overflow-hidden rounded-full bg-raised">
+                  <span className="absolute inset-y-0 w-1/3 rounded-full bg-primary motion-safe:animate-[indeterminate_1.4s_ease-in-out_infinite]" />
+                </div>
+                <p className="text-sm text-muted-foreground tabular-nums">
+                  {t.goalFirst.testing(board?.tactics.filter((x) => x.status === "ready" || x.status === "rejected").length ?? 0, board?.tactics.length ?? 0)}
+                </p>
+              </div>
+            )}
+          </div>
           {!teamId && <p className="text-sm text-muted-foreground">{t.noMatch}</p>}
           {create.isError && (
             <p role="alert" className="text-sm text-destructive">

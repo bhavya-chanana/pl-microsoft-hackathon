@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { describeEvent, EVENT_ICON } from "@/features/companion/match-timeline";
+import { RateSelect } from "@/features/fans/player-ratings";
 import { MatchCard } from "@/features/fans/match-card";
+import { useCoach } from "@/features/coach/coach-store";
 import { useLive } from "@/features/live/live-store";
-import { usePlayerEvents, usePlayerStats } from "@/features/live/queries";
+import { usePlayerEvents, usePlayerStats, useRatings } from "@/features/live/queries";
 import { useProfile } from "@/features/profile/profile-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import type { MatchMeta, PlayerStats } from "@/lib/contract";
@@ -150,6 +152,26 @@ function FollowButton({ playerId, name }: { playerId: string; name: string }) {
   );
 }
 
+/** Fan mode only: one "Rate this player" control instead of vote columns. */
+function VoteSection({ playerId }: { playerId: string }) {
+  const coachMode = useCoach((s) => s.coachMode);
+  const runId = useLive((s) => s.runId);
+  const row = useRatings().data?.find((r) => r.player_id === playerId);
+  if (coachMode || !row || !runId) return null;
+  return (
+    <section aria-labelledby="player-vote" className="flex flex-col gap-2">
+      <h3 id="player-vote" className="text-sm font-medium">
+        {copy.playersTable.vote}
+      </h3>
+      <p className="text-[13px] text-muted-foreground">
+        {copy.playersTable.voteHelp}
+        {row.fan_rating !== null && ` · ${copy.fans.fansColumn} ${formatNumber(row.fan_rating, 1)} (${copy.fans.votes(row.fan_votes)})`}
+      </p>
+      <RateSelect row={row} runId={runId} />
+    </section>
+  );
+}
+
 function PlayerBody({ playerId, meta }: { playerId: string; meta: MatchMeta }) {
   const info = meta.players[playerId];
   const stats = usePlayerStats(playerId);
@@ -187,6 +209,7 @@ function PlayerBody({ playerId, meta }: { playerId: string; meta: MatchMeta }) {
       ) : (
         <Retry label={C.error} retry={() => void stats.refetch()} />
       )}
+      <VoteSection playerId={playerId} />
       <RecentMoments playerId={playerId} meta={meta} />
       <div className="mt-auto pt-2">
         <FollowButton playerId={playerId} name={info?.name ?? ""} />

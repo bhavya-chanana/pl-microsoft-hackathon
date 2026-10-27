@@ -4,9 +4,9 @@ import { useState } from "react";
 
 import { Segmented } from "@/components/ui/segmented";
 import { StablePanel } from "@/components/ui/stable-panel";
-import { PlayerRatings } from "@/features/fans/player-ratings";
 import { copy } from "@/lib/copy";
 
+import { PlayersTable } from "./players-table";
 import { ShotMapPanel } from "./shot-map";
 import { PlayerCard, TeamComparison } from "./team-stats";
 
@@ -39,7 +39,7 @@ export function StatsPage() {
             <TeamComparison />
           </div>
         )}
-        {view === "players" && <PlayerRatings />}
+        {view === "players" && <PlayersTable />}
         {view === "shots" && <ShotMapPanel />}
       </StablePanel>
     </div>

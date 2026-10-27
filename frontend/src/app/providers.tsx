@@ -1,5 +1,6 @@
 "use client";
 
+import { useCoach } from "@/features/coach/coach-store";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
 import { ThemeProvider } from "next-themes";
@@ -17,6 +18,7 @@ function LiveStream({ children }: { children: ReactNode }) {
   useEffect(() => {
     void profileStore.persist.rehydrate();
     void useFans.persist.rehydrate();
+    void useCoach.persist.rehydrate();
   }, []);
   return <LiveStreamContext value={stream}>{children}</LiveStreamContext>;
 }

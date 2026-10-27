@@ -7,9 +7,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLive } from "@/features/live/live-store";
 import { usePlayerStats, useTeamStats } from "@/features/live/queries";
 import { useProfile } from "@/features/profile/profile-store";
-import type { MatchMeta, Shot, TeamStats } from "@/lib/contract";
+import type { MatchMeta, TeamStats } from "@/lib/contract";
 import { copy } from "@/lib/copy";
-import { formatNumber, playerName, sideTone } from "@/lib/match";
+import { formatNumber, sideTone } from "@/lib/match";
 import { cn } from "@/lib/utils";
 
 const L = copy.stats.labels;
@@ -59,6 +59,26 @@ function possessionSplit(home: number | null, away: number | null): { home: numb
   return { home: share, away: 100 - share };
 }
 
+/** A big-number tile: home value left, away right, the leader in its team colour. */
+function Kpi({ label, home, away, digits = 0, unit = "" }: { label: string; home: number; away: number; digits?: number; unit?: string }) {
+  const lead = home === away ? null : home > away ? "home" : "away";
+  const num = (side: "home" | "away", n: number) => (
+    <span className={cn("font-display text-[40px] leading-10 font-bold tnum", lead === side ? sideTone[side].text : "text-muted-foreground")}>
+      {formatNumber(n, digits)}
+      {unit && <span className="text-xl">{unit}</span>}
+    </span>
+  );
+  return (
+    <li className="flex min-w-[78%] snap-start flex-col gap-2 rounded-2xl border bg-card p-4 shadow-raised sm:min-w-0">
+      <span className="text-[13px] font-medium text-muted-foreground">{label}</span>
+      <span className="flex items-baseline justify-between gap-2">
+        {num("home", home)}
+        {num("away", away)}
+      </span>
+    </li>
+  );
+}
+
 function Failed({ retry }: { retry: () => void }) {
   return (
     <div role="alert" className="flex flex-col items-start gap-3">
@@ -97,69 +117,30 @@ export function TeamComparison() {
         </h3>
         <span className={cn("font-display text-lg font-semibold", sideTone.away.text)}>{meta.away.short_name}</span>
       </div>
-      <p className="text-base font-medium">{whoIsOnTop(meta, h, a, possession)}</p>
-      <StatRow label={L.possession} home={possession.home} away={possession.away} unit="%" />
-      <StatRow label={L.shots} home={h.shots} away={a.shots} />
-      <StatRow label={L.onTarget} home={h.shots_on_target} away={a.shots_on_target} />
-      <StatRow label={L.xg} home={h.xg} away={a.xg} digits={2} />
-      <StatRow label={L.passes} home={h.passes} away={a.passes} />
-      <StatRow label={L.corners} home={h.corners} away={a.corners} />
-      <StatRow label={L.fouls} home={h.fouls} away={a.fouls} />
-      <ShotMap meta={meta} home={h} away={a} />
+      <p className="text-lg font-medium">{whoIsOnTop(meta, h, a, possession)}</p>
+      <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0">
+        <Kpi label={L.possession} home={possession.home} away={possession.away} unit="%" />
+        <Kpi label={L.shots} home={h.shots} away={a.shots} />
+        <Kpi label={L.xg} home={h.xg} away={a.xg} digits={2} />
+      </ul>
+      <div className="mt-2 flex flex-col gap-5">
+        <StatRow label={L.possession} home={possession.home} away={possession.away} unit="%" />
+        <StatRow label={L.shots} home={h.shots} away={a.shots} />
+        <StatRow label={L.onTarget} home={h.shots_on_target} away={a.shots_on_target} />
+        <StatRow label={L.xg} home={h.xg} away={a.xg} digits={2} />
+      </div>
+      <details className="group mt-1 rounded-2xl border px-4 py-1 open:pb-4">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-medium [&::-webkit-details-marker]:hidden">
+          {copy.stats.moreStats}
+          <span aria-hidden className="text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
+        </summary>
+        <div className="mt-3 flex flex-col gap-5">
+          <StatRow label={L.passes} home={h.passes} away={a.passes} />
+          <StatRow label={L.corners} home={h.corners} away={a.corners} />
+          <StatRow label={L.fouls} home={h.fouls} away={a.fouls} />
+        </div>
+      </details>
     </section>
-  );
-}
-
-function ShotMap({ meta, home, away }: { meta: MatchMeta; home: TeamStats; away: TeamStats }) {
-  const shots: { shot: Shot; side: "home" | "away" }[] = [
-    ...home.shot_map.map((shot) => ({ shot, side: "home" as const })),
-    ...away.shot_map.map((shot) => ({ shot, side: "away" as const })),
-  ];
-  const goals = shots.filter((s) => s.shot.outcome === "goal").length;
-  return (
-    <figure className="mt-2 flex flex-col gap-2">
-      <figcaption className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium">{copy.stats.shotMap}</span>
-        <span className="text-xs text-muted-foreground">
-          {copy.stats.shotMapHelp} {shots.length} shots, {goals} goals.
-        </span>
-      </figcaption>
-      <svg viewBox="-2 -2 109 72" className="w-full rounded-md" role="img" aria-label={`${copy.stats.shotMap}: ${meta.home.name} ${home.shots} shots, ${meta.away.name} ${away.shots} shots`}>
-        <rect x={-2} y={-2} width={109} height={72} rx={1} className="fill-turf" />
-        <g className="fill-none stroke-chalk" strokeWidth={0.3}>
-          <rect width={105} height={68} />
-          <line x1={52.5} y1={0} x2={52.5} y2={68} />
-          <rect x={0} y={13.84} width={16.5} height={40.32} />
-          <rect x={88.5} y={13.84} width={16.5} height={40.32} />
-        </g>
-        {shots.map(({ shot, side }) => {
-          const goal = shot.outcome === "goal";
-          const r = 0.9 + Math.sqrt(shot.xg) * 3;
-          return (
-            <circle
-              key={shot.event_id}
-              cx={shot.x}
-              cy={shot.y}
-              r={r}
-              className={cn(goal ? sideTone[side].fill : "fill-none", sideTone[side].stroke)}
-              strokeWidth={goal ? 0.3 : 0.5}
-            >
-              <title>
-                {`${shot.minute_label} ${playerName(meta, shot.player_id)}, xG ${shot.xg.toFixed(2)}, ${goal ? copy.stats.goal : shot.outcome.replaceAll("_", " ")}`}
-              </title>
-            </circle>
-          );
-        })}
-      </svg>
-      <p className="flex gap-4 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="size-3 rounded-full bg-foreground" /> {copy.stats.goal}
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="size-3 rounded-full border-2 border-foreground" /> {copy.stats.otherShot}
-        </span>
-      </p>
-    </figure>
   );
 }
 
@@ -168,7 +149,7 @@ export function PlayerCard() {
   const playerId = useProfile((s) => s.playerId);
   const query = usePlayerStats(playerId);
   if (!playerId) {
-    return <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{copy.stats.pickPlayer}</p>;
+    return null;
   }
   const info = meta?.players[playerId];
   if (query.isPending) return <Skeleton className="h-48 w-full" aria-hidden />;

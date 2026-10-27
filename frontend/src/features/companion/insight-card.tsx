@@ -129,6 +129,7 @@ function DetailsSheet({ item, open, onOpenChange }: { item: FeedItem; open: bool
             {item.minute_label} {item.headline}
           </SheetTitle>
           <SheetDescription>{copy.feed.detailsHelp}</SheetDescription>
+          <FactCheckBadge status={item.fact_check} className="mt-1" />
         </SheetHeader>
         {open && <Evidence insightId={item.insight_id} />}
       </SheetContent>
@@ -145,7 +146,6 @@ function Ticks({ item }: { item: FeedItem }) {
           {copy.feed.yourPlayer}
         </span>
       )}
-      <FactCheckBadge status={item.fact_check} />
     </>
   );
 }

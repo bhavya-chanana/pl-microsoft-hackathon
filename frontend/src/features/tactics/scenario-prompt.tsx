@@ -8,6 +8,7 @@ import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
 const t = copy.tactics.prompt;
+const g = copy.tactics.goalFirst;
 export const MAX_PROMPT = 400;
 export const IDEA_COUNTS = [3, 4, 5] as const;
 export const HORIZON_RANGE = { min: 5, max: 10 } as const;
@@ -20,17 +21,54 @@ export type PromptSettings = {
 };
 
 type Props = PromptSettings & {
+  /** Rendered first inside Fine-tune (the moment and team pickers). */
+  extra?: React.ReactNode;
   onChange: (next: Partial<PromptSettings>) => void;
 };
 
 /** The brief for the board: free text, quick starts, how bold to be, how many ideas and how far ahead. */
-export function ScenarioPrompt({ prompt, risk, n, horizon, onChange }: Props) {
+export function ScenarioPrompt({ prompt, risk, n, horizon, onChange, extra }: Props) {
   const id = useId();
   const tooLong = prompt.length > MAX_PROMPT;
   return (
     <fieldset className="flex min-w-0 flex-col gap-4">
-      <legend className="mb-1 font-display text-lg font-semibold">{t.heading}</legend>
+      <legend className="sr-only">{t.heading}</legend>
 
+      <div className="flex flex-col gap-3">
+        <p id={`${id}-goal`} className="text-lg font-semibold">
+          {g.question}
+        </p>
+        <ul aria-labelledby={`${id}-goal`} className="grid gap-3 sm:grid-cols-2">
+          {g.goals.map((goal) => {
+            const custom = goal.text === "";
+            const active = custom ? prompt !== "" && !g.goals.some((x) => x.text && x.text === prompt) : prompt === goal.text;
+            return (
+              <li key={goal.label}>
+                <button
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onChange({ prompt: goal.text })}
+                  className={cn(
+                    "flex min-h-16 w-full flex-col items-start justify-center gap-0.5 rounded-2xl px-4 py-3 text-left ring-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                    active ? "bg-raised ring-2 ring-primary" : "ring-border hover:bg-raised",
+                  )}
+                >
+                  <span className="text-base font-semibold">{goal.label}</span>
+                  <span className="text-[13px] text-muted-foreground">{goal.hint}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <details className="group rounded-2xl border px-4 py-1 open:pb-4">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-medium [&::-webkit-details-marker]:hidden">
+          {g.fineTune}
+          <span aria-hidden className="text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
+        </summary>
+        <div className="mt-3 flex flex-col gap-4">
+          {extra}
       <div className="flex flex-col gap-2">
         <label htmlFor={`${id}-prompt`} className="text-sm font-medium">
           {t.label}
@@ -54,29 +92,6 @@ export function ScenarioPrompt({ prompt, risk, n, horizon, onChange }: Props) {
             {t.length(prompt.length, MAX_PROMPT)}
           </span>
         </div>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <p id={`${id}-presets`} className="text-xs font-medium text-muted-foreground">
-          {t.presets}
-        </p>
-        <ul aria-labelledby={`${id}-presets`} className="flex flex-wrap gap-2">
-          {t.presetList.map((p) => (
-            <li key={p.label}>
-              <button
-                type="button"
-                onClick={() => onChange({ prompt: p.text })}
-                aria-pressed={prompt === p.text}
-                className={cn(
-                  "min-h-11 rounded-full border px-3 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                  "hover:bg-muted aria-pressed:border-ring aria-pressed:bg-muted",
-                )}
-              >
-                {p.label}
-              </button>
-            </li>
-          ))}
-        </ul>
       </div>
 
       <div className="flex flex-col gap-2">
@@ -123,6 +138,8 @@ export function ScenarioPrompt({ prompt, risk, n, horizon, onChange }: Props) {
           />
         </div>
       </div>
+        </div>
+      </details>
     </fieldset>
   );
 }
