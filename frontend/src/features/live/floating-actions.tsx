@@ -33,12 +33,12 @@ export function FloatingActions() {
         hidden && "invisible opacity-0",
       )}
     >
-      <div className="glass-strong pointer-events-auto flex items-center gap-1.5 rounded-full p-1.5">
-        <Button className="h-11 gap-2 rounded-full px-5 text-sm" disabled={!hasMatch} onClick={() => useShell.getState().setCatchup(true)}>
+      <div className="glass-strong pointer-events-auto flex items-center gap-1 rounded-full p-1">
+        <Button className="h-10 gap-2 rounded-full px-5 text-sm" disabled={!hasMatch} onClick={() => useShell.getState().setCatchup(true)}>
           <History aria-hidden />
           {copy.catchup.cta}
         </Button>
-        <Button variant="ghost" className="h-11 gap-2 rounded-full px-4 text-sm hover:bg-foreground/10" disabled={!hasMatch} onClick={() => useShell.getState().setPundit(true)}>
+        <Button variant="ghost" className="h-10 gap-2 rounded-full px-4 text-sm hover:bg-foreground/10" disabled={!hasMatch} onClick={() => useShell.getState().setPundit(true)}>
           <MessageCircleQuestion aria-hidden />
           {copy.pundit.open}
         </Button>

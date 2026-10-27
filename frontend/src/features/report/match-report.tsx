@@ -28,7 +28,7 @@ function Section({ title, children, className }: { title: string; children: Reac
 }
 
 /** Cumulative chances created per team as a step chart: minute ticks, goal dots on the line, end totals. */
-function XgTimeline({ meta, timeline }: { meta: MatchMeta; timeline: MatchEvent[] }) {
+export function XgTimeline({ meta, timeline }: { meta: MatchMeta; timeline: MatchEvent[] }) {
   const series = useMemo(() => {
     const out = { home: [{ t: 0, v: 0 }], away: [{ t: 0, v: 0 }] };
     const total = { home: 0, away: 0 };

@@ -4,7 +4,6 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/ui/empty-state";
-import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCoach } from "@/features/coach/coach-store";
 import { useLive } from "@/features/live/live-store";
@@ -17,7 +16,7 @@ import { cn } from "@/lib/utils";
 
 const T = copy.playersTable;
 type SortKey = "name" | "position" | "rating" | "fans";
-type Team = "all" | "home" | "away";
+export type Team = "all" | "home" | "away";
 const LINES = ["GK", "DEF", "MID", "FWD"];
 
 function compare(key: SortKey, a: PlayerRating, b: PlayerRating): number {
@@ -46,11 +45,10 @@ function Th({ label, k, sort, dir, onSort, className }: { label: string; k: Sort
 }
 
 /** Every player who has played: sortable, 48px rows, tap a row for the player sheet. */
-export function PlayersTable() {
+export function PlayersTable({ team }: { team: Team }) {
   const meta = useLive((s) => s.meta);
   const ratings = useRatings();
   const coachMode = useCoach((s) => s.coachMode);
-  const [team, setTeam] = useState<Team>("all");
   const [sort, setSort] = useState<SortKey>("rating");
   const [dir, setDir] = useState<1 | -1>(-1);
   const [picked, setPicked] = useState<string | null>(null);
@@ -80,20 +78,11 @@ export function PlayersTable() {
   if (!rows.length && team === "all") {
     return <EmptyState>{T.empty}</EmptyState>;
   }
+  const hasVotes = rows.some((r) => r.fan_votes > 0);
+  const showFans = !coachMode && hasVotes;
   const best = Math.max(10, ...rows.map((r) => r.data_rating));
   return (
     <div className="flex flex-col gap-3">
-      <Segmented<Team>
-        label={copy.statsPage.players}
-        value={team}
-        onChange={setTeam}
-        className="max-w-sm"
-        options={[
-          { value: "all", label: copy.momentsPage.kinds.all },
-          { value: "home", label: <><span aria-hidden className="size-2.5 rounded-full bg-home" />{meta.home.short_name}</> },
-          { value: "away", label: <><span aria-hidden className="size-2.5 rounded-full bg-away" />{meta.away.short_name}</> },
-        ]}
-      />
       <div className="min-w-0 overflow-x-auto rounded-2xl border bg-card">
         <table className="w-full min-w-[28rem] border-separate border-spacing-0 text-left text-[15px]">
           <thead className="text-[13px] text-muted-foreground">
@@ -101,15 +90,15 @@ export function PlayersTable() {
               <Th label={T.player} k="name" sort={sort} dir={dir} onSort={onSort} className="sticky left-0 z-10 bg-card" />
               <Th label={T.pos} k="position" sort={sort} dir={dir} onSort={onSort} />
               <Th label={T.rating} k="rating" sort={sort} dir={dir} onSort={onSort} />
-              {!coachMode && <Th label={T.fans} k="fans" sort={sort} dir={dir} onSort={onSort} className="text-right" />}
+              {showFans && <Th label={T.fans} k="fans" sort={sort} dir={dir} onSort={onSort} className="text-right" />}
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => {
               const home = r.team_id === meta.home.team_id;
               return (
-                <tr key={r.player_id} className="group h-12">
-                  <th scope="row" className="sticky left-0 z-10 border-t bg-card px-3 text-left font-medium">
+                <tr key={r.player_id} className="group h-12 transition-colors hover:bg-raised/60 has-[:focus-visible]:bg-raised/60">
+                  <th scope="row" className="sticky left-0 z-10 border-t bg-card px-3 text-left font-medium group-hover:bg-raised">
                     <button
                       type="button"
                       aria-label={T.open(r.name)}
@@ -117,7 +106,7 @@ export function PlayersTable() {
                         opener.current = e.currentTarget;
                         setPicked(r.player_id);
                       }}
-                      className="flex h-12 w-full items-center gap-2 text-left outline-offset-[-2px]"
+                      className="flex h-12 w-full items-center gap-2 rounded-md text-left outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-ring"
                     >
                       <span aria-hidden className={cn("h-5 w-1 shrink-0 rounded-full", home ? "bg-home" : "bg-away")} />
                       <span className={cn("truncate", !r.on_pitch && "text-muted-foreground")}>{r.short_name}</span>
@@ -132,7 +121,7 @@ export function PlayersTable() {
                       </span>
                     </span>
                   </td>
-                  {!coachMode && (
+                  {showFans && (
                     <td className="border-t px-3 text-right tabular-nums text-muted-foreground">
                       {r.fan_rating === null ? "–" : formatNumber(r.fan_rating, 1)}
                     </td>

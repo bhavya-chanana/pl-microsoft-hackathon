@@ -218,7 +218,7 @@ export function ScenarioLab() {
   const pendingKey = kickoff.isPending ? kickoff.variables?.key : null;
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-4 sm:px-6 lg:py-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 xl:px-8">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h1 className="text-[28px] leading-[34px] font-semibold tracking-tight">{copy.lab.heading}</h1>

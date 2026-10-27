@@ -148,11 +148,11 @@ export function BroadcastMonitor({
       data-monitor={autoReplay ? "main" : undefined}
       className={cn(
         "@container relative isolate overflow-hidden bg-graphic text-graphic-foreground",
-        fill ? "h-dvh w-full" : "aspect-video w-full rounded-lg shadow-floating ring-1 ring-border",
+        fill ? "h-dvh w-full" : cn("w-full rounded-lg shadow-floating ring-1 ring-border", compact ? "aspect-[3/2]" : "aspect-video"),
         className,
       )}
     >
-      <div className="absolute inset-0 grid place-items-center p-[3%] pt-[12%] @2xl:pt-[9%]">
+      <div className={cn("absolute inset-0 grid place-items-center p-[3%]", !compact && "pt-[12%] @2xl:pt-[9%]")}>
         <Pitch
           tilt={tilt}
           onSelectPlayer={interactive && !replay ? pick.select : undefined}
@@ -163,10 +163,12 @@ export function BroadcastMonitor({
           {!replay && lane && <PassLane pass={lane} />}
         </Pitch>
       </div>
-      <div className="absolute top-[3%] left-[3%] flex flex-col gap-1.5">
-        <ScoreBug />
-        {!compact && <MomentumBar compact className="hidden w-full max-w-56 @2xl:flex" />}
-      </div>
+      {!compact && (
+        <div className="absolute top-[3%] left-[3%] flex flex-col gap-1.5">
+          <ScoreBug />
+          <MomentumBar compact className="hidden w-full max-w-56 @2xl:flex" />
+        </div>
+      )}
       <AnimatePresence initial={false}>
         {replay ? (
           <m.div key="replay" className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -174,7 +176,7 @@ export function BroadcastMonitor({
           </m.div>
         ) : (
           <m.div key="live" className="pointer-events-none absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <OverlayLayer onAir={onAir} />
+            {!compact && <OverlayLayer onAir={onAir} />}
           </m.div>
         )}
       </AnimatePresence>

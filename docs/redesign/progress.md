@@ -21,3 +21,9 @@ Not done / unverified:
 
 ## Designer feedback not yet applied
 None received yet.
+
+## Final pass (phase 5 polish)
+- One shell width (max-w-7xl) on all pages; Moments gets a right aside; Stats toolbar is one row, Fans column hidden when empty.
+- Explore tiles have real mini previews; Multiverse caption sits below the pitch; mobile Live caption is one row and the pill no longer hides content.
+- Pitch markers use a roving focus (one tab stop, arrows move, Escape returns to the pitch) instead of 22 tab stops.
+- Checked: contrast of subtle text over glass (5.3-6.4:1), reduced motion, reduced transparency, light theme. Screenshots in docs/redesign/screens/after/final/.

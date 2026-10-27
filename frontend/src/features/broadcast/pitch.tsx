@@ -79,12 +79,23 @@ function Dot({ entity, meta, tweenMs, favourite, selected, scale, onSelect, onHo
       className={cn("group outline-none", interactive && "cursor-pointer")}
       {...(interactive && {
         role: "button",
-        tabIndex: 0,
+        tabIndex: -1,
         "aria-label": `#${player.shirt} ${player.name}, ${teamName(meta, teamId)}. ${copy.playerCard.open}`,
         "aria-haspopup": "dialog" as const,
         "aria-pressed": selected,
         onClick: (e: React.MouseEvent<SVGGElement>) => onSelect?.(id, e.currentTarget),
         onKeyDown: (e: React.KeyboardEvent<SVGGElement>) => {
+          const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+          if (step || e.key === "Escape") {
+            e.preventDefault();
+            const svg = e.currentTarget.ownerSVGElement;
+            if (!svg) return;
+            if (e.key === "Escape") return svg.focus();
+            const all = Array.from(svg.querySelectorAll<SVGGElement>("[data-entity][role=button]"));
+            const i = all.indexOf(e.currentTarget);
+            all[(i + step + all.length) % all.length]?.focus();
+            return;
+          }
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             onSelect?.(id, e.currentTarget);
@@ -270,9 +281,21 @@ export function Pitch({
       onClick={interactive ? pickNearest : undefined}
       viewBox={`-3 -3 ${W + 6} ${H + 6}`}
       role={interactive ? "group" : "img"}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.target !== e.currentTarget) return;
+              if (e.key === "Enter" || e.key === " " || e.key.startsWith("Arrow")) {
+                e.preventDefault();
+                svgRef.current?.querySelector<SVGGElement>("[data-entity][role=button]")?.focus();
+              }
+            }
+          : undefined
+      }
       aria-label={label}
       className={cn(
-        "block h-full w-full transition-transform duration-700 ease-broadcast",
+        "block h-full w-full outline-none focus-visible:ring-2 focus-visible:ring-ring transition-transform duration-700 ease-broadcast",
         tilt && "[transform:perspective(900px)_rotateX(32deg)_scale(1.02)] origin-[50%_70%]",
         className,
       )}

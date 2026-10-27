@@ -827,6 +827,8 @@ export const copy = {
     attack: "attack this way",
   },
   momentsPage: {
+    catchUpTitle: "Just joined?",
+    catchUpHelp: "Get the match so far in under a minute, or read the full recap.",
     heading: "Moments",
     intro: "Goals, cards, substitutions and the plays that mattered.",
     highlights: "Highlights",

@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toggle } from "@/components/ui/toggle";
 import { BroadcastMonitor } from "@/features/broadcast/broadcast-monitor";
+import { useOverlayDirector } from "@/features/broadcast/use-overlay-director";
+import { Caption } from "@/features/live/live-pitch";
 import { FactCheckBadge } from "@/features/companion/fact-check-badge";
 import { Narrator } from "@/features/companion/narration";
 import { useLive } from "@/features/live/live-store";
@@ -195,6 +197,12 @@ function PaneTitle({ kind, audio, onAudio }: { kind: Kind; audio: boolean; onAud
   );
 }
 
+/** What is on air, as a caption under the pitch (same as the Live page), not over the play. */
+function PaneCaption() {
+  const onAir = useOverlayDirector();
+  return <Caption onAir={onAir} />;
+}
+
 function Pane({
   index,
   store,
@@ -223,6 +231,7 @@ function Pane({
       >
         <PaneTitle kind={kind} audio={audio} onAudio={onAudio} />
         <BroadcastMonitor compact autoReplay={index === 0} />
+        <PaneCaption />
         <div className="min-h-32">{kind === "coach" ? <CoachTop /> : <FeedTop />}</div>
         <PaneControls index={index} kind={kind} onKind={onKind} />
         <Narrator enabled={audio} />

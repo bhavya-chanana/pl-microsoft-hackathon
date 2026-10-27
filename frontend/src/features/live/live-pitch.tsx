@@ -41,7 +41,7 @@ function overlay_insight_id(onAir: Record<string, string | null>, overlays: Reco
   return id ? overlays[id]?.insight_id : undefined;
 }
 
-function Caption({ onAir }: { onAir: Record<string, string | null> }) {
+export function Caption({ onAir }: { onAir: Record<string, string | null> }) {
   const overlays = useLive((s) => s.overlays);
   const meta = useLive((s) => s.meta);
   const language = useProfile((s) => s.language);
@@ -59,7 +59,7 @@ function Caption({ onAir }: { onAir: Record<string, string | null> }) {
   }
   const side = overlay && meta ? (overlay.team_id === meta.home.team_id ? "home" : overlay.team_id === meta.away.team_id ? "away" : null) : null;
   return (
-    <div className="min-h-11" aria-live="polite">
+    <div className="min-h-10 md:min-h-11" aria-live="polite">
       <AnimatePresence mode="wait" initial={false}>
         {overlay && text && (
           <m.div
@@ -130,7 +130,7 @@ export function LivePitch() {
   const [tilt, setTilt] = useState(false);
   const label = replay ? (signalLabels[replay.moment.signal_type] ?? replay.moment.signal_type) : null;
   return (
-    <section aria-label={copy.pitch.label} data-monitor="main" className="@container flex flex-col gap-3 rounded-2xl border bg-card p-3 shadow-raised max-md:-mx-4 max-md:rounded-none max-md:border-x-0">
+    <section aria-label={copy.pitch.label} data-monitor="main" className="@container flex flex-col gap-2 rounded-2xl border bg-card p-3 shadow-raised max-md:-mx-4 max-md:rounded-none max-md:border-x-0">
       <div className="relative isolate aspect-[111/74] w-full overflow-hidden rounded-xl bg-turf max-md:-mx-3 max-md:w-[calc(100%+1.5rem)] max-md:rounded-none">
         <Pitch
           tilt={tilt}

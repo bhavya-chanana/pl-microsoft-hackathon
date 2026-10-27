@@ -62,12 +62,12 @@ export function MomentsPage() {
   const { setCatchup, setRecap } = useShell.getState();
   const filter = (item: FeedItem) => matches(kind, item) && (team === "both" || item.team_id === meta?.[team].team_id);
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 pt-6 pb-8 md:px-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 pt-6 pb-8 md:px-6 xl:px-8">
       <header className="flex flex-col gap-1">
         <h1 className="text-[28px] leading-[34px] font-semibold tracking-tight">{copy.momentsPage.heading}</h1>
         <p className="text-muted-foreground">{copy.momentsPage.intro}</p>
       </header>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 min-[1100px]:hidden">
         <Button className="h-11 gap-2 px-5" onClick={() => setCatchup(true)} disabled={!meta}>
           <History aria-hidden />
           {copy.catchup.cta}
@@ -76,6 +76,8 @@ export function MomentsPage() {
           {copy.recap.cta}
         </Button>
       </div>
+      <div className="grid items-start gap-6 min-[1100px]:grid-cols-[minmax(0,48rem)_20rem] min-[1100px]:justify-between">
+        <div className="flex min-w-0 flex-col gap-4">
       <StickyBar className="flex items-center gap-3">
         <Segmented
           className="min-w-0 shrink-0"
@@ -117,6 +119,21 @@ export function MomentsPage() {
           </div>
         )}
       </StablePanel>
+        </div>
+      <aside className="hidden flex-col gap-3 rounded-2xl border bg-card p-5 shadow-raised min-[1100px]:sticky min-[1100px]:top-[calc(var(--stack-h)+1rem)] min-[1100px]:flex">
+        <h2 className="font-display text-xl font-semibold">{copy.momentsPage.catchUpTitle}</h2>
+        <p className="text-[15px] text-muted-foreground">{copy.momentsPage.catchUpHelp}</p>
+      <div className="flex flex-col items-start gap-2">
+        <Button className="h-11 gap-2 px-5" onClick={() => setCatchup(true)} disabled={!meta}>
+          <History aria-hidden />
+          {copy.catchup.cta}
+        </Button>
+        <Button variant="ghost" className="h-11 px-4 text-muted-foreground underline-offset-4 hover:underline" onClick={() => setRecap(true)} disabled={!meta}>
+          {copy.recap.cta}
+        </Button>
+      </div>
+      </aside>
+      </div>
     </div>
   );
 }

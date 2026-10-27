@@ -28,7 +28,7 @@ export function StickyBar({ children, className }: { children: React.ReactNode; 
       <div ref={sentinel} aria-hidden className="h-px" />
       <div
         className={cn(
-          "sticky top-[var(--stack-h)] z-30 -mx-4 px-4 py-2 transition-[background-color,box-shadow] md:-mx-6 md:px-6 print:hidden",
+          "sticky top-[var(--stack-h)] z-30 -mx-4 px-4 py-2 transition-[background-color,box-shadow] md:-mx-6 md:px-6 xl:-mx-8 xl:px-8 print:hidden",
           stuck ? "glass border-b" : "bg-transparent",
           className,
         )}
