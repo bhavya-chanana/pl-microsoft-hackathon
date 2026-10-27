@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 
-import { History, MessageCircleQuestion } from "lucide-react";
+import { History, MessageCircleQuestion, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useShell } from "@/components/shell/shell-store";
 import { useLive } from "@/features/live/live-store";
+import { useRestart } from "@/features/stream/use-replay";
 import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
@@ -25,9 +26,22 @@ function useOverlayOpen(): boolean {
 /** Catch me up and Ask the pundit as plain buttons; the Live page places them in its hero row. */
 export function ActionButtons({ size = "md", className }: { size?: "md" | "sm" | "bar"; className?: string }) {
   const hasMatch = useLive((s) => s.meta !== null);
+  const fullTime = useLive((s) => s.status === "finished" || s.status === "archived" || s.state?.status === "full_time");
+  const restart = useRestart();
   const h = size === "sm" ? "h-8 text-[13px]" : size === "bar" ? "h-10 flex-1 text-sm" : "h-10 text-sm";
   return (
-    <div className={cn("flex items-center gap-1", className)}>
+    <div className={cn("flex flex-wrap items-center gap-1", className)}>
+      {fullTime && hasMatch && (
+        <Button
+          variant="secondary"
+          className={cn("gap-2 rounded-full px-4", h, size === "bar" && "order-first w-full flex-none")}
+          disabled={restart.isPending}
+          onClick={() => restart.mutate({ startMinute: 0 })}
+        >
+          <RotateCcw aria-hidden className={cn(restart.isPending && "motion-safe:animate-spin")} />
+          {restart.isPending ? copy.replay.restarting : copy.replay.restart}
+        </Button>
+      )}
       <Button className={cn("gap-2 rounded-full px-4", h)} disabled={!hasMatch} onClick={() => useShell.getState().setCatchup(true)}>
         <History aria-hidden />
         {copy.catchup.cta}
