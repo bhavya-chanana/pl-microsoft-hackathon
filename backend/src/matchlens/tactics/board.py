@@ -329,6 +329,25 @@ def _recorded(clients: ModelClients) -> bool:
     return bool(getattr(clients.creative_client, "enabled", False))
 
 
+def _shortfall(errors: list[str], got: int, wanted: int) -> str | None:
+    """One plain sentence saying why fewer ideas than asked for are shown, or None when all are.
+
+    English only, like the rest of the board's built-in text. The reason is read from the error log but
+    worded without internal terms."""
+    if got >= wanted:
+        return None
+    text = " ".join(errors).lower()
+    if "timeout after" in text or "no time left" in text or "deadline reached" in text:
+        why = "the AI ran out of time, so fewer ideas were tested."
+    elif "rejected" in text or "no valid tactics" in text:
+        why = "some of the AI's ideas did not pass the checks."
+    elif "ideate" in text or "no answer" in text or "unavailable" in text:
+        why = "the AI could not be reached, so only the built-in recipes were tested."
+    else:
+        why = "not enough distinct ideas were ready."
+    return f"{got} of {wanted} ideas ready: {why}"
+
+
 def _fallback_verdict(final: list[TacticResult], baseline: OutcomeStats | None, language: str) -> Verdict:
     """A data-only verdict: used when the model is unavailable, too slow or contradicts the statistics."""
     scored = [r for r in final if r.outcome is not None]
@@ -462,7 +481,7 @@ class BoardService:
         board = TacticsBoard(
             board_id=f"b-{secrets.token_hex(5)}", status="thinking", situation=situation, prompt=request.prompt,
             risk=request.risk, horizon_s=request.horizon_s, evaluator=evaluator.version, model_label=clients.label,
-            recorded=_recorded(clients))
+            recorded=_recorded(clients), requested=request.n)
         rec = _Record(board=board, request=request, meta=session.meta, snap=snap, styles=styles,
                       provider_context=context, base_seed=rollout.snapshot_digest(snap), k=default_k(),
                       clients=clients, evaluator=evaluator)
@@ -722,7 +741,7 @@ class BoardService:
         rec.intents = {tid: i for tid, i in rec.intents.items() if tid in kept or tid in rec.user}
         for r in final:
             rec.results[r.tactic_id] = r
-        self._publish(rec, status="evaluating")
+        self._publish(rec, status="evaluating", shortfall=_shortfall(rec.errors, len(final), rec.request.n))
 
         remaining = default_deadline_s() - (time.monotonic() - rec.started)
         verdict: Verdict | None = None

@@ -104,6 +104,8 @@ class TacticsBoard(_Model):
     model_label: str
     recorded: bool = False  # answered from the demo cassette
     errors: list[str] = Field(default_factory=list)
+    requested: int = 3  # how many ideas the coach asked for
+    shortfall: str | None = None  # plain English (the board's fallback text is English only) when fewer are shown
 
 
 class Drawing(_Model):
