@@ -119,7 +119,7 @@ export function PlayersTable({ team }: { team: Team }) {
   return (
     <div className="flex flex-col gap-3">
       {!coachMode && <p className="text-sm text-muted-foreground">{copy.fans.ratingsHelp}</p>}
-      <p className="text-sm text-muted-foreground sm:hidden">Swipe across for more player stats.</p>
+      <p className="text-sm text-muted-foreground sm:hidden">{T.swipeHint}</p>
       <div className="min-w-0 overflow-x-auto rounded-2xl border bg-card">
         <table className="w-full min-w-[44rem] border-separate border-spacing-0 text-left text-[15px]">
           <thead className="text-[13px] text-muted-foreground">

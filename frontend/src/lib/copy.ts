@@ -993,6 +993,7 @@ export const copy = {
     team: "Team",
   },
   playersTable: {
+    swipeHint: "Swipe across for more player stats.",
     player: "Player",
     pos: "Pos",
     rating: "Rating",
