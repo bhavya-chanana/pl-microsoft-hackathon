@@ -12,21 +12,44 @@ from __future__ import annotations
 import logging
 import secrets
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
-from matchlens.domain.models import Event, MatchMeta, TrackingFrame
+from matchlens.domain.models import Event, MatchMeta, SyntheticMatch, TrackingFrame
 from matchlens.ingest.adapters import FeedAdapter, ReplayControl, StoredRunAdapter, SyntheticReplayAdapter
 from matchlens.runtime.session import MatchSession, SignalHandler
 from matchlens.simulator.engine import generate_match
-from matchlens.simulator.storyline import Storyline
+from matchlens.simulator.storyline import Storyline, comeback_storyline
 from matchlens.store.repository import Repository
 
 log = logging.getLogger(__name__)
 
+DEFAULT_RESTART_SPEED = 15.0
 ResumeHook = Callable[[MatchSession, dict[str, Any]], Awaitable[None]]
 # Derived fields stored next to each event, not part of the feed schema.
 _EVENT_EXTRAS = ("minute_label", "pass_quality")
+
+
+@dataclass(frozen=True)
+class Recipe:
+    """How the loaded match was started, so "restart" can play the same match again.
+
+    synthetic: regenerated from ``seed`` and ``storyline`` (None is the default hero storyline).
+    recorded: a recorded match file, replayed from ``match``.
+    stored: a run in the database that cannot be regenerated (a season archive, a custom storyline,
+    a finished run): replayed from its stored events and frames."""
+
+    kind: Literal["synthetic", "recorded", "stored"]
+    seed: int | None = None
+    storyline: Storyline | None = None
+    match: SyntheticMatch | None = None
+    run_id: str | None = None
+
+    @property
+    def source(self) -> str:
+        """What the API calls the restarted run: synthetic, recorded or rerun (of a stored run)."""
+        return "rerun" if self.kind == "stored" else self.kind
 
 
 def new_run_id(match_id: str) -> str:
@@ -40,6 +63,7 @@ class SessionManager:
         # What the current (or starting) match was generated from, for reset hooks.
         self.seed: int | None = None
         self.storyline: Storyline | None = None
+        self.recipe: Recipe | None = None
         self.repo = Repository.detached()
         self._handlers: list[SignalHandler] = []
         self._reset_hooks: list[Callable[[], object]] = []
@@ -79,6 +103,7 @@ class SessionManager:
     ) -> MatchSession:
         await self.stop()
         self._prepare(seed, storyline)
+        self.recipe = Recipe("synthetic", seed=seed, storyline=storyline)
         match = generate_match(seed=seed, storyline=storyline)
         self.control = ReplayControl(speed=speed, start_elapsed=start_minute * 60)
         session = self._session(SyntheticReplayAdapter(match, self.control), new_run_id(match.meta.match_id))
@@ -88,11 +113,14 @@ class SessionManager:
         session.start()
         return session
 
-    async def start_feed(self, adapter: FeedAdapter, control: ReplayControl, source: str) -> MatchSession:
+    async def start_feed(self, adapter: FeedAdapter, control: ReplayControl, source: str,
+                         recipe: Recipe | None = None) -> MatchSession:
         """Start a run from any feed adapter (e.g. a provider adapter used for local testing).
-        Such runs are not resumed after a restart: only synthetic runs can be regenerated."""
+        Such runs are not resumed after a server restart: only synthetic runs can be regenerated.
+        Pass ``recipe`` to let the API restart the match (without one it cannot)."""
         await self.stop()
         self._prepare(None, None)  # no seed: the recorded demo stays off
+        self.recipe = recipe
         self.control = control
         meta = adapter.meta()
         session = self._session(adapter, new_run_id(meta.match_id))
@@ -117,6 +145,7 @@ class SessionManager:
         await self.stop()
         run_id = run["run_id"]
         self._prepare(run["seed"], None)
+        self.recipe = Recipe("synthetic", seed=run["seed"])
         match = generate_match(seed=run["seed"])
         if match.meta.storyline_title != run.get("storyline"):
             raise ValueError(f"run {run_id} was not played from the default storyline")
@@ -154,6 +183,9 @@ class SessionManager:
                 pass  # another storyline: it cannot be regenerated, so open it as it was left
         await self.stop()
         self._prepare(None, None)
+        # A hero-storyline run can be regenerated, and keeps the recorded demo agents when restarted.
+        default = run.get("seed") is not None and run.get("storyline") == comeback_storyline().title
+        self.recipe = Recipe("synthetic", seed=run["seed"]) if default else Recipe("stored", run_id=run_id)
         events, frames = await self._load(run_id)
         self.control = ReplayControl(speed=float(run.get("speed", 1.0)))
         session = self._session(StoredRunAdapter(MatchMeta.model_validate(stored["meta"])), run_id)
@@ -182,6 +214,33 @@ class SessionManager:
         for row in await session.recorder.load("overlays"):
             session.overlays[row["overlay_id"]] = row
         session.fans.load(await session.recorder.load("fan_votes"))
+
+    async def restart(self, speed: float | None = None, start_minute: float = 0.0) -> MatchSession:
+        """Play the loaded match again from ``start_minute`` as a new run, whatever it is: the hero
+        match, a custom storyline, a recorded match or a stored run. LookupError if nothing can be restarted."""
+        recipe = self.recipe
+        if self.session is None or recipe is None:
+            raise LookupError("no match to restart")
+        if speed is None:
+            speed = self.control.speed if self.control and not self.session.archived else DEFAULT_RESTART_SPEED
+        if recipe.kind == "synthetic":
+            return await self.start_synthetic(seed=recipe.seed or 0, speed=speed, start_minute=start_minute,
+                                              storyline=recipe.storyline)
+        control = ReplayControl(speed=speed, start_elapsed=start_minute * 60)
+        if recipe.kind == "recorded":
+            assert recipe.match is not None
+            return await self.start_feed(SyntheticReplayAdapter(recipe.match, control), control, "recorded", recipe)
+        assert recipe.run_id is not None
+        run = await self.repo.get("runs", recipe.run_id, recipe.run_id)
+        stored = await self.repo.get("runs", recipe.run_id, "meta")
+        if not run or not stored:
+            raise LookupError(f"run {recipe.run_id} is no longer stored")
+        events, frames = await self._load(recipe.run_id)
+        match = SyntheticMatch(meta=MatchMeta.model_validate(stored["meta"]), events=events, tracking=frames,
+                               seed=int(run.get("seed") or 0))
+        session = await self.start_feed(SyntheticReplayAdapter(match, control), control, "rerun", recipe)
+        session.recorder.update(rerun_of=recipe.run_id)
+        return session
 
     def set_control(self, speed: float | None = None, paused: bool | None = None) -> None:
         ctl = self.control

@@ -39,7 +39,7 @@ from matchlens.interpret.moments import moment
 from matchlens.interpret.pulse import pulse
 from matchlens.mcp_server.server import mcp
 from matchlens.runtime.fans import VOTER_PATTERN
-from matchlens.runtime.manager import manager
+from matchlens.runtime.manager import Recipe, manager
 from matchlens.runtime.session import MatchSession, event_payload
 from matchlens.simulator.roster import default_match_meta
 from matchlens.simulator.scenarios import PRESETS, check_storyline, presets, script_vs_reality
@@ -344,8 +344,29 @@ async def start_recorded(req: FeedRequest) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="no such recorded match")
     match = SyntheticMatch.model_validate_json(await asyncio.to_thread(path.read_text))
     control = ReplayControl(speed=req.speed, start_elapsed=req.start_minute * 60)
-    s = await manager.start_feed(SyntheticReplayAdapter(match, control), control, source="recorded")
+    s = await manager.start_feed(SyntheticReplayAdapter(match, control), control, source="recorded",
+                                 recipe=Recipe("recorded", match=match))
     return {"match_id": s.meta.match_id, "run_id": s.run_id, "speed": req.speed}
+
+
+class RestartRequest(BaseModel):
+    speed: float | None = Field(default=None, gt=0, le=60)
+    start_minute: float = Field(default=0.0, ge=0, le=100)
+
+
+@app.post("/api/replay/restart")
+async def restart_replay(req: RestartRequest | None = None) -> dict[str, Any]:
+    """Play the loaded match again from the start (or ``start_minute``) as a new run: the hero match,
+    a scenario, a recorded match or a past match from the archive. Without ``speed``: the current one
+    (15x for a past match)."""
+    req = req or RestartRequest()
+    try:
+        s = await manager.restart(speed=req.speed, start_minute=req.start_minute)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    recipe, control = manager.recipe, manager.control
+    assert recipe is not None and control is not None
+    return {"match_id": s.meta.match_id, "run_id": s.run_id, "speed": control.speed, "source": recipe.source}
 
 
 @app.get("/api/runs")

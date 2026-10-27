@@ -38,6 +38,7 @@ export const PROXY_GET = [
 export const PROXY_POST = [
   /^replay$/,
   /^replay\/control$/,
+  /^replay\/restart$/,
   /^replay\/feed$/,
   /^runs\/[\w-]+\/open$/,
   /^polls\/[\w-]+\/vote$/,

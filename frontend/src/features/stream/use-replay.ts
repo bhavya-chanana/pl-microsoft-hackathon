@@ -11,7 +11,7 @@ import { ReplayStatus } from "@/lib/contract";
 import { copy } from "@/lib/copy";
 
 const KEY = ["replay-status"] as const;
-const Started = z.object({ match_id: z.string(), speed: z.number() });
+const Restarted = z.object({ match_id: z.string(), run_id: z.string().optional(), speed: z.number(), source: z.string().optional() });
 
 /** Current playback speed and pause state. An empty control call just reports them. */
 export function useReplayStatus() {
@@ -32,13 +32,15 @@ export function useReplayControl() {
   });
 }
 
-/** Restart the demo match from the chosen minute (the caller confirms first). */
+/** Restart whatever match is loaded (the demo, a Lab script, a recorded feed or a past run) from the chosen minute; the caller confirms first. */
 export function useRestart() {
   const client = useQueryClient();
   const restart = useMutation({
     mutationFn: () => {
-      const speed = client.getQueryData<ReplayStatus>(KEY)?.speed ?? 15;
-      return postJson("replay", { seed: 7, speed, start_minute: useShell.getState().startMinute }, Started);
+      // The speed of a finished run means nothing, so only a live match sends it (the backend then uses 15x).
+      const live = useLive.getState().status === "live";
+      const speed = live ? client.getQueryData<ReplayStatus>(KEY)?.speed : undefined;
+      return postJson("replay/restart", { speed, start_minute: useShell.getState().startMinute }, Restarted);
     },
     onSuccess: () => {
       useShell.getState().setRestartOpen(false);
