@@ -121,10 +121,10 @@ export function MatchHeader({ hero }: { hero: boolean }) {
             {copy.product}
           </span>
           {meta && home && away && hs !== null && as !== null ? (
-            <div className="flex items-center gap-4 md:gap-10">
-              <div className="flex flex-col items-center gap-1 md:flex-row md:gap-3">
+            <div className="flex w-full min-w-0 items-center justify-center gap-3 md:gap-10">
+              <div className="flex min-w-0 flex-col items-center gap-1 md:flex-row md:gap-3">
                 <Crest team={home} side="home" className="size-8 text-xs md:size-11 md:text-lg" />
-                <span className="max-w-24 truncate text-[13px] font-medium text-muted-foreground md:max-w-none md:text-base md:text-foreground">
+                <span className="line-clamp-2 min-w-0 max-w-24 text-center text-[13px] leading-4 font-medium break-words text-balance text-muted-foreground md:max-w-48 md:text-base md:leading-5 md:text-foreground xl:max-w-64">
                   {home.name}
                 </span>
               </div>
@@ -139,9 +139,9 @@ export function MatchHeader({ hero }: { hero: boolean }) {
                   <ConnectionPill className="pointer-events-auto" />
                 </div>
               </div>
-              <div className="flex flex-col items-center gap-1 md:flex-row-reverse md:gap-3">
+              <div className="flex min-w-0 flex-col items-center gap-1 md:flex-row-reverse md:gap-3">
                 <Crest team={away} side="away" className="size-8 text-xs md:size-11 md:text-lg" />
-                <span className="max-w-24 truncate text-[13px] font-medium text-muted-foreground md:max-w-none md:text-base md:text-foreground">
+                <span className="line-clamp-2 min-w-0 max-w-24 text-center text-[13px] leading-4 font-medium break-words text-balance text-muted-foreground md:max-w-48 md:text-base md:leading-5 md:text-foreground xl:max-w-64">
                   {away.name}
                 </span>
               </div>
@@ -164,7 +164,7 @@ export function MatchHeader({ hero }: { hero: boolean }) {
         {meta && home && away && hs !== null && as !== null ? (
           <>
             <Crest team={home} side="home" className="size-6 text-[10px]" />
-            <span className="truncate font-display text-lg font-bold whitespace-nowrap tnum md:text-xl">
+            <span className="max-w-[40vw] truncate font-display text-lg font-bold whitespace-nowrap tnum md:text-xl">
               <span className="sr-only">{home.name} </span>
               <span aria-hidden className="max-sm:hidden">{home.short_name}</span><span aria-hidden className="sm:hidden">{abbr(home)}</span> {hs} - {as} <span aria-hidden className="max-sm:hidden">{away.short_name}</span><span aria-hidden className="sm:hidden">{abbr(away)}</span>
               <span className="sr-only"> {away.name}</span>

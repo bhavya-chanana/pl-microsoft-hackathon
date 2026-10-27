@@ -117,7 +117,7 @@ function Header({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
                   )}
                 >
                   <span aria-hidden className={cn("size-2.5 rounded-full", side === "home" ? "bg-home" : "bg-away")} />
-                  {t.short_name}
+                  <span className="max-w-[10rem] truncate">{t.short_name}</span>
                 </button>
               );
             })}

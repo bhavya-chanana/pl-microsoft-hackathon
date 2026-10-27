@@ -195,15 +195,23 @@ function KeyPlayers({ meta }: { meta: MatchMeta }) {
   );
 }
 
-/** Goalscorers under one team's name. */
+/** Goalscorers under one team's name, one player per line (a player's goals share a line). */
 function Scorers({ meta, timeline, only }: { meta: MatchMeta; timeline: MatchEvent[]; only: "home" | "away" }) {
   const goals = timeline.filter((e) => e.type === "goal" && sideOf(meta, e.team_id) === only);
   if (!goals.length) return null;
+  const byPlayer = new Map<string, string[]>();
+  for (const e of goals) {
+    const key = e.player_id ?? e.event_id;
+    byPlayer.set(key, [...(byPlayer.get(key) ?? []), e.minute_label]);
+  }
   return (
-    <p className="text-[13px] text-muted-foreground">
-      <span className="sr-only">{R.scorers}: </span>
-      {goals.map((e) => `${playerName(meta, e.player_id, true)} ${e.minute_label}`).join(", ")}
-    </p>
+    <ul aria-label={R.scorers} className="flex flex-col gap-0.5 text-[13px] leading-5 text-muted-foreground">
+      {[...byPlayer].map(([id, minutes]) => (
+        <li key={id} className="break-words">
+          {playerName(meta, id, true)} <span className="tabular-nums">{minutes.join(", ")}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -298,41 +306,41 @@ export function MatchReport() {
   return (
     <article className="match-report flex flex-col gap-4">
       <header className="flex flex-col gap-4 rounded-2xl border bg-card p-4 sm:p-5 print:shadow-none">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="rounded-full bg-raised px-3 py-1.5 text-[13px] font-medium ring-1 ring-border tabular-nums">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="w-fit rounded-full bg-raised px-3 py-1.5 text-[13px] font-medium ring-1 ring-border tabular-nums">
             {phase} · {state.minute_label}
           </span>
-          <div className="flex gap-2 print:hidden">
-            <Button variant="secondary" className="h-11 gap-2 px-4" onClick={() => void copyLink()}>
+          <div className="grid grid-cols-2 gap-2 sm:flex print:hidden">
+            <Button variant="secondary" className="h-11 w-full justify-center gap-2 px-4 sm:w-auto" onClick={() => void copyLink()}>
               <Link2 aria-hidden />
               {R.copyLink}
             </Button>
-            <Button className="h-11 gap-2 px-4" onClick={() => printLight()}>
+            <Button className="h-11 w-full justify-center gap-2 px-4 sm:w-auto" onClick={() => printLight()}>
               <Printer aria-hidden />
               {R.export}
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-3 sm:gap-6">
-          <div className="flex min-w-0 flex-col items-end gap-1 text-right">
-            <span className={cn("flex items-center gap-2 text-lg font-medium", sideTone.home.text)}>
-              <span className="truncate">{meta.home.name}</span>
-              <span aria-hidden className="size-3 shrink-0 rounded-full bg-home" />
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-start sm:gap-x-6">
+          <div className="col-start-1 row-start-2 flex min-w-0 flex-col items-start gap-1.5 text-left sm:row-start-1 sm:items-end sm:text-right">
+            <span className="flex min-w-0 max-w-full items-start gap-2 text-base leading-6 font-semibold sm:text-lg">
+              <span aria-hidden className="mt-2 size-2.5 shrink-0 rounded-full bg-home order-first sm:order-last" />
+              <span className="line-clamp-2 min-w-0 text-balance break-words">{meta.home.name}</span>
             </span>
             <Scorers meta={meta} timeline={timeline} only="home" />
           </div>
-          <p className="font-display text-[44px] leading-[48px] font-bold whitespace-nowrap tabular-nums sm:text-[56px] sm:leading-[56px]">
+          <p className="col-span-2 row-start-1 text-center font-display text-[56px] leading-[56px] font-bold whitespace-nowrap tabular-nums sm:col-span-1 sm:col-start-2">
             {state.score[meta.home.team_id] ?? 0} - {state.score[meta.away.team_id] ?? 0}
           </p>
-          <div className="flex min-w-0 flex-col items-start gap-1">
-            <span className={cn("flex items-center gap-2 text-lg font-medium", sideTone.away.text)}>
-              <span aria-hidden className="size-3 shrink-0 rounded-full bg-away" />
-              <span className="truncate">{meta.away.name}</span>
+          <div className="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-1.5 text-right sm:col-start-3 sm:row-start-1 sm:items-start sm:text-left">
+            <span className="flex min-w-0 max-w-full items-start gap-2 text-base leading-6 font-semibold sm:text-lg">
+              <span aria-hidden className="mt-2 size-2.5 shrink-0 rounded-full bg-away order-last sm:order-first" />
+              <span className="line-clamp-2 min-w-0 text-balance break-words">{meta.away.name}</span>
             </span>
             <Scorers meta={meta} timeline={timeline} only="away" />
           </div>
         </div>
-        <p className="border-t pt-3 text-center text-[13px] text-muted-foreground">
+        <p className="border-t pt-3 text-center text-[13px] leading-5 text-balance text-muted-foreground">
           {meta.competition} · {meta.venue}
         </p>
       </header>
