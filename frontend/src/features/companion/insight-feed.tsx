@@ -59,7 +59,7 @@ export function InsightFeed({
   if (filter) items = items.filter(filter);
   if (highlights) {
     const latest = items[0];
-    const sure = items.filter((i) => i.signal_type === "goal" || i.signal_type === "card");
+    const sure = items.filter((i) => i.signal_type === "goal" || i.signal_type === "card" || i.signal_type === "correction");
     const chance = items.find((i) => i.signal_type === "big_chance");
     const picked = new Set([...sure, ...(chance ? [chance] : []), ...(latest ? [latest] : [])]);
     items = items.filter((i) => picked.has(i));

@@ -61,11 +61,11 @@ export function TopStats() {
   const h = useTeamStats(meta?.home.team_id ?? null).data;
   const a = useTeamStats(meta?.away.team_id ?? null).data;
   if (!meta || !h || !a) return null;
-  const pt = (h.possession_pct ?? 0) + (a.possession_pct ?? 0) || 1;
-  const hp = Math.round(((h.possession_pct ?? 0) / pt) * 100);
+  const pt = h.possession_pct !== null && a.possession_pct !== null ? h.possession_pct + a.possession_pct : 0;
+  const hp = pt > 0 ? Math.round((h.possession_pct! / pt) * 100) : null;
   return (
-    <div className="grid grid-cols-3 gap-3">
-      <Split label="Possession %" home={hp} away={100 - hp} />
+    <div className={cn("grid gap-3", hp === null ? "grid-cols-2" : "grid-cols-3")}>
+      {hp !== null && <Split label="Possession %" home={hp} away={100 - hp} />}
       <Split label="Shots" home={h.shots} away={a.shots} />
       <Split label="xG" home={h.xg} away={a.xg} />
     </div>

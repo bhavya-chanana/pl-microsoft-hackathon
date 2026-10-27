@@ -44,7 +44,7 @@ export const useCoach = create<CoachState>()(
       save: (key, brief) => {
         const old = get().briefs[key];
         if (old && sig(old.brief) === sig(brief)) {
-          set({ briefs: { ...get().briefs, [key]: { ...old, at: Date.now() } } });
+          set({ briefs: { ...get().briefs, [key]: { ...old, brief, at: Date.now() } } });
           return;
         }
         set({ briefs: { ...get().briefs, [key]: { brief, at: Date.now(), prev: old?.brief ?? null } } });
@@ -62,4 +62,4 @@ export const useCoach = create<CoachState>()(
   ),
 );
 
-export const briefKey = (teamId: string, language: string) => `${teamId}:${language}`;
+export const briefKey = (runId: string, teamId: string, language: string) => `${runId}:${teamId}:${language}`;

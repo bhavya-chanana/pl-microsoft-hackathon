@@ -40,7 +40,7 @@ export const queryKeys = {
   catchup: (m: CatchupWindow, p: FanProfile) =>
     ["catchup", m, p.mode, p.language, p.clubId, p.playerId, p.metric] as const,
   recap: (p: FanProfile) => ["recap", p.mode, p.language, p.clubId, p.playerId, p.metric] as const,
-  coach: (teamId: string, language: string) => ["coach", teamId, language] as const,
+  coach: (teamId: string, language: string, runId: string | null) => ["coach", teamId, language, runId] as const,
   player: (id: string) => ["player", id] as const,
   playerEvents: (id: string) => ["player-events", id] as const,
   team: (id: string) => ["team", id] as const,
@@ -106,12 +106,12 @@ export function useRecap(profile: FanProfile, enabled: boolean) {
 
 /** Coach brief for one side; refreshed as new moments land (the backend answers once per match minute). */
 export function useCoachBrief(teamId: string | null, language: string) {
+  const runId = useLive((s) => s.runId);
   useInsightRefresh("coach");
   return useQuery({
-    queryKey: queryKeys.coach(teamId ?? "", language),
+    queryKey: queryKeys.coach(teamId ?? "", language, runId),
     queryFn: ({ signal }) => getJson("coach", CoachBrief, { team_id: teamId, language }, signal),
-    enabled: Boolean(teamId),
-    placeholderData: keepPreviousData,
+    enabled: Boolean(teamId && runId),
   });
 }
 

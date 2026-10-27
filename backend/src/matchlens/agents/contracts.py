@@ -210,6 +210,7 @@ class FactCheckStatus(StrEnum):
 
 
 class FactCheckReport(BaseModel):
+    verification_scope: str = "Structured claims and recognized numeric patterns; other prose is not independently verified."
     status: FactCheckStatus
     results: list[ClaimResult] = Field(default_factory=list)
     unaccounted_numbers: list[str] = Field(default_factory=list)

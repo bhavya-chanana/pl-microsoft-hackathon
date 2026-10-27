@@ -83,6 +83,18 @@ class MatchSession:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
+            self._task = None
+        tasks = list(self._handler_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    def track_handler_task(self, task: asyncio.Task[None]) -> None:
+        """Own background work so stopping the session cancels and joins it."""
+        if not task.done():
+            self._handler_tasks.add(task)
+            task.add_done_callback(self._handler_tasks.discard)
 
     def on_signal(self, handler: SignalHandler) -> None:
         self._signal_handlers.append(handler)
@@ -162,9 +174,7 @@ class MatchSession:
         decision and the grounded pack) then sees the match as of the signal, before the feed ingests the
         next event. The task is kept in a set so it cannot be garbage-collected while it runs."""
         task = asyncio.eager_task_factory(asyncio.get_running_loop(), self._safe(handler, sig))
-        if not task.done():
-            self._handler_tasks.add(task)
-            task.add_done_callback(self._handler_tasks.discard)
+        self.track_handler_task(task)
 
     async def _safe(self, handler: SignalHandler, sig: Signal) -> None:
         try:

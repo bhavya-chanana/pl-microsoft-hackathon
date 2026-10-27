@@ -45,6 +45,7 @@ class WriteBehind:
         self._wake = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
+        self._closing = False
 
     @property
     def pending(self) -> int:
@@ -60,13 +61,14 @@ class WriteBehind:
 
     def start(self) -> None:
         if self._task is None:
+            self._closing = False
             self._task = asyncio.create_task(self._loop(), name="store-writer")
 
     async def close(self) -> None:
         if self._task is not None:
-            self._task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._task
+            self._closing = True
+            self._wake.set()
+            await self._task
             self._task = None
         await self.flush()
 
@@ -79,6 +81,8 @@ class WriteBehind:
                 await self.flush()
             except Exception:  # pragma: no cover - flush already logs per batch
                 log.exception("store flush failed")
+            if self._closing:
+                return
 
     async def flush(self) -> None:
         async with self._lock:

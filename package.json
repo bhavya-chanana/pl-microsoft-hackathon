@@ -29,7 +29,9 @@
     "tacticsml:export": "cd backend && uv run --group tactics-ml python -m matchlens.tacticsml.train export",
     "tacticsml:eval": "cd backend && uv run --group tactics-ml python -m matchlens.tacticsml.train evaluate",
     "lint": "cd frontend && npm run lint && npm run typecheck",
-    "build": "cd frontend && npm run build"
+    "build": "cd frontend && npm run build",
+    "data:season": "cd backend && uv run --group leaguedata python -m matchlens.dataset.season",
+    "db:seed:season": "cd backend && uv run python -m matchlens.store.seed"
   },
   "devDependencies": {
     "concurrently": "10.0.6"

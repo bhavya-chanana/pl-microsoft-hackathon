@@ -200,7 +200,7 @@ def personalise_feed(session: MatchSession, profile: FanProfile, limit: int = 50
     """Insights rendered for one fan: their mode and language, their club's angle,
     and their favourite player's moments boosted (FR-035 to FR-037)."""
     out = []
-    for ins in session.insights.values():
+    for insertion_order, ins in enumerate(session.insights.values()):
         if ins["stage"] == "retracted":
             continue
         mode = profile.mode.value
@@ -215,12 +215,15 @@ def personalise_feed(session: MatchSession, profile: FanProfile, limit: int = 50
             angle = ins["club_angles"].get(profile.club_id, {}).get(profile.language.value)
         relevance = (5 - ins["priority"]) + (3 if involves_player else 0) + \
             (1 if profile.club_id and ins["team_id"] == profile.club_id else 0)
-        out.append({
+        sequences = [event.sequence for event_id in ins.get("evidence_event_ids", [])
+                     if (event := session.engine.event(event_id)) is not None]
+        order = (ins["elapsed"], (ins.get("period") or 0), max(sequences, default=-1), insertion_order)
+        out.append((order, {
             "insight_id": ins["insight_id"], "signal_type": ins["signal_type"], "minute_label": ins["minute_label"],
             "elapsed": ins["elapsed"], "team_id": ins["team_id"], "player_ids": ins["player_ids"],
             "headline": text["headline"], "body": text["body"], "club_angle": angle,
             "key_numbers": ins["key_numbers"], "stage": ins["stage"], "fact_check": ins["fact_check"]["status"],
             "favourite_player": involves_player, "relevance": relevance,
-        })
-    out.sort(key=lambda x: -x["elapsed"])
-    return out[:limit]
+        }))
+    out.sort(key=lambda pair: pair[0], reverse=True)
+    return [item for _, item in out[:limit]]

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import AsyncIterator, Iterable
 from pathlib import Path
 from typing import Protocol
@@ -39,41 +40,68 @@ class ReplayControl:
     """Live-adjustable replay settings shared with the API."""
 
     def __init__(self, speed: float = 1.0, start_elapsed: float = 0.0) -> None:
-        self.speed = speed
+        self._speed = speed
+        self._progress = 0.0
+        self._updated = time.monotonic()
         self.start_elapsed = start_elapsed
         self.paused = False
+        self._changed = asyncio.Event()
         self._resume = asyncio.Event()
         self._resume.set()
 
+    def _advance(self) -> None:
+        now = time.monotonic()
+        if not self.paused:
+            self._progress += (now - self._updated) * max(self._speed, 0.01)
+        self._updated = now
+
+    @property
+    def speed(self) -> float:
+        return self._speed
+
+    @speed.setter
+    def speed(self, value: float) -> None:
+        self._advance()
+        self._speed = value
+        self._changed.set()
+
     def pause(self) -> None:
+        self._advance()
         self.paused = True
         self._resume.clear()
+        self._changed.set()
 
     def resume(self) -> None:
+        self._advance()
         self.paused = False
         self._resume.set()
+        self._changed.set()
 
     async def wait_if_paused(self) -> None:
         await self._resume.wait()
 
 
 async def paced(items: Iterable[FeedItem], control: ReplayControl) -> AsyncIterator[FeedItem]:
-    """Deliver feed items in (scaled) match time. Items before ``control.start_elapsed``
-    are delivered immediately, which lets a viewer join a match already in progress."""
-    loop = asyncio.get_running_loop()
-    anchor_wall = loop.time()
-    anchor_elapsed = control.start_elapsed
-    speed = control.speed
+    """Deliver items in scaled match time, excluding time spent paused."""
+    control._advance()
+    start_progress = control._progress
     for item in items:
-        if item.elapsed > control.start_elapsed:
+        if control.paused:
             await control.wait_if_paused()
-            if control.speed != speed or control.paused:
-                # Re-anchor after a speed change or a pause.
-                anchor_wall, anchor_elapsed, speed = loop.time(), item.elapsed, control.speed
-            due = anchor_wall + (item.elapsed - anchor_elapsed) / max(speed, 0.01)
-            delay = due - loop.time()
-            if delay > 0:
-                await asyncio.sleep(delay)
+        if item.elapsed > control.start_elapsed:
+            while True:
+                control._advance()
+                if control.paused:
+                    await control.wait_if_paused()
+                    continue
+                remaining = item.elapsed - control.start_elapsed - (control._progress - start_progress)
+                if remaining <= 0:
+                    break
+                control._changed.clear()
+                try:
+                    await asyncio.wait_for(control._changed.wait(), remaining / max(control.speed, 0.01))
+                except TimeoutError:
+                    pass
         yield item
 
 

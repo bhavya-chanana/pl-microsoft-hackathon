@@ -1,6 +1,5 @@
 "use client";
 
-import { useCoach } from "@/features/coach/coach-store";
 import { ArrowUpRight, Clapperboard, FlaskConical, History, LayoutGrid } from "lucide-react";
 import Link from "next/link";
 import type { ComponentType, ReactNode } from "react";
@@ -123,8 +122,8 @@ function Rows() {
     meta && state
       ? [`${meta.home.short_name} v ${meta.away.short_name}`, `${state.score[meta.home.team_id] ?? 0}-${state.score[meta.away.team_id] ?? 0}`]
       : ["This match", "-"],
-    ["Kestrel Park Comeback", "3-2"],
-    ["Seven-Goal Thriller", "4-3"],
+    ["Playback speed", "1×–60×"],
+    ["Past matches", "Browse"],
   ];
   return (
     <ul className="flex flex-col divide-y rounded-lg bg-raised/60 px-2.5 text-[13px] ring-1 ring-border">
@@ -140,9 +139,7 @@ function Rows() {
 
 /** Things to try beyond following the match. */
 export function ExplorePage() {
-  const setDev = useShell((s) => s.setDev);
-  const coachMode = useCoach((s) => s.coachMode);
-  const showDev = useShell((s) => s.showDev);
+  const setStream = useShell((s) => s.setStream);
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6 xl:px-8">
       <header className="flex flex-col gap-1">
@@ -150,32 +147,26 @@ export function ExplorePage() {
         <p className="text-muted-foreground">{T.intro}</p>
       </header>
       <ul className="grid auto-rows-fr gap-4 md:grid-cols-2">
-        {!coachMode && (
         <li className="md:col-span-2">
           <Link href={routes.multiverse} className={tileClass} onPointerMove={spot}>
             <Body wide icon={LayoutGrid} title={T.multiverse.title} subtitle={T.multiverse.subtitle} body={T.multiverse.body} preview={<Panels />} />
           </Link>
         </li>
-        )}
-        {!coachMode && (
         <li>
           <Link href={routes.broadcast} className={tileClass} onPointerMove={spot}>
             <Body icon={Clapperboard} title={T.broadcast.title} body={T.broadcast.body} preview={<MiniScoreboard />} />
           </Link>
         </li>
-        )}
         <li>
           <Link href={routes.lab} className={tileClass} onPointerMove={spot}>
             <Body icon={FlaskConical} title={T.lab.title} body={T.lab.body} preview={<Spark />} />
           </Link>
         </li>
-        {showDev && (
         <li className="md:col-span-2">
-          <button type="button" className={tileClass} onClick={() => setDev(true)} onPointerMove={spot}>
+          <button type="button" className={tileClass} onClick={() => setStream(true)} onPointerMove={spot}>
             <Body wide icon={History} title={T.replay.title} body={T.replay.body} preview={<Rows />} />
           </button>
         </li>
-        )}
       </ul>
     </div>
   );

@@ -44,7 +44,7 @@ from matchlens.agents.contracts import (
 from matchlens.agents.coordinator import Coordinator, Plan
 from matchlens.agents.factchecker import check_text, merge_reports, rewrite_payload
 from matchlens.agents.llm import ModelClients
-from matchlens.agents.producer import OverlayScheduler
+from matchlens.agents.producer import MAX_DURATION_S, MIN_DURATION_S, OverlayScheduler
 from matchlens.interpret.signals import Signal, SignalType
 from matchlens.runtime.session import MatchSession
 
@@ -422,6 +422,8 @@ class InsightPipeline:
             self.coordinator.restore(state.get("coordinator", {}))
             self.scheduler.restore(state.get("scheduler", {}))
         self.decisions = [{k: d[k] for k in ("signal_id", "revision", "plan", "reason")} for d in decisions]
+        if session.archived or session.finished:
+            return 0
         latest = {d["signal_id"]: d for d in self.decisions}
         signals = {sig.signal_id: sig for sig in session.engine.signals()}
         now = session.engine.c.elapsed
@@ -435,6 +437,7 @@ class InsightPipeline:
                 task = asyncio.create_task(self._run_agents(job, session))
                 self._pending.add(task)
                 task.add_done_callback(self._pending.discard)
+                session.track_handler_task(task)
                 requeued += 1
         return requeued
 
@@ -483,7 +486,19 @@ class InsightPipeline:
             self._publish_overlay(build_overlay(templates.overlay_plan(pack), insight, session), session)
 
     def _publish_overlay(self, overlay: Overlay, session: MatchSession) -> None:
-        placed = self.scheduler.place(overlay, now=session.engine.c.elapsed)
+        now = session.engine.c.elapsed
+        # Agent work can finish after a fast replay has advanced far beyond its
+        # signal. Keep the upgraded insight, but never schedule its old graphic
+        # at the current time (including when joining after a warm-up replay).
+        if now - overlay.start_elapsed > MAX_LAG_MATCH_S:
+            log.info("recording stale overlay %s at its original match time: %.0fs old",
+                     overlay.overlay_id, now - overlay.start_elapsed)
+            historical_duration = min(max(MIN_DURATION_S, overlay.duration_s), MAX_DURATION_S,
+                                      max(0.0, now - overlay.start_elapsed - 0.001))
+            historical = overlay.model_copy(update={"duration_s": historical_duration})
+            session.publish_overlay(historical.model_dump(mode="json"))
+            return
+        placed = self.scheduler.place(overlay, now=now)
         for overlay_id, duration in self.scheduler.take_trimmed().items():
             if overlay_id in session.overlays and overlay_id != overlay.overlay_id:
                 session.publish_overlay({**session.overlays[overlay_id], "duration_s": duration})

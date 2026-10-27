@@ -1,12 +1,13 @@
 "use client";
 
-import { Check, ChevronDown, Pin, PinOff, X } from "lucide-react";
+import { ChevronDown, Pin, PinOff, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLive } from "@/features/live/live-store";
+import { FactCheckBadge } from "@/features/companion/fact-check-badge";
 import { useShell } from "@/components/shell/shell-store";
 import { useCoachBrief, usePulse, useRatings, useTeamStats } from "@/features/live/queries";
 import { XgTimeline } from "@/features/report/match-report";
@@ -267,12 +268,13 @@ function useAgeSeconds(at: number | undefined): number {
 export function Overview({ onReport, onLineup }: { onReport: () => void; onLineup: () => void }) {
   const meta = useLive((s) => s.meta);
   const state = useLive((s) => s.state);
+  const runId = useLive((s) => s.runId);
   const finished = useLive((s) => s.status === "finished" || s.status === "archived");
   const language = useProfile((s) => s.language);
   const picked = useCoach((s) => s.teamId);
-  const teamId = picked ?? meta?.home.team_id ?? null;
+  const teamId = meta ? (picked === meta.away.team_id ? meta.away.team_id : meta.home.team_id) : null;
   const query = useCoachBrief(finished ? null : teamId, language);
-  const key = teamId ? briefKey(teamId, language) : "";
+  const key = teamId && runId ? briefKey(runId, teamId, language) : "";
   const cached = useCoach((s) => s.briefs[key]);
   const dismissed = useCoach((s) => s.dismissed);
   const pinned = useCoach((s) => s.pinned);
@@ -289,7 +291,7 @@ export function Overview({ onReport, onLineup }: { onReport: () => void; onLineu
     return [...all.filter((i) => pinned.includes(i.issue_id)), ...all.filter((i) => !pinned.includes(i.issue_id))].slice(0, 3);
   }, [brief, dismissed, pinned]);
   const hidden = (brief?.items.length ?? 0) - items.length;
-  const half = !finished && Boolean(state && state.elapsed >= 2700 && state.elapsed <= 3600);
+  const half = !finished && state?.status === "half_time";
   if (!meta || !teamId) return <Skeleton className="h-64 w-full rounded-[20px]" aria-hidden />;
 
   const actions = finished ? (
@@ -331,10 +333,10 @@ export function Overview({ onReport, onLineup }: { onReport: () => void; onLineu
   );
   return (
     <div className="grid items-start gap-4 py-4 min-[1100px]:grid-cols-12 min-[1100px]:gap-6">
-      <div className={cn("order-2 flex min-w-0 flex-col gap-4 min-[1100px]:order-1", finished ? "min-[1100px]:col-span-12" : "min-[1100px]:col-span-7")}>
+      <div className={cn("order-1 flex min-w-0 flex-col gap-4", finished ? "min-[1100px]:col-span-12" : "min-[1100px]:col-span-7")}>
         {actions}
       </div>
-      <div className={cn("order-1 min-w-0 min-[1100px]:order-2", finished ? "min-[1100px]:col-span-12" : "min-[1100px]:col-span-5")}>
+      <div className={cn("order-2 min-w-0", finished ? "min-[1100px]:col-span-12" : "min-[1100px]:col-span-5")}>
         <GameSoFar meta={meta} half={half} wide={false} />
       </div>
       <div className="order-3 flex min-w-0 flex-col gap-4 min-[1100px]:col-span-12">
@@ -352,10 +354,12 @@ export function Overview({ onReport, onLineup }: { onReport: () => void; onLineu
         {brief && !finished && (
           <Popover>
             <PopoverTrigger className="inline-flex min-h-11 w-fit items-center gap-1.5 rounded-md text-[13px] text-muted-foreground hover:text-foreground">
-              <Check aria-hidden className="size-4 text-verified" />
-              {copy.coachPage.checked}
+              <FactCheckBadge status={brief.source === "data" && brief.fact_check.status === "verified" ? "data_only" : brief.fact_check.status} />
             </PopoverTrigger>
-            <PopoverContent className="w-72 text-sm">{copy.coach.pipeline}</PopoverContent>
+            <PopoverContent className="flex w-72 flex-col gap-2 text-sm">
+              <p>{brief.source === "data" ? copy.factCheckHelp.data_only : copy.factCheckHelp[brief.fact_check.status]}</p>
+              {brief.fact_check.verification_scope && <p className="text-muted-foreground">{brief.fact_check.verification_scope}</p>}
+            </PopoverContent>
           </Popover>
         )}
       </div>

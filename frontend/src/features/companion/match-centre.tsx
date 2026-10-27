@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MonitorPlay } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { MomentumBar } from "@/features/broadcast/momentum-bar";
@@ -28,7 +29,7 @@ export function MatchCentre() {
   const analyst = useProfile((s) => s.mode === "analyst");
   const coachMode = useCoach((s) => s.coachMode);
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 pt-4 pb-28 md:pb-12 md:px-6 md:pt-6 xl:px-8">
+    <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 pt-4 pb-8 md:pb-12 md:px-6 md:pt-6 xl:px-8">
       <h1 className="sr-only">{copy.nav.live}</h1>
       <div id="live-actions" className="flex items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
@@ -36,11 +37,15 @@ export function MatchCentre() {
         </div>
         <ActionButtons className="hidden shrink-0 md:flex" />
       </div>
+      <ActionButtons size="bar" className="w-full md:hidden" />
       <ScorersStrip />
       <div className="grid items-start gap-4 min-[1100px]:grid-cols-12 min-[1100px]:gap-6">
         <div className="contents min-[1100px]:col-span-8 min-[1100px]:flex min-[1100px]:flex-col min-[1100px]:gap-4">
           <div className="order-1 min-w-0 min-[1100px]:order-none">
             <LivePitch />
+            <div className="mt-2 flex justify-end">
+              <Link href={routes.broadcast} className={cn(buttonVariants({ variant: "outline" }), "h-11 gap-2 px-4")}><MonitorPlay aria-hidden />{copy.nav.broadcast}</Link>
+            </div>
           </div>
           <div className="order-2 min-w-0 min-[1100px]:order-none">
             <MomentumBar />

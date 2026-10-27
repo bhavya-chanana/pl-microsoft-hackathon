@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCoach } from "@/features/coach/coach-store";
 import { RatingBadge } from "@/features/coach/rating";
 import { useLive } from "@/features/live/live-store";
+import { RateSelect } from "@/features/fans/player-ratings";
 import { usePlayersStats, useRatings } from "@/features/live/queries";
 import { PlayerSheet } from "@/features/player/player-sheet";
 import type { PlayerRating, PlayerStats } from "@/lib/contract";
@@ -79,6 +80,7 @@ function Th({ label, full, k, sort, dir, onSort, className }: { label: string; f
 export function PlayersTable({ team }: { team: Team }) {
   const meta = useLive((s) => s.meta);
   const ratings = useRatings();
+  const runId = useLive((s) => s.runId);
   const coachMode = useCoach((s) => s.coachMode);
   const [sort, setSort] = useState<SortKey>("rating");
   const [dir, setDir] = useState<1 | -1>(-1);
@@ -111,12 +113,13 @@ export function PlayersTable({ team }: { team: Team }) {
   if (!rows.length && team === "all") {
     return <EmptyState>{T.empty}</EmptyState>;
   }
-  const hasVotes = rows.some((r) => r.fan_votes > 0);
-  const showFans = !coachMode && hasVotes;
+  const showFans = !coachMode;
   // Min and Duels are optional backend fields: leave the columns out until some player has them.
   const cols = NUM_COLS.filter((c) => (c.key !== "minutes" && c.key !== "duels") || rows.some((r) => num(c.key, stats.get(r.player_id)) !== null));
   return (
     <div className="flex flex-col gap-3">
+      {!coachMode && <p className="text-sm text-muted-foreground">{copy.fans.ratingsHelp}</p>}
+      <p className="text-sm text-muted-foreground sm:hidden">Swipe across for more player stats.</p>
       <div className="min-w-0 overflow-x-auto rounded-2xl border bg-card">
         <table className="w-full min-w-[44rem] border-separate border-spacing-0 text-left text-[15px]">
           <thead className="text-[13px] text-muted-foreground">
@@ -124,10 +127,11 @@ export function PlayersTable({ team }: { team: Team }) {
               <Th label={T.player} k="name" sort={sort} dir={dir} onSort={onSort} className="sticky left-0 z-10 bg-card" />
               <Th label={T.pos} k="position" sort={sort} dir={dir} onSort={onSort} />
               <Th label={T.rating} k="rating" sort={sort} dir={dir} onSort={onSort} />
+              {showFans && <Th label={T.fans} k="fans" sort={sort} dir={dir} onSort={onSort} className="text-right" />}
+              {showFans && runId && <th scope="col" className="px-3 font-medium">{copy.fans.you}</th>}
               {cols.map((c) => (
                 <Th key={c.key} label={c.label} full={c.full} k={c.key} sort={sort} dir={dir} onSort={onSort} className="text-right" />
               ))}
-              {showFans && <Th label={T.fans} k="fans" sort={sort} dir={dir} onSort={onSort} className="text-right" />}
             </tr>
           </thead>
           <tbody>
@@ -153,6 +157,12 @@ export function PlayersTable({ team }: { team: Team }) {
                   <td className="border-t px-3">
                     <RatingBadge value={r.data_rating} size="md" />
                   </td>
+                  {showFans && (
+                    <td className="border-t px-3 text-right tabular-nums text-muted-foreground" title={r.fan_rating === null ? copy.fans.noFanRating : copy.fans.votes(r.fan_votes)}>
+                      {r.fan_rating === null ? "–" : formatNumber(r.fan_rating, 1)}
+                    </td>
+                  )}
+                  {showFans && runId && <td className="min-w-24 border-t px-3"><RateSelect row={r} runId={runId} /></td>}
                   {cols.map((c) => {
                     const v = num(c.key, stats.get(r.player_id));
                     const st = stats.get(r.player_id);
@@ -162,11 +172,6 @@ export function PlayersTable({ team }: { team: Team }) {
                       </td>
                     );
                   })}
-                  {showFans && (
-                    <td className="border-t px-3 text-right tabular-nums text-muted-foreground">
-                      {r.fan_rating === null ? "–" : formatNumber(r.fan_rating, 1)}
-                    </td>
-                  )}
                 </tr>
               );
             })}

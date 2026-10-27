@@ -63,6 +63,7 @@ function AnswerCard({
         <span>{answer.source === "agent" ? copy.pundit.agentAnswer : copy.pundit.dataAnswer}</span>
         <FactCheckBadge status={answer.fact_check.status} className="ml-auto" />
       </header>
+      {answer.fact_check.verification_scope && <p className="text-xs text-muted-foreground">{answer.fact_check.verification_scope}</p>}
       <p className="max-w-prose text-base leading-relaxed">{answer.answer}</p>
       {answer.points.length > 0 && (
         <ul className="flex max-w-prose list-disc flex-col gap-1 pl-5 text-sm text-muted-foreground">

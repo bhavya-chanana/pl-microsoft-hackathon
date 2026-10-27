@@ -54,22 +54,14 @@ function useHeroVisible(): boolean {
 }
 
 /**
- * Never floats over content. Mobile: a 48px bar docked 12px above the tab bar (the page reserves its
- * height). Desktop: a compact version beside the match header once the hero row has scrolled away.
+ * Desktop: a compact version beside the match header once the hero row has scrolled away.
+ * Mobile actions stay in the page flow so they never cover match content.
  */
 export function FloatingActions() {
   const hidden = useOverlayOpen();
   const heroVisible = useHeroVisible();
   return (
     <>
-      <div
-        className={cn(
-          "glass-strong fixed inset-x-3 bottom-[calc(12px+64px+12px+env(safe-area-inset-bottom))] z-40 flex h-12 items-center rounded-full p-1 md:hidden",
-          hidden && "invisible opacity-0",
-        )}
-      >
-        <ActionButtons size="bar" className="w-full" />
-      </div>
       <div
         className={cn(
           "glass-strong fixed top-[calc(var(--topbar-h)+8px)] right-6 z-40 hidden rounded-full p-1 transition-opacity lg:block",

@@ -90,8 +90,8 @@ function Header({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
     io.observe(el);
     return () => io.disconnect();
   }, []);
-  const teamId = picked ?? meta?.home.team_id ?? null;
-  const half = state ? state.elapsed >= 2700 && state.elapsed <= 3600 && !finished : false;
+  const teamId = meta ? (picked === meta.away.team_id ? meta.away.team_id : meta.home.team_id) : null;
+  const half = state?.status === "half_time" && !finished;
   const phase = finished ? copy.report.phase.full : half ? copy.report.phase.half : state ? copy.coachPage.liveAt(state.minute_label) : "";
   return (
     <>
@@ -124,11 +124,10 @@ function Header({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
           </div>
         )}
         {phase && <span className="rounded-full bg-raised px-3 py-1.5 text-[13px] font-medium ring-1 ring-border tabular-nums">{phase}</span>}
-        {fetching && (
-          <Button variant="ghost" size="icon" className="ml-auto size-11" aria-label={copy.coach.refresh} onClick={() => void client.invalidateQueries({ queryKey: ["coach"] })}>
-            <RotateCw aria-hidden className="motion-safe:animate-spin" />
-          </Button>
-        )}
+        <Button variant="ghost" size="sm" className="ml-auto h-11 gap-2" disabled={fetching || !teamId} onClick={() => void client.invalidateQueries({ queryKey: ["coach"] })}>
+          <RotateCw aria-hidden className={cn(fetching && "motion-safe:animate-spin")} />
+          {copy.coach.refresh}
+        </Button>
       </div>
       <CoachTabs tab={tab} onChange={onChange} />
       </div>

@@ -60,6 +60,7 @@ function Provenance({ factCheck, source }: { factCheck: FactCheck; source: strin
   return (
     <p className="flex flex-wrap items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
       <FactCheckBadge status={source === "data" && factCheck.status === "verified" ? "data_only" : factCheck.status} />
+      {factCheck.verification_scope && <span className="basis-full">{factCheck.verification_scope}</span>}
     </p>
   );
 }

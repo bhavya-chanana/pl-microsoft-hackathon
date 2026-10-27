@@ -261,16 +261,18 @@ export function MatchReport() {
   const meta = useLive((s) => s.meta);
   const state = useLive((s) => s.state);
   const timeline = useLive((s) => s.timeline);
+  const runId = useLive((s) => s.runId);
   const finished = useLive((s) => s.status === "finished" || s.status === "archived");
   const language = useProfile((s) => s.language);
-  const teamId = useCoach((s) => s.teamId) ?? meta?.home.team_id ?? null;
-  const stored = useCoach((s) => (teamId ? s.briefs[briefKey(teamId, language)]?.brief : undefined));
+  const picked = useCoach((s) => s.teamId);
+  const teamId = meta ? (picked === meta.away.team_id ? meta.away.team_id : meta.home.team_id) : null;
+  const stored = useCoach((s) => (teamId && runId ? s.briefs[briefKey(runId, teamId, language)]?.brief : undefined));
   // The report fetches its own brief, so it never asks the coach to visit the Brief tab first.
   const fetched = useCoachBrief(finished ? null : teamId, language);
   const brief = fetched.data ?? stored;
   const { resolvedTheme, setTheme } = useTheme();
   if (!meta || !state) return null;
-  const phase = finished ? R.phase.full : state.elapsed >= 2700 && state.elapsed <= 3600 ? R.phase.half : R.phase.latest;
+  const phase = finished ? R.phase.full : state.status === "half_time" ? R.phase.half : R.phase.latest;
   /** Print on paper colours, then put the viewer's theme back. */
   const printLight = () => {
     const back = resolvedTheme ?? "dark";

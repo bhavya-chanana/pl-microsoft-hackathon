@@ -258,7 +258,7 @@ export const copy = {
     data_only: "From match data",
   } satisfies Record<FactCheckStatus, string>,
   factCheckHelp: {
-    verified: "Every claim and number matched the match data.",
+    verified: "Checked claims and recognized numbers matched the match data.",
     rewritten: "An agent made a claim the data did not support. The fact-checker had it rewritten.",
     blocked: "The agent text could not be verified, so only the raw match data is shown.",
     data_only: "Generated directly from match data without a language model.",

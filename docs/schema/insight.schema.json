@@ -140,6 +140,11 @@
     },
     "FactCheckReport": {
       "properties": {
+        "verification_scope": {
+          "default": "Structured claims and recognized numeric patterns; other prose is not independently verified.",
+          "title": "Verification Scope",
+          "type": "string"
+        },
         "status": {
           "$ref": "#/$defs/FactCheckStatus"
         },

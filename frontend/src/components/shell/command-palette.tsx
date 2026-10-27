@@ -1,6 +1,6 @@
 "use client";
 
-import { Code2, Compass, History, Pause, Play, RotateCcw, SlidersHorizontal, MessageCircleQuestion, Moon, Newspaper, Radio, Search, Sparkles, ChartColumn, ClipboardList, Route } from "lucide-react";
+import { Code2, Compass, History, Pause, Play, RotateCcw, SlidersHorizontal, MessageCircleQuestion, MonitorPlay, Moon, Newspaper, Radio, Search, Sparkles, ChartColumn, ClipboardList, Route } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -136,6 +136,9 @@ export function CommandPalette() {
           <CommandItem onSelect={go(routes.coach)}><ClipboardList aria-hidden />{copy.nav.coach}</CommandItem>
           <CommandItem onSelect={go(routes.coachTactics)}><Route aria-hidden />{copy.nav.tactics}</CommandItem>
           <CommandItem onSelect={go(routes.explore)}><Compass aria-hidden />{copy.nav.explore}</CommandItem>
+          <CommandItem onSelect={go(routes.broadcast)} keywords={["overlay", "tv", "screen", "obs"]}><MonitorPlay aria-hidden />{copy.nav.broadcast}</CommandItem>
+          <CommandItem onSelect={go(routes.multiverse)}>{copy.nav.multiverse}</CommandItem>
+          <CommandItem onSelect={go(routes.lab)}>{copy.nav.lab}</CommandItem>
         </CommandGroup>
       </CommandList>
       </Command>

@@ -127,6 +127,7 @@ export const FactCheck = z.object({
   results: z.array(ClaimResult),
   unaccounted_numbers: z.array(z.string()),
   actions: z.array(z.string()),
+  verification_scope: z.string().optional(),
 });
 export type FactCheck = z.infer<typeof FactCheck>;
 

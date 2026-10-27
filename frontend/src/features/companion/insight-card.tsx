@@ -44,6 +44,7 @@ function Evidence({ insightId }: { insightId: string }) {
   return (
     <div className="flex flex-col gap-3 border-t pt-3 text-sm">
       <p className="text-muted-foreground">{copy.factCheckHelp[fc.status]}</p>
+      {fc.verification_scope && <p className="text-muted-foreground">{fc.verification_scope}</p>}
       {fc.results.length ? (
         <ul className="flex flex-col gap-1.5">
           {fc.results.map((r, i) => (
@@ -92,9 +93,9 @@ const REPLAYABLE = new Set([
 ]);
 
 /** The few moment types that deserve a full card; everything else is a quiet row. */
-export const BIG_MOMENTS = new Set(["goal", "card", "big_chance"]);
+export const BIG_MOMENTS = new Set(["goal", "card", "big_chance", "correction"]);
 
-const BIG_ICON: Record<string, typeof Zap> = { goal: Goal, card: RectangleVertical, big_chance: Target, substitution: ArrowLeftRight };
+const BIG_ICON: Record<string, typeof Zap> = { goal: Goal, card: RectangleVertical, big_chance: Target, correction: Info, substitution: ArrowLeftRight };
 
 function useMomentActions(item: FeedItem) {
   const play = useReplay((s) => s.play);
@@ -176,6 +177,7 @@ function MomentCard({ item, language }: { item: FeedItem; language: Language }) 
         <span className="text-[13px] font-medium text-muted-foreground">{signalLabels[item.signal_type] ?? item.signal_type}</span>
       </header>
       <h3 className="text-xl leading-7 font-semibold">{item.headline}</h3>
+      <FactCheckBadge status={item.fact_check} />
       {item.body && <p className="line-clamp-2 max-w-prose text-[15px] text-muted-foreground">{item.body}</p>}
       {item.key_numbers.length > 0 && item.signal_type !== "card" && (
         <dl className="flex flex-wrap gap-x-5 gap-y-1">

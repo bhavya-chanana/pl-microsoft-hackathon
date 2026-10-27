@@ -74,7 +74,7 @@ export function BroadcastControls() {
   return (
     <div
       className={cn(
-        "absolute top-4 left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-2 transition-opacity duration-300 focus-within:opacity-100",
+        "absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-30 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 flex-col-reverse items-center gap-2 transition-opacity duration-300 focus-within:opacity-100 xl:top-4 xl:right-4 xl:bottom-auto xl:left-auto xl:translate-x-0 xl:flex-col",
         show ? "opacity-100" : "pointer-events-none opacity-0",
       )}
     >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,10 +25,14 @@ function why(row: PlayerRating): string {
 /** Your 1-10 score for one player; posts to the ratings endpoint. */
 export function RateSelect({ row, runId }: { row: PlayerRating; runId: string }) {
   const mine = useFans((s) => s.scores[runId]?.[row.player_id]);
+  const client = useQueryClient();
   const rate = useMutation({
     mutationFn: (score: number) =>
       postJson("ratings", { voter_id: useFans.getState().ensureVoterId(), player_id: row.player_id, score }, PlayerRating),
-    onSuccess: (_, score) => useFans.getState().score(runId, row.player_id, score),
+    onSuccess: (_, score) => {
+      useFans.getState().score(runId, row.player_id, score);
+      void client.invalidateQueries({ queryKey: ["ratings"] });
+    },
     onError: () => toast.error(T.rateFailed),
   });
   return (
