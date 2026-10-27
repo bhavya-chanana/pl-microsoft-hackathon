@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutGroup, motion } from "motion/react";
+import { LayoutGroup, m } from "motion/react";
 import { useId } from "react";
 
 import { spring } from "@/lib/motion";
@@ -48,7 +48,7 @@ export function Segmented<T extends string>({
               )}
             >
               {active && (
-                <motion.span
+                <m.span
                   layoutId="seg"
                   transition={spring.snappy}
                   className="absolute inset-0 rounded-full bg-card shadow-raised ring-1 ring-border"

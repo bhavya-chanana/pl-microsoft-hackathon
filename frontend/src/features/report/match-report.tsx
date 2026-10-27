@@ -1,8 +1,8 @@
 "use client";
 
-import { Printer, Link2 } from "lucide-react";
+import { ArrowLeftRight, Link2, Printer, RectangleVertical } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -27,49 +27,70 @@ function Section({ title, children, className }: { title: string; children: Reac
   );
 }
 
-/** Cumulative chances created per team as a step chart, goals marked. */
+/** Cumulative chances created per team as a step chart: minute ticks, goal dots on the line, end totals. */
 function XgTimeline({ meta, timeline }: { meta: MatchMeta; timeline: MatchEvent[] }) {
   const series = useMemo(() => {
     const out = { home: [{ t: 0, v: 0 }], away: [{ t: 0, v: 0 }] };
     const total = { home: 0, away: 0 };
-    const goals: { t: number; side: "home" | "away" }[] = [];
+    const goals: { t: number; v: number; side: "home" | "away" }[] = [];
     let end = 90 * 60;
     for (const e of timeline) {
       end = Math.max(end, e.elapsed);
       const side = sideOf(meta, e.team_id);
-      if (!side) continue;
-      if (e.type === "shot" && typeof e.attrs.xg === "number") {
-        total[side] += e.attrs.xg;
-        out[side].push({ t: e.elapsed, v: total[side] });
-      }
-      if (e.type === "goal" || (e.type === "shot" && e.outcome === "goal")) goals.push({ t: e.elapsed, side });
+      if (!side || e.type !== "shot") continue;
+      if (typeof e.attrs.xg === "number") total[side] += e.attrs.xg;
+      out[side].push({ t: e.elapsed, v: total[side] });
+      if (e.outcome === "goal") goals.push({ t: e.elapsed, v: total[side], side });
     }
-    return { ...out, goals, end, max: Math.max(0.5, total.home, total.away) };
+    return { ...out, goals, end, max: Math.max(0.5, total.home, total.away), total };
   }, [meta, timeline]);
-  const X = (t: number) => (t / series.end) * 100;
-  const Y = (v: number) => 40 - (v / series.max) * 36;
+  const W = 300;
+  const H = 120;
+  const pad = { l: 26, r: 8, t: 8, b: 20 };
+  const X = (t: number) => pad.l + (t / series.end) * (W - pad.l - pad.r);
+  const Y = (v: number) => H - pad.b - (v / series.max) * (H - pad.t - pad.b);
   const path = (pts: { t: number; v: number }[]) =>
-    pts.map((p, i) => `${i === 0 ? "M" : "L"} ${X(p.t)} ${Y(pts[i - 1]?.v ?? 0)} L ${X(p.t)} ${Y(p.v)}`).join(" ") + ` L 100 ${Y(pts[pts.length - 1].v)}`;
-  const last = (s: "home" | "away") => series[s][series[s].length - 1].v;
+    pts.map((p, i) => `${i === 0 ? "M" : "L"} ${X(p.t)} ${Y(pts[i - 1]?.v ?? 0)} L ${X(p.t)} ${Y(p.v)}`).join(" ") + ` L ${X(series.end)} ${Y(pts[pts.length - 1].v)}`;
+  const ticks = [0, 45, 90].filter((m) => m * 60 <= series.end);
+  const yTicks = [0, series.max / 2, series.max];
   return (
     <figure className="flex flex-col gap-2">
-      <svg viewBox="0 0 100 42" preserveAspectRatio="none" className="h-40 w-full" role="img" aria-label={`${R.xgTimeline}: ${meta.home.short_name} ${last("home").toFixed(2)}, ${meta.away.short_name} ${last("away").toFixed(2)}`}>
-        <line x1={0} y1={40} x2={100} y2={40} className="stroke-border" strokeWidth={0.4} vectorEffect="non-scaling-stroke" />
-        <line x1={X(2700)} y1={0} x2={X(2700)} y2={40} className="stroke-border" strokeDasharray="2 2" strokeWidth={0.4} vectorEffect="non-scaling-stroke" />
-        <path d={path(series.home)} className={cn("fill-none", sideTone.home.stroke)} strokeWidth={2} vectorEffect="non-scaling-stroke" />
-        <path d={path(series.away)} className={cn("fill-none", sideTone.away.stroke)} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="h-auto w-full"
+        role="img"
+        aria-label={`${R.xgTimeline}: ${meta.home.short_name} ${series.total.home.toFixed(2)}, ${meta.away.short_name} ${series.total.away.toFixed(2)}`}
+      >
+        {yTicks.map((v) => (
+          <g key={v}>
+            <line x1={pad.l} x2={W - pad.r} y1={Y(v)} y2={Y(v)} className="stroke-border" strokeWidth={0.5} />
+            <text x={pad.l - 4} y={Y(v) + 3} textAnchor="end" fontSize={8} className="fill-muted-foreground">
+              {v.toFixed(1)}
+            </text>
+          </g>
+        ))}
+        {ticks.map((m) => (
+          <text key={m} x={X(m * 60)} y={H - 6} textAnchor={m === 0 ? "start" : m === 90 ? "end" : "middle"} fontSize={8} className="fill-muted-foreground">
+            {m}&prime;
+          </text>
+        ))}
+        <line x1={X(2700)} x2={X(2700)} y1={pad.t} y2={H - pad.b} className="stroke-border" strokeDasharray="3 3" strokeWidth={0.6} />
+        <path d={path(series.home)} className={cn("fill-none", sideTone.home.stroke)} strokeWidth={1.8} strokeLinejoin="round" />
+        <path d={path(series.away)} className={cn("fill-none", sideTone.away.stroke)} strokeWidth={1.8} strokeLinejoin="round" />
         {series.goals.map((g, i) => (
-          <line key={i} x1={X(g.t)} x2={X(g.t)} y1={36} y2={40} className={sideTone[g.side].stroke} strokeWidth={3} vectorEffect="non-scaling-stroke" />
+          <circle key={i} cx={X(g.t)} cy={Y(g.v)} r={3.2} className={cn(sideTone[g.side].fill, "stroke-card")} strokeWidth={1.2} />
         ))}
       </svg>
       <figcaption className="flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-muted-foreground">
+        {(["home", "away"] as const).map((side) => (
+          <span key={side} className="inline-flex items-center gap-1.5">
+            <span aria-hidden className={cn("size-2.5 rounded-full", sideTone[side].bg)} />
+            {meta[side].short_name} <b className="font-semibold text-foreground tabular-nums">{series.total[side].toFixed(2)}</b>
+          </span>
+        ))}
         <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="size-2.5 rounded-full bg-home" />
-          {meta.home.short_name} <b className="font-semibold text-foreground tabular-nums">{last("home").toFixed(2)}</b>
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="size-2.5 rounded-full bg-away" />
-          {meta.away.short_name} <b className="font-semibold text-foreground tabular-nums">{last("away").toFixed(2)}</b>
+          <span aria-hidden className="size-2.5 rounded-full bg-foreground" />
+          {copy.stats.goal}
         </span>
       </figcaption>
     </figure>
@@ -96,34 +117,43 @@ function Possession({ meta }: { meta: MatchMeta }) {
   );
 }
 
+const ROWS = 6;
+
+function EventIcon({ e }: { e: MatchEvent }) {
+  if (e.type === "substitution") return <ArrowLeftRight aria-hidden className="size-4 text-muted-foreground" />;
+  const red = e.outcome.includes("red") || e.outcome === "second_yellow";
+  return <RectangleVertical aria-hidden className={cn("size-4", red ? "fill-red-500 text-red-500" : "fill-amber-400 text-amber-400")} />;
+}
+
 function SubsCards({ meta, timeline }: { meta: MatchMeta; timeline: MatchEvent[] }) {
+  const [all, setAll] = useState(false);
   const rows = timeline.filter((e) => e.type === "substitution" || e.type === "card");
   if (!rows.length) return <p className="text-sm text-muted-foreground">{R.noSubsCards}</p>;
+  const shown = all ? rows : rows.slice(0, ROWS);
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[22rem] text-left text-[15px]">
-        <thead className="text-[13px] text-muted-foreground">
-          <tr>
-            <th className="py-1.5 pr-3 font-medium">{R.minute}</th>
-            <th className="py-1.5 pr-3 font-medium">{R.event}</th>
-            <th className="py-1.5 pr-3 font-medium">{R.player}</th>
-            <th className="py-1.5 font-medium">{R.team}</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {rows.map((e) => {
-            const side = sideOf(meta, e.team_id);
-            return (
-              <tr key={e.event_id} className="h-11">
-                <td className="pr-3 font-display font-semibold tabular-nums">{e.minute_label}</td>
-                <td className="pr-3">{eventLabels[e.type] ?? e.type}{e.type === "card" && e.outcome ? ` (${e.outcome.replaceAll("_", " ")})` : ""}</td>
-                <td className="pr-3">{playerName(meta, e.player_id, true)}</td>
-                <td>{side ? meta[side].short_name : ""}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="flex flex-col gap-2">
+      <ul className="divide-y">
+        {shown.map((e) => {
+          const side = sideOf(meta, e.team_id);
+          const label = `${eventLabels[e.type] ?? e.type}${e.type === "card" && e.outcome ? `, ${e.outcome.replaceAll("_", " ")}` : ""}`;
+          return (
+            <li key={e.event_id} className="grid h-11 grid-cols-[2.5rem_1.25rem_minmax(0,1fr)_auto] items-center gap-2 text-[15px]">
+              <span className="font-display font-semibold tabular-nums">{e.minute_label}</span>
+              <EventIcon e={e} />
+              <span className="truncate">
+                <span className="sr-only">{label}: </span>
+                {playerName(meta, e.player_id, true)}
+              </span>
+              <span className="text-[13px] text-muted-foreground">{side ? meta[side].short_name : ""}</span>
+            </li>
+          );
+        })}
+      </ul>
+      {rows.length > ROWS && (
+        <Button variant="ghost" className="h-11 self-start px-3 print:hidden" onClick={() => setAll((v) => !v)}>
+          {all ? R.showFewer : R.showAll(rows.length)}
+        </Button>
+      )}
     </div>
   );
 }
@@ -196,8 +226,8 @@ export function MatchReport() {
           </Button>
         </div>
       </header>
-      <div className="grid items-start gap-4 lg:grid-cols-2">
-        <div className="flex flex-col gap-4">
+      <div className="grid items-start gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+        <div className="flex min-w-0 flex-col gap-4">
           <Section title={R.actions}>
             {finished ? (
               <p className="text-[15px] text-muted-foreground">{R.matchOver}</p>
@@ -223,14 +253,14 @@ export function MatchReport() {
           <Section title={R.possession}>
             <Possession meta={meta} />
           </Section>
+          <Section title={R.keyPlayers}>
+            <KeyPlayers meta={meta} />
+          </Section>
         </div>
         <div className="flex flex-col gap-4">
           <ShotMapPanel className="break-inside-avoid print:shadow-none" />
           <Section title={R.subsCards}>
             <SubsCards meta={meta} timeline={timeline} />
-          </Section>
-          <Section title={R.keyPlayers}>
-            <KeyPlayers meta={meta} />
           </Section>
         </div>
       </div>

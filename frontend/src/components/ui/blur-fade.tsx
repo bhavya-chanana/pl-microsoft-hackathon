@@ -1,14 +1,7 @@
 "use client"
 
 import { useRef } from "react"
-import {
-  AnimatePresence,
-  motion,
-  useInView,
-  type MotionProps,
-  type UseInViewOptions,
-  type Variants,
-} from "motion/react"
+import { AnimatePresence, m, useInView, type MotionProps, type UseInViewOptions, type Variants } from "motion/react"
 
 type MarginType = UseInViewOptions["margin"]
 
@@ -72,7 +65,7 @@ export function BlurFade({
 
   return (
     <AnimatePresence>
-      <motion.div
+      <m.div
         ref={ref}
         initial="hidden"
         animate={isInView ? "visible" : "hidden"}
@@ -88,7 +81,7 @@ export function BlurFade({
         {...props}
       >
         {children}
-      </motion.div>
+      </m.div>
     </AnimatePresence>
   )
 }

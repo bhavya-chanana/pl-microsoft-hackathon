@@ -9,7 +9,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLive } from "@/features/live/live-store";
 import { useCoachBrief } from "@/features/live/queries";
 import { useProfile } from "@/features/profile/profile-store";
-import { ReplayControls } from "@/features/replay/replay-controls";
 import type { CoachBrief, CoachItem, Confidence } from "@/lib/contract";
 import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
@@ -140,76 +139,82 @@ export function CoachRoom({ onReport }: { onReport: () => void }) {
   }, [brief, dismissed, pinned]);
   const hidden = (brief?.items.length ?? 0) - items.length;
   const fresh = !query.isFetching && Boolean(live);
-  return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      <p className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground">
-        <span className="max-w-prose">{copy.coach.description}</span>
-        {brief && (
-          <span className="tabular-nums">
-            {copy.coach.asOf(brief.minute)} · {query.isFetching ? copy.coachPage.refreshing : copy.coachPage.updated(age)}
-          </span>
-        )}
-      </p>
-      {finished && (
-        <div className="flex flex-col items-start gap-3 rounded-2xl border bg-card p-5 shadow-raised">
-          <p className="text-lg font-semibold">{copy.coachPage.fullTime}</p>
-          <Button className="h-11 px-5" onClick={onReport}>
-            {copy.coachPage.seeReport}
-          </Button>
-        </div>
+  const aside = (
+    <aside className="flex flex-col gap-4 lg:sticky lg:top-[calc(var(--stack-h)+4rem)] lg:self-start">
+      <p className="max-w-prose text-[15px] text-muted-foreground">{copy.coach.description}</p>
+      {brief && (
+        <p className="text-sm text-muted-foreground tabular-nums">
+          {copy.coach.asOf(brief.minute)} · {query.isFetching ? copy.coachPage.refreshing : copy.coachPage.updated(age)}
+        </p>
       )}
       {!finished && strip.length > 0 && (
-        <section aria-label={copy.coachPage.changed} className="flex flex-wrap items-center gap-2">
+        <section aria-label={copy.coachPage.changed} className="flex flex-col gap-2 rounded-2xl border bg-card p-4">
           <span className="text-[13px] font-medium text-muted-foreground">{copy.coachPage.changed}</span>
-          {strip.map((c) => (
-            <span key={c} className="rounded-full bg-raised px-3 py-1 text-[13px] ring-1 ring-border">
-              {c}
-            </span>
-          ))}
+          <ul className="flex flex-wrap gap-2">
+            {strip.map((c) => (
+              <li key={c} className="rounded-full bg-raised px-3 py-1 text-[13px] ring-1 ring-border">
+                {c}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
-      {!finished && (
-        <section aria-busy={query.isFetching} lang={language} className="flex flex-col gap-4">
-          {!brief && query.isPending ? (
-            <div role="status" className="flex flex-col gap-4">
-              <p className="text-sm text-muted-foreground">{copy.coach.loading}</p>
-              {[0, 1, 2].map((i) => (
-                <Skeleton key={i} className="h-40 w-full rounded-2xl" />
-              ))}
-            </div>
-          ) : query.isError && !brief ? (
-            <p role="alert" className="text-sm">
-              {copy.coach.error}
-            </p>
-          ) : brief ? (
-            <>
-              <ol className="flex flex-col gap-4">
-                {items.map((item) => (
-                  <ItemCard key={item.issue_id} item={item} side={side} minute={brief.minute} />
+      {brief && !finished && (
+        <Popover>
+          <PopoverTrigger className="inline-flex min-h-11 w-fit items-center gap-1.5 rounded-md text-[13px] text-muted-foreground hover:text-foreground">
+            <Check aria-hidden className={cn("size-4", fresh && "text-verified")} />
+            {copy.coachPage.checked}
+          </PopoverTrigger>
+          <PopoverContent className="w-72 text-sm">{copy.coach.pipeline}</PopoverContent>
+        </Popover>
+      )}
+    </aside>
+  );
+  return (
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="flex min-w-0 flex-col gap-4">
+        {finished && (
+          <div className="flex flex-col items-start gap-3 rounded-2xl border bg-card p-5 shadow-raised">
+            <p className="text-lg font-semibold">{copy.coachPage.fullTime}</p>
+            <Button className="h-11 px-5" onClick={onReport}>
+              {copy.coachPage.seeReport}
+            </Button>
+          </div>
+        )}
+        {!finished && (
+          <section aria-busy={query.isFetching} lang={language} className="flex flex-col gap-4">
+            {!brief && query.isPending ? (
+              <div role="status" className="flex flex-col gap-4">
+                <p className="text-sm text-muted-foreground">{copy.coach.loading}</p>
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} className="h-40 w-full rounded-2xl" />
                 ))}
-              </ol>
-              {hidden > 0 && (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  {copy.coachPage.dismissedN(hidden)}
-                  <Button variant="ghost" className="h-11 px-3" onClick={() => useCoach.getState().restore()}>
-                    {copy.coachPage.undo}
-                  </Button>
-                </p>
-              )}
-              <p className="flex flex-wrap items-center gap-2 border-t pt-3 text-[13px] text-muted-foreground">
-                <Popover>
-                  <PopoverTrigger className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-1 hover:text-foreground">
-                    <Check aria-hidden className={cn("size-4", fresh && "text-verified")} />
-                    {copy.coachPage.checked}
-                  </PopoverTrigger>
-                  <PopoverContent className="w-72 text-sm">{copy.coach.pipeline}</PopoverContent>
-                </Popover>
+              </div>
+            ) : query.isError && !brief ? (
+              <p role="alert" className="text-sm">
+                {copy.coach.error}
               </p>
-            </>
-          ) : null}
-        </section>
-      )}
-      <ReplayControls className="max-w-xl" />
+            ) : brief ? (
+              <>
+                <ol className="flex flex-col gap-4">
+                  {items.map((item) => (
+                    <ItemCard key={item.issue_id} item={item} side={side} minute={brief.minute} />
+                  ))}
+                </ol>
+                {hidden > 0 && (
+                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                    {copy.coachPage.dismissedN(hidden)}
+                    <Button variant="ghost" className="h-11 px-3" onClick={() => useCoach.getState().restore()}>
+                      {copy.coachPage.undo}
+                    </Button>
+                  </p>
+                )}
+              </>
+            ) : null}
+          </section>
+        )}
+      </div>
+      {aside}
     </div>
   );
 }

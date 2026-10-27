@@ -39,18 +39,18 @@ function Mark({ outcome, r, className }: { outcome: string; r: number; className
     case "goal":
       return (
         <g className={className}>
-          <circle r={r} className="fill-current" />
+          <circle r={r} className="fill-current" fillOpacity={0.7} />
           <circle r={r + 0.7} className="fill-none stroke-current" strokeWidth={0.35} />
         </g>
       );
     case "saved":
-      return <rect x={-r} y={-r} width={r * 2} height={r * 2} className={cn("fill-none stroke-current", className)} strokeWidth={0.5} />;
+      return <rect x={-r} y={-r} width={r * 2} height={r * 2} className={cn("fill-none stroke-current", className)} strokeWidth={0.2} />;
     case "blocked":
       return (
         <path
           d={`M 0 ${-r * 1.15} L ${r} ${r * 0.75} L ${-r} ${r * 0.75} Z`}
           className={cn("fill-none stroke-current", className)}
-          strokeWidth={0.5}
+          strokeWidth={0.2}
           strokeLinejoin="round"
         />
       );
@@ -66,7 +66,16 @@ function Mark({ outcome, r, className }: { outcome: string; r: number; className
   }
 }
 
-const markSize = (xg: number | null) => 0.9 + Math.sqrt(xg ?? 0.05) * 2.2;
+const markSize = (xg: number | null) => Math.min(1.9, 0.7 + Math.sqrt(xg ?? 0.05) * 1.5);
+
+/** A small stable offset per shot, so shots from the same spot do not hide each other. */
+function jitter(id: string): [number, number] {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return [((h & 0xff) / 255 - 0.5) * 1.6, (((h >> 8) & 0xff) / 255 - 0.5) * 1.6];
+}
+
+const VIEW_H = 31;
 
 function HalfPitch() {
   return (
@@ -114,10 +123,11 @@ export function ShotMapPanel({ className }: { className?: string }) {
   const shots = all.filter((s) => team === "both" || s.side === team);
   const latest = shots.slice(-LATEST).reverse();
   const goals = shots.filter((s) => s.event.outcome === "goal").length;
+  const goalNumber = new Map(shots.filter((s) => s.event.outcome === "goal").map((s, i) => [s.event.event_id, i + 1]));
   const count = (side: Side) => all.filter((s) => s.side === side).length;
 
   return (
-    <section aria-labelledby="shot-map-heading" className={cn("flex flex-col gap-3 rounded-lg border bg-card p-4", className)}>
+    <section aria-labelledby="shot-map-heading" className={cn("@container flex min-w-0 flex-col gap-3 rounded-2xl border bg-card p-4 shadow-raised", className)}>
       <div className="flex flex-col gap-0.5">
         <h2 id="shot-map-heading" className="font-display text-lg font-semibold">
           {S.heading}
@@ -135,24 +145,31 @@ export function ShotMapPanel({ className }: { className?: string }) {
           { value: "away", label: <><span aria-hidden className="size-2.5 rounded-full bg-away" />{meta.away.short_name}</> },
         ]}
       />
-      <div className="grid gap-4 md:grid-cols-[minmax(0,34rem)_minmax(0,1fr)]">
-        <figure className="flex flex-col gap-2">
+      <div className="grid gap-4 @3xl:grid-cols-[minmax(0,34rem)_minmax(0,1fr)]">
+        <figure className="flex min-w-0 flex-col gap-2">
           <svg
-            viewBox={`-3 -3 ${W + 6} ${HALF + 5}`}
+            viewBox={`-3 -3 ${W + 6} ${VIEW_H + 3}`}
             role="img"
             aria-label={`${S.heading}: ${meta.home.name} ${count("home")} shots, ${meta.away.name} ${count("away")} shots, ${goals} goals.`}
             className="w-full rounded-md bg-turf"
           >
             <HalfPitch />
-            {shots.map((shot) => {
+            {[...shots].sort((x, y) => Number(x.event.outcome === "goal") - Number(y.event.outcome === "goal")).map((shot) => {
               const dim = active !== null && active !== shot.event.event_id;
+              const [dx, dy] = jitter(shot.event.event_id);
+              const goal = shot.event.outcome === "goal";
               return (
                 <g
                   key={shot.event.event_id}
-                  transform={`translate(${shot.x} ${shot.y})`}
+                  transform={`translate(${shot.x + dx} ${Math.max(0.5, shot.y + dy)})`}
                   className={cn(sideTone[shot.side].text, "transition-opacity", dim && "opacity-25")}
                 >
                   <Mark outcome={shot.event.outcome} r={markSize(shot.xg)} className="stroke-current" />
+                  {goal && (
+                    <text y={0.9} textAnchor="middle" fontSize={2.4} fontWeight={700} className="fill-background">
+                      {goalNumber.get(shot.event.event_id)}
+                    </text>
+                  )}
                   <title>{describeShot(shot, meta)}</title>
                 </g>
               );

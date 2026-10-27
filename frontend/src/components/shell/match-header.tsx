@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion, useMotionTemplate, useReducedMotion, useScroll, useTransform } from "motion/react";
+import { AnimatePresence, m, useMotionTemplate, useReducedMotion, useScroll, useTransform } from "motion/react";
 import { useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -44,7 +44,7 @@ function ScoreDigit({ value, side }: { value: number; side: "home" | "away" }) {
   return (
     <span className="relative inline-grid overflow-hidden px-1">
       {changed && !reduce && (
-        <motion.span
+        <m.span
           key={`glow-${value}`}
           aria-hidden
           className={cn("absolute inset-0 -z-10 rounded-xl blur-md", side === "home" ? "bg-home" : "bg-away")}
@@ -54,7 +54,7 @@ function ScoreDigit({ value, side }: { value: number; side: "home" | "away" }) {
         />
       )}
       <AnimatePresence initial={false} mode="popLayout">
-        <motion.span
+        <m.span
           key={value}
           initial={{ y: reduce ? 0 : "100%", opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -62,7 +62,7 @@ function ScoreDigit({ value, side }: { value: number; side: "home" | "away" }) {
           transition={{ duration: reduce ? 0 : 0.4, ease: [0.16, 1, 0.3, 1] }}
         >
           {value}
-        </motion.span>
+        </m.span>
       </AnimatePresence>
     </span>
   );
@@ -90,19 +90,19 @@ export function MatchHeader({ hero }: { hero: boolean }) {
   const as = meta && state ? (state.score[meta.away.team_id] ?? 0) : null;
 
   return (
-    <motion.div
+    <m.div
       style={{ height }}
       className="fixed inset-x-0 top-[var(--topbar-h)] z-40 overflow-hidden"
       data-match-header
     >
-      <motion.div
+      <m.div
         aria-hidden
         style={{ opacity: barOpacity }}
         className="glass absolute inset-0 border-x-0 border-t-0 shadow-none"
       />
       {/* Hero state */}
       {hero && (
-        <motion.div
+        <m.div
           style={{ opacity: heroOpacity }}
           className="pointer-events-none absolute inset-x-0 top-0 mx-auto flex h-[var(--hdr-max)] max-w-7xl items-center justify-center px-4 pt-11 md:pt-0"
           aria-label="Match score"
@@ -143,10 +143,10 @@ export function MatchHeader({ hero }: { hero: boolean }) {
               <Skeleton className="size-12 rounded-full" />
             </div>
           )}
-        </motion.div>
+        </m.div>
       )}
       {/* Collapsed state */}
-      <motion.div
+      <m.div
         style={{ opacity: barOpacity }}
         className="absolute inset-x-0 top-0 mx-auto flex h-[var(--hdr-min)] max-w-7xl items-center justify-center gap-3 px-4 pr-28 md:pr-4"
       >
@@ -165,7 +165,7 @@ export function MatchHeader({ hero }: { hero: boolean }) {
         ) : (
           <Skeleton className="h-6 w-48" aria-hidden />
         )}
-      </motion.div>
-    </motion.div>
+      </m.div>
+    </m.div>
   );
 }

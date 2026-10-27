@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
+import { StickyBar } from "@/components/ui/sticky-bar";
 import { StablePanel } from "@/components/ui/stable-panel";
 import { useShell } from "@/components/shell/shell-store";
 import { InsightFeed } from "@/features/companion/insight-feed";
@@ -75,7 +76,7 @@ export function MomentsPage() {
           {copy.recap.cta}
         </Button>
       </div>
-      <div className="sticky top-[var(--stack-h)] z-30 -mx-4 flex items-center gap-3 bg-background px-4 py-2 md:-mx-6 md:px-6">
+      <StickyBar className="flex items-center gap-3">
         <Segmented
           className="min-w-0 shrink-0"
           label={copy.momentsPage.heading}
@@ -106,7 +107,7 @@ export function MomentsPage() {
             )}
           </div>
         )}
-      </div>
+      </StickyBar>
       <StablePanel panelKey={view}>
         {view === "highlights" ? (
           <InsightFeed filter={filter} />

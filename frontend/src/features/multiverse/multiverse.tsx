@@ -1,10 +1,12 @@
 "use client";
 
-import { Volume2, VolumeX } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { SlidersHorizontal, Volume2, VolumeX } from "lucide-react";
+import { AnimatePresence, m } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { StoreApi } from "zustand";
 
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toggle } from "@/components/ui/toggle";
@@ -77,7 +79,7 @@ function FeedTop() {
         {items.map((item) => {
           const side = sideOf(meta, item.team_id);
           return (
-            <motion.li
+            <m.li
               key={item.insight_id}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -92,7 +94,7 @@ function FeedTop() {
                 </div>
                 <p className="line-clamp-2 font-display text-base leading-snug font-semibold">{item.headline}</p>
               </div>
-            </motion.li>
+            </m.li>
           );
         })}
     </ol>
@@ -127,32 +129,44 @@ function PaneControls({ index, kind, onKind }: { index: number; kind: Kind; onKi
   const language = useProfile((s) => s.language);
   const setLanguage = useProfile((s) => s.setLanguage);
   return (
-    <div className="flex gap-2">
-      <Select items={copy.multiverse.personas} value={kind} onValueChange={(v) => v && onKind(v as Kind)}>
-        <SelectTrigger aria-label={`${copy.multiverse.persona} ${index + 1}`} className="h-11 min-w-0 flex-1">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {KINDS.map((k) => (
-            <SelectItem key={k} value={k}>
-              {copy.multiverse.personas[k]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select items={copy.languages} value={language} onValueChange={(v) => v && setLanguage(v as Language)}>
-        <SelectTrigger aria-label={`${copy.profile.language} ${index + 1}`} className="h-11 w-28">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {LANGUAGES.map((l) => (
-            <SelectItem key={l} value={l} lang={l}>
-              {copy.languages[l]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <Popover>
+      <PopoverTrigger render={<Button variant="secondary" className="h-11 gap-2 self-start px-4" />}>
+        <SlidersHorizontal aria-hidden />
+        {copy.multiverse.customise}
+      </PopoverTrigger>
+      <PopoverContent className="flex w-72 flex-col gap-3">
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          {copy.multiverse.persona}
+          <Select items={copy.multiverse.personas} value={kind} onValueChange={(v) => v && onKind(v as Kind)}>
+            <SelectTrigger aria-label={`${copy.multiverse.persona} ${index + 1}`} className="h-11 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {KINDS.map((k) => (
+                <SelectItem key={k} value={k}>
+                  {copy.multiverse.personas[k]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          {copy.profile.language}
+          <Select items={copy.languages} value={language} onValueChange={(v) => v && setLanguage(v as Language)}>
+            <SelectTrigger aria-label={`${copy.profile.language} ${index + 1}`} className="h-11 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LANGUAGES.map((l) => (
+                <SelectItem key={l} value={l} lang={l}>
+                  {copy.languages[l]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -203,7 +217,7 @@ function Pane({
       <section
         aria-label={`${copy.multiverse.panes} ${index + 1}`}
         className={cn(
-          "flex w-[88vw] max-w-xl shrink-0 snap-center flex-col gap-3 rounded-xl border bg-card p-3 shadow-raised transition-shadow duration-300 sm:w-[70vw] lg:w-auto lg:max-w-none",
+          "flex w-[88vw] max-w-xl shrink-0 snap-center flex-col gap-3 rounded-2xl border bg-card p-3 shadow-raised transition-shadow duration-300 sm:w-[70vw] lg:w-auto lg:max-w-none",
           flash && "ring-2 ring-tally",
         )}
       >
@@ -270,12 +284,12 @@ export function Multiverse() {
     <div className="mx-auto flex max-w-7xl flex-col gap-4 py-4 lg:px-6 lg:py-6">
       <div className="flex flex-wrap items-end justify-between gap-3 px-4 lg:px-0">
         <div className="flex flex-col gap-1">
-          <h1 className="font-display text-display font-semibold">{copy.multiverse.heading}</h1>
+          <h1 className="text-[28px] leading-[34px] font-semibold tracking-tight">{copy.multiverse.heading}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">{copy.multiverse.intro}</p>
         </div>
         <AnimatePresence>
           {flash && (
-            <motion.p
+            <m.p
               role="status"
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -283,7 +297,7 @@ export function Multiverse() {
               className="rounded-full bg-tally px-3 py-1 font-display text-sm font-semibold text-tally-foreground"
             >
               {copy.multiverse.sync}
-            </motion.p>
+            </m.p>
           )}
         </AnimatePresence>
       </div>

@@ -3,6 +3,7 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
+import { EmptyState } from "@/components/ui/empty-state";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCoach } from "@/features/coach/coach-store";
@@ -77,7 +78,7 @@ export function PlayersTable() {
     );
   }
   if (!rows.length && team === "all") {
-    return <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{T.empty}</p>;
+    return <EmptyState>{T.empty}</EmptyState>;
   }
   const best = Math.max(10, ...rows.map((r) => r.data_rating));
   return (

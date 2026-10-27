@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { motion } from "motion/react";
+import { m } from "motion/react";
 import { useState } from "react";
 
 import { useReplay } from "@/features/broadcast/replay-store";
@@ -158,7 +158,7 @@ function MomentCard({ item, language }: { item: FeedItem; language: Language }) 
   const Icon = BIG_ICON[item.signal_type] ?? Zap;
   const goal = item.signal_type === "goal";
   return (
-    <motion.article
+    <m.article
       lang={language}
       layout="position"
       initial={{ opacity: 0, y: 8 }}
@@ -210,7 +210,7 @@ function MomentCard({ item, language }: { item: FeedItem; language: Language }) 
         </span>
       </div>
       <DetailsSheet item={item} open={details} onOpenChange={setDetails} />
-    </motion.article>
+    </m.article>
   );
 }
 
@@ -219,7 +219,7 @@ function MomentRow({ item, language }: { item: FeedItem; language: Language }) {
   const side = sideOf(meta, item.team_id);
   const [details, setDetails] = useState(false);
   return (
-    <motion.article lang={language} layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border-b last:border-0">
+    <m.article lang={language} layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border-b last:border-0">
       <div
         role="button"
         tabIndex={0}
@@ -245,7 +245,7 @@ function MomentRow({ item, language }: { item: FeedItem; language: Language }) {
         </span>
       </div>
       <DetailsSheet item={item} open={details} onOpenChange={setDetails} />
-    </motion.article>
+    </m.article>
   );
 }
 

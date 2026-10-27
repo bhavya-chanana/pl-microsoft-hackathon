@@ -230,6 +230,29 @@
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+  a,
+  button,
+  [role="button"],
+  [role="radio"],
+  input,
+  select,
+  textarea,
+  summary {
+    touch-action: manipulation;
+  }
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  @media (pointer: fine) {
+    html {
+      overscroll-behavior: none;
+    }
+  }
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-ring;
   }

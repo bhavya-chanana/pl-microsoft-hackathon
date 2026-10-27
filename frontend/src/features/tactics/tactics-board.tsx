@@ -4,7 +4,9 @@ import { Hammer, LoaderCircle, Sparkles } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
+import { TextShimmer } from "@/components/ui/text-shimmer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLive } from "@/features/live/live-store";
 import { useCreateBoard, useTacticsBoard } from "@/features/live/queries";
@@ -125,12 +127,7 @@ function VerdictPanel({ board, titleOf, onShow }: { board: TacticsBoard; titleOf
 
 function EmptyStage() {
   return (
-    <section aria-labelledby="empty-heading" className="flex flex-col items-start gap-3 rounded-lg border border-dashed bg-card/50 p-6">
-      <h2 id="empty-heading" className="font-display text-xl font-semibold">
-        {t.stage.emptyHeading}
-      </h2>
-      <p className="max-w-prose text-sm text-muted-foreground">{t.stage.empty}</p>
-    </section>
+    <EmptyState title={t.stage.emptyHeading}>{t.stage.empty}</EmptyState>
   );
 }
 
@@ -271,9 +268,9 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
                 <div className="relative h-1.5 w-full max-w-md overflow-hidden rounded-full bg-raised">
                   <span className="absolute inset-y-0 w-1/3 rounded-full bg-primary motion-safe:animate-[indeterminate_1.4s_ease-in-out_infinite]" />
                 </div>
-                <p className="text-sm text-muted-foreground tabular-nums">
+                <TextShimmer as="p" className="text-sm tabular-nums" duration={2.2}>
                   {t.goalFirst.testing(board?.tactics.filter((x) => x.status === "ready" || x.status === "rejected").length ?? 0, board?.tactics.length ?? 0)}
-                </p>
+                </TextShimmer>
               </div>
             )}
           </div>

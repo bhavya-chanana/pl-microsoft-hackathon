@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutGroup, motion } from "motion/react";
+import { LayoutGroup, m } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -32,7 +32,7 @@ export function TabBar() {
                   )}
                 >
                   {active && (
-                    <motion.span
+                    <m.span
                       layoutId="tab-pill"
                       transition={spring.snappy}
                       className="absolute inset-0 rounded-full bg-raised ring-1 ring-foreground/10"

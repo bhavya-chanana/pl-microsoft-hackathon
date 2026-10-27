@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight, Radio, Video } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, m } from "motion/react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,7 @@ function Caption({ onAir }: { onAir: Record<string, string | null> }) {
     <div className="min-h-11" aria-live="polite">
       <AnimatePresence mode="wait" initial={false}>
         {overlay && text && (
-          <motion.div
+          <m.div
             key={overlay.overlay_id}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -82,7 +82,7 @@ function Caption({ onAir }: { onAir: Record<string, string | null> }) {
                 ))}
               </p>
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>
@@ -98,7 +98,7 @@ function GoalChip() {
   return (
     <AnimatePresence>
       {goal && (
-        <motion.div
+        <m.div
           key={goal.signal_id}
           role="status"
           initial={{ opacity: 0, x: -16 }}
@@ -108,7 +108,7 @@ function GoalChip() {
         >
           GOAL
           <span className="font-sans text-sm font-semibold">{scorer ? `${scorer} ${goal.minute_label}` : goal.minute_label}</span>
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>
   );

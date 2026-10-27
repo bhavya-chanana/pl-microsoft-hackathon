@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { m, useReducedMotion } from "motion/react";
 
 import type { Drawing } from "@/lib/contract";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,7 @@ export function linePath(points: XY[]) {
 /** Chalk label with a dark halo, readable on any turf. */
 function Label({ at, text, primary }: { at: XY; text: string; primary: boolean }) {
   return (
-    <motion.text
+    <m.text
       x={at.x}
       y={at.y}
       textAnchor="middle"
@@ -34,7 +34,7 @@ function Label({ at, text, primary }: { at: XY; text: string; primary: boolean }
       transition={{ duration: 0.3, delay: 0.25 }}
     >
       {text}
-    </motion.text>
+    </m.text>
   );
 }
 
@@ -45,7 +45,7 @@ function Stroke({ d, width, dashed, primary, duration }: { d: string; width: num
   return (
     <>
       <path d={d} className="fill-none stroke-graphic" strokeOpacity={0.45} strokeWidth={width + 0.5} strokeLinecap="round" strokeLinejoin="round" />
-      <motion.path
+      <m.path
         d={d}
         className={cn("fill-none", primary ? "stroke-telestrator" : "stroke-graphic-foreground")}
         strokeWidth={width}
@@ -86,7 +86,7 @@ function Mark({ drawing }: { drawing: Drawing }) {
       const r = drawing.radius ?? 2.6;
       return (
         <g>
-          <motion.circle
+          <m.circle
             cx={a.x}
             cy={a.y}
             r={r}
@@ -105,7 +105,7 @@ function Mark({ drawing }: { drawing: Drawing }) {
       const r = drawing.radius ?? 10;
       return (
         <g>
-          <motion.circle
+          <m.circle
             cx={a.x}
             cy={a.y}
             r={r}
@@ -124,7 +124,7 @@ function Mark({ drawing }: { drawing: Drawing }) {
     case "marker":
       return (
         <g>
-          <motion.circle
+          <m.circle
             cx={a.x}
             cy={a.y}
             r={0.8}

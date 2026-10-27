@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutGroup, motion } from "motion/react";
+import { LayoutGroup, m } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -36,7 +36,7 @@ export function TopBar() {
                     )}
                   >
                     {active && (
-                      <motion.span
+                      <m.span
                         layoutId="nav-pill"
                         transition={spring.snappy}
                         className="absolute inset-0 rounded-full bg-foreground/10 ring-1 ring-foreground/10"

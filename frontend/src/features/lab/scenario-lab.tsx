@@ -1,13 +1,14 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { CheckCircle2, CircleDashed, Download, PenLine, Play, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDashed, Download, EllipsisVertical, PenLine, Play, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useScenarios, useScriptCheck } from "@/features/live/queries";
@@ -218,9 +219,22 @@ export function ScenarioLab() {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-4 sm:px-6 lg:py-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="font-display text-display font-semibold">{copy.lab.heading}</h1>
-        <p className="max-w-prose text-sm text-muted-foreground">{copy.lab.intro}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-[28px] leading-[34px] font-semibold tracking-tight">{copy.lab.heading}</h1>
+          <p className="max-w-prose text-[15px] text-muted-foreground">{copy.lab.intro}</p>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="outline" size="icon" className="size-11 shrink-0" aria-label={copy.lab.more} />}>
+            <EllipsisVertical aria-hidden />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem render={<a href={serverRoutes.backend("dataset")} download />} className="min-h-11 gap-2">
+              <Download aria-hidden />
+              {copy.lab.dataset}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem]">
@@ -348,19 +362,6 @@ export function ScenarioLab() {
             <Button variant="outline" className="h-11 gap-2 self-start px-4" nativeButton={false} render={<Link href={routes.live} />}>
               <Play aria-hidden />
               {copy.lab.watchLive}
-            </Button>
-          </section>
-          <section className="flex flex-col gap-2 rounded-lg border bg-card p-4 shadow-raised">
-            <h2 className="font-display text-lg font-semibold">{copy.lab.dataset}</h2>
-            <p className="text-xs text-muted-foreground">{copy.lab.datasetHelp}</p>
-            <Button
-              variant="outline"
-              className="h-11 gap-2 self-start px-4"
-              nativeButton={false}
-              render={<a href={serverRoutes.backend("dataset")} download />}
-            >
-              <Download aria-hidden />
-              {copy.lab.dataset}
             </Button>
           </section>
         </aside>

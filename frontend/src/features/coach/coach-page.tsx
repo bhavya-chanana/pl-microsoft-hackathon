@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
 import { Segmented } from "@/components/ui/segmented";
+import { StickyBar } from "@/components/ui/sticky-bar";
 import { StablePanel } from "@/components/ui/stable-panel";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,6 @@ function Body() {
   const coachMode = useCoach((s) => s.coachMode);
   const client = useQueryClient();
   const teamId = picked ?? meta?.home.team_id ?? null;
-  const side = meta && teamId === meta.away.team_id ? "away" : "home";
   const change = (next: Tab) => {
     setTab(next);
     window.history.replaceState(null, "", next === "brief" ? "/coach" : `/coach?tab=${next}`);
@@ -71,10 +71,7 @@ function Body() {
           </label>
         </div>
       </header>
-      <div
-        className="sticky top-[var(--stack-h)] z-30 -mx-4 bg-background px-4 py-2 md:-mx-6 md:px-6 print:hidden"
-        style={{ ["--team-accent" as string]: side === "home" ? "var(--team-home)" : "var(--team-away)" }}
-      >
+      <StickyBar>
         <Segmented
           label={copy.coachPage.tabs}
           value={tab}
@@ -86,7 +83,7 @@ function Body() {
             { value: "report", label: copy.coachPage.report },
           ]}
         />
-      </div>
+      </StickyBar>
       <StablePanel panelKey={tab}>
         {tab === "brief" ? <CoachRoom onReport={() => change("report")} /> : tab === "tactics" ? <TacticsRoute /> : <MatchReport />}
       </StablePanel>

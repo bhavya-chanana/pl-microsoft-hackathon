@@ -5,6 +5,7 @@ export const copy = {
   product: "Matchlens",
   tagline: "Live match intelligence, explained as it happens",
   nav: {
+    skip: "Skip to content",
     live: "Live",
     moments: "Moments",
     stats: "Stats",
@@ -221,6 +222,11 @@ export const copy = {
   },
   broadcastControls: {
     back: "Back to Match centre",
+    exit: "Exit",
+    copyLink: "Copy overlay link",
+    copied: "Link copied. Add it as a browser source in OBS.",
+    copyFailed: "Could not copy the link.",
+    hint: "Move the mouse to bring these controls back.",
     sound: "Turn on commentary",
     soundOn: "Turn off commentary",
   },
@@ -416,6 +422,7 @@ export const copy = {
     tooLong: (max: number) => `Keep it under ${max} characters.`,
   },
   multiverse: {
+    customise: "Customise",
     heading: "Multiverse",
     intro: "One match, four fans. Each screen is the same live feed, told for a different person in their own language.",
     sync: "Same moment, four stories",
@@ -479,7 +486,7 @@ export const copy = {
       ],
       fineTune: "Fine-tune",
       build: "Build ideas",
-      testing: (done: number, total: number) => (total ? `Testing idea ${Math.min(done + 1, total)} of ${total}...` : "Coming up with ideas..."),
+      testing: (done: number, total: number) => (total ? `Testing idea ${Math.min(done + 1, total)} of ${total}…` : "Coming up with ideas…"),
       noClear: "No clear winner",
       noClearMargin: (m: string) => `Best idea beats standard play by ${m}, within the noise.`,
     },
@@ -738,6 +745,7 @@ export const copy = {
   },
 
   lab: {
+    more: "More actions",
     heading: "Scenario lab",
     intro: "Script a match, kick it off, and watch the whole pipeline narrate it live. Every scenario is synthetic: fictional teams, generated tracking.",
     presets: "Ready-made scripts",
@@ -863,6 +871,8 @@ export const copy = {
     noSubsCards: "No substitutions or cards yet.",
     keyPlayers: "Key players",
     export: "Export PDF",
+    showAll: (n: number) => `Show all ${n}`,
+    showFewer: "Show fewer",
     copyLink: "Copy link",
     linkCopied: "Link copied",
     minute: "Min",

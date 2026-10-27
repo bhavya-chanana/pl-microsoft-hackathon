@@ -3,6 +3,7 @@
 import { RotateCw } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 
+import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFeed } from "@/features/live/queries";
@@ -68,7 +69,7 @@ export function InsightFeed({
   }
   if (limit) items = items.slice(0, limit);
   if (!items.length) {
-    return <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{copy.feed.empty}</p>;
+    return <EmptyState>{copy.feed.empty}</EmptyState>;
   }
   return (
     <ol className={cn("flex gap-3", carousel ? "snap-x snap-mandatory overflow-x-auto overscroll-x-contain pb-2 md:snap-none md:flex-col md:overflow-visible md:pb-0" : "flex-col")} aria-label={copy.feed.heading}>

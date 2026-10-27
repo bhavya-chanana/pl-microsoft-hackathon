@@ -1,10 +1,12 @@
 "use client";
 
-import { ArrowLeft, Volume2, VolumeX } from "lucide-react";
+import { Link2, Volume2, VolumeX, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { buttonVariants } from "@/components/ui/button";
+import { toast } from "sonner";
+
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
 import { Narrator } from "@/features/companion/narration";
 import { copy } from "@/lib/copy";
@@ -34,42 +36,73 @@ function useActive(): boolean {
   return active;
 }
 
+const HINT_KEY = "matchlens.broadcast.hint.v1";
+
 /**
- * The way out of the full-screen feed and its commentary switch. Browsers only
- * let a page play sound after a click, so commentary starts off.
+ * The way out of the full-screen feed, a link to put it in OBS, and the commentary switch, in one glass
+ * pill that steps aside when idle. Browsers only play sound after a click, so commentary starts off.
  */
 export function BroadcastControls() {
   const active = useActive();
   const [sound, setSound] = useState(false);
+  const [hint, setHint] = useState(false);
+  useEffect(() => {
+    let first = false;
+    try {
+      first = !localStorage.getItem(HINT_KEY);
+      if (first) localStorage.setItem(HINT_KEY, "1");
+    } catch {
+      /* storage can be blocked */
+    }
+    if (!first) return;
+    const on = setTimeout(() => setHint(true), 0);
+    const off = setTimeout(() => setHint(false), 6_000);
+    return () => {
+      clearTimeout(on);
+      clearTimeout(off);
+    };
+  }, []);
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast.success(copy.broadcastControls.copied);
+    } catch {
+      toast.error(copy.broadcastControls.copyFailed);
+    }
+  };
+  const show = active || hint;
   return (
     <div
       className={cn(
-        "absolute right-[2%] bottom-[2%] z-30 flex items-center gap-2 transition-opacity duration-300",
-        "focus-within:opacity-100",
-        active ? "opacity-100" : "pointer-events-none opacity-0",
+        "absolute top-4 left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-2 transition-opacity duration-300 focus-within:opacity-100",
+        show ? "opacity-100" : "pointer-events-none opacity-0",
       )}
     >
-      <Link
-        href={routes.live}
-        className={cn(
-          buttonVariants({ variant: "secondary" }),
-          "min-h-11 gap-2 bg-graphic/80 px-3 text-graphic-foreground hover:bg-graphic",
-        )}
-      >
-        <ArrowLeft aria-hidden />
-        {copy.broadcastControls.back}
-      </Link>
-      <Toggle
-        variant="outline"
-        className="size-11 shrink-0 border-graphic-foreground/20 bg-graphic/80 text-graphic-foreground hover:bg-graphic hover:text-graphic-foreground aria-pressed:bg-graphic aria-pressed:text-telestrator"
-        pressed={sound}
-        onPressedChange={setSound}
-        aria-label={sound ? copy.broadcastControls.soundOn : copy.broadcastControls.sound}
-        title={sound ? copy.broadcastControls.soundOn : copy.broadcastControls.sound}
-      >
-        {sound ? <Volume2 aria-hidden /> : <VolumeX aria-hidden />}
-      </Toggle>
-      <Narrator enabled={sound} />
+      <div className="glass-strong flex items-center gap-1 rounded-full p-1.5">
+        <Link href={routes.explore} className={cn(buttonVariants({ variant: "ghost" }), "h-11 gap-2 rounded-full px-4")}>
+          <X aria-hidden />
+          {copy.broadcastControls.exit}
+        </Link>
+        <Button variant="ghost" className="h-11 gap-2 rounded-full px-4" onClick={() => void copyLink()}>
+          <Link2 aria-hidden />
+          {copy.broadcastControls.copyLink}
+        </Button>
+        <Toggle
+          className="size-11 shrink-0 rounded-full"
+          pressed={sound}
+          onPressedChange={setSound}
+          aria-label={sound ? copy.broadcastControls.soundOn : copy.broadcastControls.sound}
+          title={sound ? copy.broadcastControls.soundOn : copy.broadcastControls.sound}
+        >
+          {sound ? <Volume2 aria-hidden /> : <VolumeX aria-hidden />}
+        </Toggle>
+        <Narrator enabled={sound} />
+      </div>
+      {hint && (
+        <p role="status" className="glass rounded-full px-4 py-1.5 text-[13px]">
+          {copy.broadcastControls.hint}
+        </p>
+      )}
     </div>
   );
 }

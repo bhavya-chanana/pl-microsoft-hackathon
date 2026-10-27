@@ -1,7 +1,7 @@
 "use client";
 
 import { Radio, RotateCw, Video } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, m } from "motion/react";
 import { useCallback, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -169,13 +169,13 @@ export function BroadcastMonitor({
       </div>
       <AnimatePresence initial={false}>
         {replay ? (
-          <motion.div key="replay" className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <m.div key="replay" className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <ReplayChrome replay={replay} interactive={interactive} />
-          </motion.div>
+          </m.div>
         ) : (
-          <motion.div key="live" className="pointer-events-none absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <m.div key="live" className="pointer-events-none absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <OverlayLayer onAir={onAir} />
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
       {interactive && !compact && !replay && (

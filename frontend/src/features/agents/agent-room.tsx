@@ -8,7 +8,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FactCheckBadge } from "@/features/companion/fact-check-badge";
 import { useLive } from "@/features/live/live-store";
 import { useDecisions, useHealth } from "@/features/live/queries";
-import { ReplayControls } from "@/features/replay/replay-controls";
 import type { Decision, Signal } from "@/lib/contract";
 import { copy, signalLabels } from "@/lib/copy";
 import { cn } from "@/lib/utils";
@@ -161,7 +160,6 @@ export function AgentRoom() {
           </h2>
           <Decisions />
         </section>
-        <ReplayControls className="self-start" />
       </div>
     </div>
   );

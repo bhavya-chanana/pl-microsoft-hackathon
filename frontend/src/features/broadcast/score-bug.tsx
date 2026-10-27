@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, m, useReducedMotion } from "motion/react";
 
 import { useLive } from "@/features/live/live-store";
 import { copy } from "@/lib/copy";
@@ -37,7 +37,7 @@ export function ScoreBug({ className }: { className?: string }) {
             <span className="relative inline-grid overflow-hidden font-display text-lg font-bold tabular-nums @lg:text-2xl">
               {/* A new goal rolls the number up like a stadium scoreboard. */}
               <AnimatePresence initial={false} mode="popLayout">
-                <motion.span
+                <m.span
                   key={state.score[team.team_id] ?? 0}
                   initial={{ y: reduce ? 0 : "100%", opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
@@ -45,7 +45,7 @@ export function ScoreBug({ className }: { className?: string }) {
                   transition={{ duration: reduce ? 0 : 0.4, ease: [0.16, 1, 0.3, 1] }}
                 >
                   {state.score[team.team_id] ?? 0}
-                </motion.span>
+                </m.span>
               </AnimatePresence>
             </span>
           </div>

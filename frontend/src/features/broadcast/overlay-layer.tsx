@@ -1,7 +1,7 @@
 "use client";
 
 import { BadgeCheck } from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, m, useReducedMotion } from "motion/react";
 
 import { useLive } from "@/features/live/live-store";
 import { useProfile } from "@/features/profile/profile-store";
@@ -124,7 +124,7 @@ export function PassLane({ pass }: { pass: MatchEvent }) {
   const draw = reduce ? { duration: 0 } : { duration: 0.6, ease: [0.16, 1, 0.3, 1] as const };
   return (
     <g key={pass.event_id} className={cn("pointer-events-none", sideTone[side].stroke)}>
-      <motion.path
+      <m.path
         d={`M ${x1} ${y1} L ${x2} ${y2}`}
         className="fill-none"
         strokeWidth={0.7}
@@ -134,7 +134,7 @@ export function PassLane({ pass }: { pass: MatchEvent }) {
         transition={draw}
       />
       <circle cx={x1} cy={y1} r={0.9} className={sideTone[side].fill} />
-      <motion.path
+      <m.path
         d="M 0 0 L -2.6 -1.4 L -2.6 1.4 Z"
         className={sideTone[side].fill}
         strokeWidth={0}
@@ -161,7 +161,7 @@ export function OverlayLayer({ onAir }: { onAir: OnAir }) {
       <div className="absolute inset-x-0 top-0">
         <AnimatePresence>
           {banner && (
-            <motion.div
+            <m.div
               key={banner.overlay_id}
               initial={{ opacity: 0, y: -24 }}
               animate={{ opacity: 1, y: 0 }}
@@ -169,14 +169,14 @@ export function OverlayLayer({ onAir }: { onAir: OnAir }) {
               transition={enter}
             >
               <Banner overlay={banner} language={language} />
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </div>
       <div className="absolute top-[24%] right-0 @2xl:top-[14%]">
         <AnimatePresence>
           {upper && (
-            <motion.div
+            <m.div
               key={upper.overlay_id}
               initial={{ opacity: 0, x: 48 }}
               animate={{ opacity: 1, x: 0 }}
@@ -184,14 +184,14 @@ export function OverlayLayer({ onAir }: { onAir: OnAir }) {
               transition={enter}
             >
               <StatCard overlay={upper} language={language} />
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </div>
       <div className="absolute inset-x-0 bottom-[6%] left-0">
         <AnimatePresence>
           {lower && (
-            <motion.div
+            <m.div
               key={lower.overlay_id}
               initial={{ opacity: 0, x: -64 }}
               animate={{ opacity: 1, x: 0 }}
@@ -199,7 +199,7 @@ export function OverlayLayer({ onAir }: { onAir: OnAir }) {
               transition={enter}
             >
               <LowerThird overlay={lower} language={language} />
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </div>

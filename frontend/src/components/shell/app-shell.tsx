@@ -81,6 +81,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const hero = pathname === routes.live;
   return (
     <>
+      <a
+        href="#main"
+        className="sr-only z-[100] rounded-full bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+      >
+        {copy.nav.skip}
+      </a>
       <div aria-hidden className="match-ambient fixed inset-0 -z-10" />
       <TopBar />
       <MatchHeader hero={hero} />
