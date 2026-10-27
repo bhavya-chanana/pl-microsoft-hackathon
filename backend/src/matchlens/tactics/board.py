@@ -337,7 +337,7 @@ def _shortfall(errors: list[str], got: int, wanted: int) -> str | None:
     if got >= wanted:
         return None
     text = " ".join(errors).lower()
-    if "timeout after" in text or "no time left" in text or "deadline reached" in text:
+    if "timeout" in text or "no time left" in text or "deadline reached" in text:
         why = "the AI ran out of time, so fewer ideas were tested."
     elif "rejected" in text or "no valid tactics" in text:
         why = "some of the AI's ideas did not pass the checks."

@@ -19,6 +19,7 @@ def test_shortfall_names_a_timeout_in_plain_words():
 
 @pytest.mark.parametrize("errors,fragment", [
     (["deadline reached after 30s; showing what was ready"], "ran out of time"),
+    (["ideate: TimeoutError: "], "ran out of time"),
     (["Overload: rejected (no space)"], "did not pass the checks"),
     (["ideate: RuntimeError: boom"], "could not be reached"),
     ([], "not enough distinct ideas"),
