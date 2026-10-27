@@ -7,11 +7,12 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { briefKey, useCoach } from "@/features/coach/coach-store";
+import { useAnalystWording } from "@/features/coach/use-analyst";
 import { useLive } from "@/features/live/live-store";
-import { useRatings, useTeamStats } from "@/features/live/queries";
+import { usePlayersStats, useRatings, useTeamStats } from "@/features/live/queries";
 import { useProfile } from "@/features/profile/profile-store";
 import { ShotMapPanel } from "@/features/stats/shot-map";
-import type { MatchEvent, MatchMeta } from "@/lib/contract";
+import type { MatchEvent, MatchMeta, PlayerStats } from "@/lib/contract";
 import { copy, eventLabels } from "@/lib/copy";
 import { playerName, sideOf, sideTone } from "@/lib/match";
 import { cn } from "@/lib/utils";
@@ -158,20 +159,93 @@ function SubsCards({ meta, timeline }: { meta: MatchMeta; timeline: MatchEvent[]
   );
 }
 
+/** One line on why a player stood out, from the stats the feed gives. */
+function whyLine(s: PlayerStats | undefined): string {
+  if (!s) return "";
+  const W = R.why;
+  const bits: string[] = [];
+  if (s.goals) bits.push(W.goals(s.goals));
+  if (s.assists) bits.push(W.assists(s.assists));
+  if (s.shots) bits.push(W.shots(s.shots, s.shots_on_target));
+  if (s.key_passes) bits.push(W.keyPasses(s.key_passes));
+  if (s.saves) bits.push(W.saves(s.saves));
+  if (s.tackles + s.interceptions >= 3) bits.push(W.defence(s.tackles + s.interceptions));
+  return bits.slice(0, 3).join(", ") || W.none;
+}
+
 function KeyPlayers({ meta }: { meta: MatchMeta }) {
   const ratings = useRatings().data ?? [];
   const top = [...ratings].sort((a, b) => b.data_rating - a.data_rating).slice(0, 3);
+  const stats = usePlayersStats(top.map((p) => p.player_id));
   if (!top.length) return <p className="text-sm text-muted-foreground">{copy.playersTable.empty}</p>;
   return (
     <ol className="flex flex-col divide-y">
       {top.map((p) => (
-        <li key={p.player_id} className="flex h-12 items-center gap-3">
-          <span aria-hidden className={cn("h-5 w-1 rounded-full", p.team_id === meta.home.team_id ? "bg-home" : "bg-away")} />
-          <span className="flex-1 font-medium">{p.name}</span>
+        <li key={p.player_id} className="flex min-h-14 items-center gap-3 py-2">
+          <span aria-hidden className={cn("h-8 w-1 shrink-0 rounded-full", p.team_id === meta.home.team_id ? "bg-home" : "bg-away")} />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="font-medium">{p.name}</span>
+            <span className="text-[13px] text-muted-foreground">{whyLine(stats.get(p.player_id))}</span>
+          </span>
           <span className="font-display text-xl font-semibold tabular-nums">{p.data_rating.toFixed(1)}</span>
         </li>
       ))}
     </ol>
+  );
+}
+
+/** Goalscorers under the scoreline, one line per side. */
+function Scorers({ meta, timeline }: { meta: MatchMeta; timeline: MatchEvent[] }) {
+  const goals = timeline.filter((e) => e.type === "goal");
+  if (!goals.length) return null;
+  return (
+    <div className="flex flex-wrap gap-x-6 gap-y-0.5 text-[13px] text-muted-foreground">
+      {(["home", "away"] as const).map((side) => (
+        <p key={side}>
+          <span className={cn("font-medium", sideTone[side].text)}>{meta[side].short_name}</span> <span className="sr-only">{R.scorers}: </span>
+          {goals
+            .filter((e) => sideOf(meta, e.team_id) === side)
+            .map((e) => `${playerName(meta, e.player_id, true)} ${e.minute_label}`)
+            .join(", ")}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/** Shots and chances created, split by half. */
+function ByHalf({ meta, timeline }: { meta: MatchMeta; timeline: MatchEvent[] }) {
+  const rows = [1, 2].map((period) => {
+    const pick = (side: "home" | "away") => {
+      const shots = timeline.filter((e) => e.type === "shot" && e.period === period && sideOf(meta, e.team_id) === side);
+      return { shots: shots.length, xg: shots.reduce((sum, e) => sum + (typeof e.attrs.xg === "number" ? e.attrs.xg : 0), 0), goals: shots.filter((e) => e.outcome === "goal").length };
+    };
+    return { period, home: pick("home"), away: pick("away") };
+  }).filter((r) => r.period === 1 || r.home.shots + r.away.shots > 0);
+  return (
+    <table className="w-full text-[15px]">
+      <caption className="sr-only">{R.byHalf}</caption>
+      <thead className="text-[13px] text-muted-foreground">
+        <tr>
+          <th scope="col" className="py-1 text-left font-medium"><span className="sr-only">Half</span></th>
+          <th scope="col" className="py-1 text-right font-medium">{meta.home.short_name}</th>
+          <th scope="col" className="py-1 text-right font-medium">{meta.away.short_name}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.period} className="border-t align-top">
+            <th scope="row" className="py-2 text-left font-medium">{r.period === 1 ? R.firstHalf : R.secondHalf}</th>
+            {(["home", "away"] as const).map((side) => (
+              <td key={side} className="py-2 text-right tabular-nums">
+                <div className="font-semibold">{r[side].goals} <span className="font-normal text-muted-foreground">goals</span></div>
+                <div className="text-[13px] text-muted-foreground">{r[side].shots} shots, xG {r[side].xg.toFixed(2)}</div>
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -185,6 +259,7 @@ export function MatchReport() {
   const teamId = useCoach((s) => s.teamId) ?? meta?.home.team_id ?? null;
   const brief = useCoach((s) => (teamId ? s.briefs[briefKey(teamId, language)]?.brief : undefined));
   const { resolvedTheme, setTheme } = useTheme();
+  const analyst = useAnalystWording();
   if (!meta || !state) return null;
   const phase = finished ? R.phase.full : state.elapsed >= 2700 && state.elapsed <= 3600 ? R.phase.half : R.phase.latest;
   /** Print on paper colours, then put the viewer's theme back. */
@@ -214,6 +289,7 @@ export function MatchReport() {
             {state.score[meta.home.team_id] ?? 0} - {state.score[meta.away.team_id] ?? 0}
             <span className={sideTone.away.text}>{meta.away.name}</span>
           </p>
+          <Scorers meta={meta} timeline={timeline} />
         </div>
         <div className="flex gap-2 print:hidden">
           <Button variant="secondary" className="h-11 gap-2 px-4" onClick={() => void copyLink()}>
@@ -247,11 +323,14 @@ export function MatchReport() {
               <p className="text-sm text-muted-foreground">{R.noActions}</p>
             )}
           </Section>
-          <Section title={R.xgTimeline}>
+          <Section title={analyst ? R.xgTimelineAnalyst : R.xgTimeline}>
             <XgTimeline meta={meta} timeline={timeline} />
           </Section>
           <Section title={R.possession}>
             <Possession meta={meta} />
+          </Section>
+          <Section title={R.byHalf}>
+            <ByHalf meta={meta} timeline={timeline} />
           </Section>
           <Section title={R.keyPlayers}>
             <KeyPlayers meta={meta} />

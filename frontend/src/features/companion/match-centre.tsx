@@ -8,6 +8,7 @@ import { FanPolls } from "@/features/fans/fan-polls";
 import { ActionButtons, FloatingActions } from "@/features/live/floating-actions";
 import { LivePitch } from "@/features/live/live-pitch";
 import { StoryLine } from "@/features/live/story-line";
+import { useCoach } from "@/features/coach/coach-store";
 import { useProfile } from "@/features/profile/profile-store";
 import { MetricTile } from "@/features/stats/metric-tile";
 import { ShotMapPanel } from "@/features/stats/shot-map";
@@ -24,6 +25,7 @@ import { MatchPulse } from "./match-pulse";
  */
 export function MatchCentre() {
   const analyst = useProfile((s) => s.mode === "analyst");
+  const coachMode = useCoach((s) => s.coachMode);
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 pt-4 pb-28 md:pb-12 md:px-6 md:pt-6 xl:px-8">
       <h1 className="sr-only">{copy.nav.live}</h1>
@@ -48,7 +50,7 @@ export function MatchCentre() {
             <MetricTile />
           </div>
           <div className="order-6 min-w-0 min-[1100px]:order-none">
-            <FanPolls />
+            {!coachMode && <FanPolls />}
           </div>
           {analyst && (
             <div className="order-5 min-w-0 min-[1100px]:order-none">

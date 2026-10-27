@@ -36,7 +36,7 @@ function Body() {
   };
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 md:px-6 xl:px-8">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <h1 className="text-[28px] leading-[34px] font-semibold tracking-tight">{copy.coach.heading.replace(" brief", "")}</h1>
         <div className="flex flex-wrap items-center gap-3">
           {meta && teamId && (

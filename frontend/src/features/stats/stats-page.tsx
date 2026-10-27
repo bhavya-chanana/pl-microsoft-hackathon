@@ -1,5 +1,6 @@
 "use client";
 
+import { useAnalystWording } from "@/features/coach/use-analyst";
 import { useState } from "react";
 
 import { Segmented } from "@/components/ui/segmented";
@@ -18,13 +19,14 @@ type View = "team" | "players" | "shots";
 
 /** Chances created over the match, as a race between the two sides. */
 function XgRace() {
+  const analyst = useAnalystWording();
   const meta = useLive((s) => s.meta);
   const timeline = useLive((s) => s.timeline);
   if (!meta) return null;
   return (
     <section aria-labelledby="xg-race" className="flex flex-col gap-3 rounded-2xl border bg-card p-4 shadow-raised sm:p-5 min-[1100px]:sticky min-[1100px]:top-[calc(var(--stack-h)+4.5rem)]">
       <h2 id="xg-race" className="font-display text-xl font-semibold">
-        {copy.report.xgTimeline}
+        {analyst ? copy.report.xgTimelineAnalyst : copy.report.xgTimeline}
       </h2>
       <XgTimeline meta={meta} timeline={timeline} />
     </section>

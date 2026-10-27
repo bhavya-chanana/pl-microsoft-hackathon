@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, m, useMotionTemplate, useReducedMotion, useScroll, useTransform } from "motion/react";
+import { AnimatePresence, m, useMotionTemplate, useMotionValueEvent, useReducedMotion, useScroll, useTransform } from "motion/react";
 import { useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -84,6 +84,10 @@ export function MatchHeader({ hero }: { hero: boolean }) {
   const heroOpacity = useTransform(progress, [0, 0.6], [1, 0]);
   const barOpacity = useTransform(progress, [0.4, 1], [0, 1]);
 
+  // Only one of the two layers is exposed at a time, so the score and clock are announced once.
+  const [collapsed, setCollapsed] = useState(!hero);
+  useMotionValueEvent(progress, "change", (v) => setCollapsed(v > 0.5));
+
   const home = meta?.home;
   const away = meta?.away;
   const hs = meta && state ? (state.score[meta.home.team_id] ?? 0) : null;
@@ -105,7 +109,9 @@ export function MatchHeader({ hero }: { hero: boolean }) {
         <m.div
           style={{ opacity: heroOpacity }}
           className="pointer-events-none absolute inset-x-0 top-0 mx-auto flex h-[var(--hdr-max)] max-w-7xl items-center justify-center px-4 pt-11 md:pt-0"
-          aria-label="Match score"
+          aria-hidden={collapsed || undefined}
+          role={collapsed ? undefined : "group"}
+          aria-label={collapsed ? undefined : "Match score"}
         >
           <span className="absolute top-0 left-4 flex h-11 items-center font-display text-xl font-bold tracking-tight uppercase md:hidden">
             {copy.product}
@@ -148,6 +154,7 @@ export function MatchHeader({ hero }: { hero: boolean }) {
       {/* Collapsed state */}
       <m.div
         style={{ opacity: barOpacity }}
+        aria-hidden={!collapsed || undefined}
         className="absolute inset-x-0 top-0 mx-auto flex h-[var(--hdr-min)] max-w-7xl items-center justify-center gap-3 px-4 pr-28 md:pr-4"
       >
         {meta && home && away && hs !== null && as !== null ? (

@@ -49,7 +49,7 @@ function summarise(board: TacticsBoard): string[] {
 }
 
 /** What the agents did to make this board: one call per persona, then the verdict, with the model used. */
-export function AgentTrace({ board }: { board: TacticsBoard }) {
+export function AgentTrace({ board, noise = false }: { board: TacticsBoard; noise?: boolean }) {
   const ready = board.tactics.filter((x) => x.status === "ready").length;
   const settled = board.tactics.filter((x) => x.status === "ready" || x.status === "rejected").length;
   const verdictState = board.verdict ? "ready" : board.status === "failed" ? "rejected" : "pending";
@@ -74,7 +74,7 @@ export function AgentTrace({ board }: { board: TacticsBoard }) {
       </div>
       <p role="status" aria-live="polite" className={cn("text-sm font-medium tabular-nums", board.status === "failed" && "text-blocked")}>
         {board.status === "failed" ? t.failed : t.statusLine(ready, board.tactics.length)}
-        <span className="sr-only">{settled === board.tactics.length && board.tactics.length > 0 ? `. ${board.verdict?.headline ?? ""}` : ""}</span>
+        <span className="sr-only">{settled === board.tactics.length && board.tactics.length > 0 ? `. ${noise ? copy.tactics.verdict.noClearWinner : (board.verdict?.headline ?? "")}` : ""}</span>
       </p>
       <ul className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
         {board.tactics.map((x) => (

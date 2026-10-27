@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pause, Play, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -24,12 +24,14 @@ export function ReplayControls({ className }: { className?: string }) {
   const [start, setStart] = useState<number>(0);
   const [paused, setPaused] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const client = useQueryClient();
 
   const restart = useMutation({
     mutationFn: () => postJson("replay", { seed: 7, speed, start_minute: start }, Started),
     onSuccess: () => {
       setConfirming(false);
       setPaused(false);
+      void client.invalidateQueries();
       toast.success(copy.replay.restarted);
     },
     onError: () => toast.error(copy.replay.failed),
@@ -89,8 +91,8 @@ export function ReplayControls({ className }: { className?: string }) {
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Button variant="secondary" className="h-11 text-destructive" onClick={() => setConfirming(true)} disabled={restart.isPending}>
-          <RotateCcw aria-hidden />
-          {copy.replay.restart}
+          <RotateCcw aria-hidden className={cn(restart.isPending && "motion-safe:animate-spin")} />
+          {restart.isPending ? copy.replay.restarting : copy.replay.restart}
         </Button>
         <Button
           variant="outline"
@@ -113,7 +115,7 @@ export function ReplayControls({ className }: { className?: string }) {
               {copy.replay.cancel}
             </Button>
             <Button className="h-11" onClick={() => restart.mutate()} disabled={restart.isPending}>
-              {copy.replay.restart}
+              {restart.isPending ? copy.replay.restarting : copy.replay.restart}
             </Button>
           </DialogFooter>
         </DialogContent>

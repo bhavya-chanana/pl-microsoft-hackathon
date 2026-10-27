@@ -375,7 +375,14 @@
     background: #fff !important;
   }
   .match-report {
-    break-inside: avoid-page;
+    display: block;
+  }
+  .match-report > * {
+    margin-bottom: 12pt;
+  }
+  .match-report section,
+  .match-report figure {
+    break-inside: avoid;
   }
   .sticky {
     position: static !important;

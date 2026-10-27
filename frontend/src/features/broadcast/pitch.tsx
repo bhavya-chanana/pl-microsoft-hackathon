@@ -50,11 +50,13 @@ type DotProps = {
   selected: boolean;
   /** Marker size multiplier, so dots stay at least 16px across on a phone-sized pitch. */
   scale: number;
+  /** Draw each player's name under the dot (the Names layer). */
+  names?: boolean;
   onSelect?: (id: string, el: SVGGElement) => void;
   onHover?: (id: string | null) => void;
 };
 
-function Dot({ entity, meta, tweenMs, favourite, selected, scale, onSelect, onHover }: DotProps) {
+function Dot({ entity, meta, tweenMs, favourite, selected, scale, names, onSelect, onHover }: DotProps) {
   const transition = `transform ${tweenMs}ms linear`;
   if (entity.entity_id === "ball") {
     return (
@@ -132,6 +134,19 @@ function Dot({ entity, meta, tweenMs, favourite, selected, scale, onSelect, onHo
           {player.shirt}
         </text>
       )}
+      {names && player && (
+        <text
+          y={3.9 * scale}
+          textAnchor="middle"
+          aria-hidden
+          className="pointer-events-none fill-graphic-foreground stroke-graphic font-display font-semibold"
+          strokeWidth={0.5}
+          paintOrder="stroke"
+          style={{ fontSize: 1.45 * scale }}
+        >
+          {player.short_name}
+        </text>
+      )}
     </g>
   );
 }
@@ -200,6 +215,8 @@ type PitchProps = {
   /** Makes players selectable (click, Enter or Space). */
   onSelectPlayer?: (playerId: string, el: SVGGElement) => void;
   selectedPlayerId?: string | null;
+  /** The Names layer: every player's name under their dot. */
+  names?: boolean;
   /** Extra layers in pitch coordinates (metres), drawn under the players. */
   children?: React.ReactNode;
 };
@@ -224,6 +241,7 @@ export function Pitch({
   overlay,
   onSelectPlayer,
   selectedPlayerId = null,
+  names = false,
   children,
 }: PitchProps) {
   const meta = useLive((s) => s.meta);
@@ -325,6 +343,7 @@ export function Pitch({
             favourite={e.entity_id === favourite}
             selected={e.entity_id === selectedPlayerId}
             scale={scale}
+            names={names}
             onSelect={onSelectPlayer}
             onHover={interactive ? setHovered : undefined}
           />

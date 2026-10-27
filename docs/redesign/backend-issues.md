@@ -31,3 +31,8 @@ Frontend only renders backend text and numbers here. I did not touch the backend
 ## From fan review 2
 - Engine emits a `kickoff` event after every goal (restart), with minute labels such as 90+3'. The frontend now keeps only the first kick-off per half; the backend should emit these as `restart` or omit them.
 - Insight key_numbers sometimes carry the unit inside `value` ("12.7 m") as well as in `unit`. The frontend now drops the duplicate; the backend should send one or the other.
+
+## From coach review 2
+- The player stats feed has no minutes played or duels, so the Players table shows tackles + interceptions and no Min column. Needed: `minutes`, `duels_won`, `duels_total`.
+- No per-half possession or territory (field tilt) in the feed; the report's By half row shows goals, shots and xG only.
+- A pitch-layer feed (shape lines, heat, pass network, press intensity) is still missing. Only the Names layer is built.

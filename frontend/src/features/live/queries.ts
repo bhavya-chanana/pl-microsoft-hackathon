@@ -1,6 +1,6 @@
 "use client";
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { z } from "zod";
 
@@ -113,6 +113,22 @@ export function useCoachBrief(teamId: string | null, language: string) {
     enabled: Boolean(teamId),
     placeholderData: keepPreviousData,
   });
+}
+
+/** Stats for many players at once (the Players table), sharing the cache with the player sheet. */
+export function usePlayersStats(playerIds: string[]) {
+  const results = useQueries({
+    queries: playerIds.map((id) => ({
+      queryKey: queryKeys.player(id),
+      queryFn: ({ signal }: { signal: AbortSignal }) => getJson(`players/${id}`, PlayerStats, undefined, signal),
+      refetchInterval: 15_000,
+    })),
+  });
+  const map = new Map<string, PlayerStats>();
+  results.forEach((r, i) => {
+    if (r.data) map.set(playerIds[i], r.data);
+  });
+  return map;
 }
 
 export function usePlayerStats(playerId: string | null) {

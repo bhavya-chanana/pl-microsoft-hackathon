@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Radio, Video } from "lucide-react";
+import { ArrowRight, Radio, Users, Video } from "lucide-react";
 import { AnimatePresence, m } from "motion/react";
 import { useState } from "react";
 
@@ -15,7 +15,8 @@ import { TelestratorLayer } from "@/features/broadcast/telestrator";
 import { REPLAY_FRAME_MS, useInstantReplay } from "@/features/broadcast/use-instant-replay";
 import { useLive } from "@/features/live/live-store";
 import { PlayerSheet } from "@/features/player/player-sheet";
-import { useProfile } from "@/features/profile/profile-store";
+import { useFanProfile, useProfile } from "@/features/profile/profile-store";
+import { useFeed } from "@/features/live/queries";
 import { copy, signalLabels } from "@/lib/copy";
 import { overlayText, playerName, sideTone } from "@/lib/match";
 import { cn } from "@/lib/utils";
@@ -57,6 +58,10 @@ export function Caption({ onAir }: { onAir: Record<string, string | null> }) {
     if (!leader || overlay.team_id !== leader) overlay = undefined;
     else if (!analyst && text) text = { ...text, body: "" };
   }
+  const profile = useFanProfile();
+  const feed = useFeed(profile);
+  const shown = new Set((feed.data ?? []).slice(0, 3).map((i) => i.insight_id));
+  if (overlay && shown.has(overlay.insight_id)) overlay = undefined;
   const side = overlay && meta ? (overlay.team_id === meta.home.team_id ? "home" : overlay.team_id === meta.away.team_id ? "away" : null) : null;
   return (
     <div aria-live="polite">
@@ -72,7 +77,7 @@ export function Caption({ onAir }: { onAir: Record<string, string | null> }) {
           >
             <span aria-hidden className={cn("h-6 w-1 shrink-0 rounded-full", side ? sideTone[side].bg : "bg-subtle")} />
             <div className="flex min-w-0 items-baseline gap-x-3">
-              <p className="truncate text-[15px] font-semibold">{text.headline}</p>
+              <p className="line-clamp-2 text-[15px] leading-5 font-semibold">{text.headline}</p>
               <p className="flex min-w-0 gap-x-3 text-[13px] text-muted-foreground max-md:hidden">
                 {text.body && <span className="truncate">{text.body}</span>}
                 {(signalType === "momentum_swing" && !analyst ? [] : overlay.stats.slice(0, 3)).map((st) => (
@@ -128,12 +133,14 @@ export function LivePitch() {
   const stop = useReplay((s) => s.stop);
   const language = useProfile((s) => s.language);
   const [tilt, setTilt] = useState(false);
+  const [names, setNames] = useState(false);
   const label = replay ? (signalLabels[replay.moment.signal_type] ?? replay.moment.signal_type) : null;
   return (
     <section aria-label={copy.pitch.label} data-monitor="main" className="@container flex flex-col gap-2 rounded-2xl border bg-card p-3 shadow-raised max-md:-mx-4 max-md:rounded-none max-md:border-x-0">
-      <div className="relative isolate aspect-[111/74] w-full overflow-hidden rounded-xl bg-turf max-md:-mx-3 max-md:w-[calc(100%+1.5rem)] max-md:rounded-none">
+      <div className="relative isolate aspect-[111/74] w-full overflow-hidden rounded-xl bg-turf max-md:-mx-3 max-md:w-[calc(100%+1.5rem)] max-md:rounded-none md:mx-auto md:w-[min(100%,calc(min(52vh,560px)*111/74))]">
         <Pitch
           tilt={tilt}
+          names={names}
           className="absolute inset-0"
           onSelectPlayer={!replay ? pick.select : undefined}
           selectedPlayerId={pick.playerId}
@@ -143,6 +150,18 @@ export function LivePitch() {
           {!replay && lane && <PassLane pass={lane} />}
         </Pitch>
         <div className="absolute top-3 left-3 flex items-center gap-2">
+          {!replay && (
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-pressed={names}
+              className={cn("h-9 gap-1.5 bg-background/80 text-foreground backdrop-blur-sm", names && "bg-primary text-primary-foreground")}
+              onClick={() => setNames((n) => !n)}
+            >
+              <Users aria-hidden />
+              {copy.pitch.names}
+            </Button>
+          )}
           {replay && (
             <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-telestrator px-3 font-display text-sm font-bold tracking-wide text-graphic uppercase">
               <Video aria-hidden className="size-4" />
@@ -174,7 +193,7 @@ export function LivePitch() {
         <FeedNotice />
       </div>
       <div className="flex items-center justify-between gap-3 text-[13px] text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5">
+        <span className="inline-flex min-w-0 items-center gap-1.5 truncate">
           {meta && possession && (
             <>
               <span aria-hidden className={cn("size-2 rounded-full", possession === meta.home.team_id ? "bg-home" : "bg-away")} />
@@ -182,8 +201,9 @@ export function LivePitch() {
             </>
           )}
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          {meta?.home.name} {copy.pitch.attack}
+        <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap">
+          <span className="md:hidden">{meta?.home.short_name} attack</span>
+          <span className="max-md:hidden">{meta?.home.name} {copy.pitch.attack}</span>
           <ArrowRight aria-hidden className="size-4" />
         </span>
       </div>

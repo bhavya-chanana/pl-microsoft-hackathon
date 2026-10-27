@@ -1,5 +1,6 @@
 "use client";
 
+import { useCoach } from "@/features/coach/coach-store";
 import { ArrowUpRight, Clapperboard, FlaskConical, History, LayoutGrid } from "lucide-react";
 import Link from "next/link";
 import type { ComponentType, ReactNode } from "react";
@@ -140,6 +141,7 @@ function Rows() {
 /** Things to try beyond following the match. */
 export function ExplorePage() {
   const setDev = useShell((s) => s.setDev);
+  const coachMode = useCoach((s) => s.coachMode);
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6 xl:px-8">
       <header className="flex flex-col gap-1">
@@ -147,16 +149,20 @@ export function ExplorePage() {
         <p className="text-muted-foreground">{T.intro}</p>
       </header>
       <ul className="grid auto-rows-fr gap-4 md:grid-cols-2">
+        {!coachMode && (
         <li className="md:col-span-2">
           <Link href={routes.multiverse} className={tileClass} onPointerMove={spot}>
             <Body wide icon={LayoutGrid} title={T.multiverse.title} subtitle={T.multiverse.subtitle} body={T.multiverse.body} preview={<Panels />} />
           </Link>
         </li>
+        )}
+        {!coachMode && (
         <li>
           <Link href={routes.broadcast} className={tileClass} onPointerMove={spot}>
             <Body icon={Clapperboard} title={T.broadcast.title} body={T.broadcast.body} preview={<MiniScoreboard />} />
           </Link>
         </li>
+        )}
         <li>
           <Link href={routes.lab} className={tileClass} onPointerMove={spot}>
             <Body icon={FlaskConical} title={T.lab.title} body={T.lab.body} preview={<Spark />} />

@@ -108,12 +108,14 @@ type CardProps = {
   roster: Roster;
   selected: boolean;
   recommended: boolean;
+  /** No clear winner: drop the confidence badge so nothing reads as a verdict. */
+  quiet?: boolean;
   onShow: () => void;
   onCompare: () => void;
 };
 
 /** One idea, in whichever state it has reached: thinking, evaluating, ready or rejected. */
-export function TacticCard({ tactic, roster, selected, recommended, onShow, onCompare }: CardProps) {
+export function TacticCard({ tactic, roster, selected, recommended, quiet = false, onShow, onCompare }: CardProps) {
   const { status, intent } = tactic;
   const persona = labelOf(t.personas, tactic.persona);
   const rejected = status === "rejected";
@@ -145,7 +147,7 @@ export function TacticCard({ tactic, roster, selected, recommended, onShow, onCo
               {t.cards.recommended}
             </Badge>
           )}
-          {ready && tactic.confidence && (
+          {ready && tactic.confidence && !quiet && (
             <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", CONFIDENCE_TONE[tactic.confidence])} title={t.cards.confidenceHelp}>
               {t.cards.confidence[tactic.confidence]}
             </span>

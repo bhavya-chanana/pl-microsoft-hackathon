@@ -73,12 +73,21 @@ function SituationBar({ board, teams }: { board: Pick<TacticsBoard, "situation">
 }
 
 /** True when the recommended idea's shot and concede ranges overlap the baseline's: no real difference to act on. */
-function withinNoise(board: TacticsBoard): boolean {
+export function withinNoise(board: TacticsBoard): boolean {
   const base = board.baseline;
   const pick = board.tactics.find((x) => x.tactic_id === board.verdict?.recommended_tactic_id)?.outcome;
   if (!base || !pick) return false;
   const overlaps = (a: { low: number; high: number }, b: { low: number; high: number }) => a.low <= b.high && b.low <= a.high;
   return overlaps(pick.p_shot, base.p_shot) && overlaps(pick.p_concede_shot, base.p_concede_shot);
+}
+
+/** One line on how far the best idea is from the baseline, so "no clear winner" comes with its margin. */
+function margin(board: TacticsBoard): string | null {
+  const base = board.baseline;
+  const pick = board.tactics.find((x) => x.tactic_id === board.verdict?.recommended_tactic_id)?.outcome;
+  if (!base || !pick) return null;
+  const diff = Math.round((pick.p_shot.value - base.p_shot.value) * 100);
+  return t.verdict.margin(Math.abs(diff), pick.rollouts);
 }
 
 function VerdictPanel({ board, titleOf, onShow }: { board: TacticsBoard; titleOf: (id: string) => string; onShow: (id: string) => void }) {
@@ -101,13 +110,14 @@ function VerdictPanel({ board, titleOf, onShow }: { board: TacticsBoard; titleOf
         </h2>
       </div>
       <p className="max-w-prose text-sm">{noise ? t.verdict.withinNoise : v.text}</p>
+      {noise && margin(board) && <p className="text-sm font-medium tnum">{margin(board)}</p>}
       <div className="flex flex-wrap items-center gap-2">
         {v.recommended_tactic_id && !noise ? (
           <Button variant="secondary" className="h-11 gap-2 px-4" onClick={() => onShow(v.recommended_tactic_id!)}>
             <Sparkles aria-hidden />
             {t.verdict.show}: {titleOf(v.recommended_tactic_id)}
           </Button>
-        ) : (
+        ) : noise ? null : (
           <p className="text-sm text-muted-foreground">{t.verdict.none}</p>
         )}
         {v.cited_metrics.length > 0 && (
@@ -165,7 +175,9 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
   const situation = board?.situation ?? create.data?.situation ?? null;
 
   const tooLong = settings.prompt.length > MAX_PROMPT;
-  const canBuild = Boolean(teamId) && !tooLong && !create.isPending;
+  const matchOver = useLive((s) => s.state?.status === "full_time");
+  const reviewingOver = !fixture && matchOver && source.kind === "live";
+  const canBuild = Boolean(teamId) && !tooLong && !create.isPending && !reviewingOver;
 
   const build = () => {
     if (!teamId) return;
@@ -275,6 +287,7 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
             )}
           </div>
           {!teamId && <p className="text-sm text-muted-foreground">{t.noMatch}</p>}
+          {reviewingOver && <p role="status" className="text-sm text-muted-foreground">{t.matchOver}</p>}
           {create.isError && (
             <p role="alert" className="text-sm text-destructive">
               {errorText(create.error)}
@@ -288,7 +301,7 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
           ) : (
             <>
               <SituationBar board={{ situation }} teams={teams} />
-              {board && <AgentTrace board={board} />}
+              {board && <AgentTrace board={board} noise={withinNoise(board)} />}
               {query.isError && !board && (
                 <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-blocked/40 p-4 text-sm">
                   {t.stage.loadFailed}
@@ -327,12 +340,14 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
                             onCompare={canCompare ? () => startCompare(active.id) : undefined}
                           />
                         </div>
+                        {(activeStats?.p_shot.value ?? 0) + (activeStats?.mean_xg ?? 0) + (activeStats?.p_turnover.value ?? 0) > 0 && (
                         <section aria-labelledby="outcome-heading" className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-raised">
                           <h2 id="outcome-heading" className="font-display text-lg font-semibold">
                             {t.outcome.heading}
                           </h2>
                           <OutcomeBar stats={activeStats} baseline={active.id === BASELINE_ID ? null : (board.baseline ?? null)} />
                         </section>
+                        )}
                       </>
                     ) : (
                       <section aria-labelledby="stage-heading" className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-raised">
@@ -363,7 +378,8 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
                           key={x.tactic_id}
                           tactic={x}
                           roster={roster}
-                          selected={activeId === x.tactic_id}
+                          selected={pickedBranch === x.tactic_id && activeId === x.tactic_id}
+                          quiet={!recommended}
                           recommended={recommended === x.tactic_id}
                           onShow={() => show(x.tactic_id)}
                           onCompare={() => startCompare(x.tactic_id)}

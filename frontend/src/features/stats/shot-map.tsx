@@ -66,7 +66,8 @@ function Mark({ outcome, r, className }: { outcome: string; r: number; className
   }
 }
 
-const markSize = (xg: number | null) => Math.min(1.9, 0.7 + Math.sqrt(xg ?? 0.05) * 1.5);
+/** Marker radius in pitch units, capped near 10px on a full-width map. */
+const markSize = (xg: number | null) => Math.min(1.35, 0.6 + Math.sqrt(xg ?? 0.05) * 1.1);
 
 /** A small stable offset per shot, so shots from the same spot do not hide each other. */
 function jitter(id: string): [number, number] {
@@ -76,6 +77,8 @@ function jitter(id: string): [number, number] {
 }
 
 const VIEW_H = 31;
+/** The penalty-area box, magnified about 2x beside the third-pitch map. */
+const ZOOM = { x: 13, y: -2, w: 42.2, h: 20 };
 
 function HalfPitch() {
   return (
@@ -88,6 +91,80 @@ function HalfPitch() {
       <path d={`M ${W / 2 - 7.31} 16.5 A 9.15 9.15 0 0 0 ${W / 2 + 7.31} 16.5`} />
       <path d={`M ${W / 2 - 9.15} ${HALF} A 9.15 9.15 0 0 1 ${W / 2 + 9.15} ${HALF}`} />
     </g>
+  );
+}
+
+type TipState = { id: string; pinned: boolean } | null;
+
+/** The shots as shaped marks. Hover shows who, when and xG; a tap pins it. */
+function ShotMarks({
+  shots,
+  meta,
+  active,
+  goalNumber,
+  tip,
+  setTip,
+  radius = 1,
+  spread = 1,
+}: {
+  shots: PlottedShot[];
+  meta: MatchMeta;
+  active: string | null;
+  goalNumber: Map<string, number>;
+  tip: TipState;
+  setTip: (t: TipState) => void;
+  radius?: number;
+  spread?: number;
+}) {
+  return (
+    <>
+      {[...shots].sort((x, y) => Number(x.event.outcome === "goal") - Number(y.event.outcome === "goal")).map((shot) => {
+        const id = shot.event.event_id;
+        const dim = (active !== null && active !== id) || (tip !== null && tip.id !== id);
+        const [dx, dy] = jitter(id);
+        const goal = shot.event.outcome === "goal";
+        return (
+          <g
+            key={id}
+            transform={`translate(${shot.x + dx * spread} ${Math.max(0.5, shot.y + dy * spread)})`}
+            className={cn(sideTone[shot.side].text, "cursor-pointer transition-opacity", dim && "opacity-25")}
+            onPointerEnter={(e) => e.pointerType === "mouse" && !tip?.pinned && setTip({ id, pinned: false })}
+            onPointerLeave={(e) => e.pointerType === "mouse" && !tip?.pinned && setTip(null)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setTip(tip?.id === id && tip.pinned ? null : { id, pinned: true });
+            }}
+          >
+            <circle r={markSize(shot.xg) * radius + 1} fill="transparent" />
+            <Mark outcome={shot.event.outcome} r={markSize(shot.xg) * radius} className="stroke-current" />
+            {goal && (
+              <text y={0.9 * radius} textAnchor="middle" fontSize={2.4 * radius} fontWeight={700} className="pointer-events-none fill-background">
+                {goalNumber.get(id)}
+              </text>
+            )}
+            <title>{describeShot(shot, meta)}</title>
+          </g>
+        );
+      })}
+    </>
+  );
+}
+
+function Tooltip({ shot, meta, box }: { shot: PlottedShot; meta: MatchMeta; box: { x: number; y: number; w: number; h: number } }) {
+  const left = ((shot.x - box.x) / box.w) * 100;
+  const top = ((shot.y - box.y) / box.h) * 100;
+  return (
+    <div
+      role="status"
+      className="pointer-events-none absolute z-10 w-max max-w-48 -translate-x-1/2 rounded-lg bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-floating ring-1 ring-border"
+      style={{ left: `${Math.min(80, Math.max(20, left))}%`, top: `calc(${top}% + 14px)` }}
+    >
+      <p className="font-semibold">{playerName(meta, shot.event.player_id)}</p>
+      <p className="text-muted-foreground tabular-nums">
+        {shot.event.minute_label} · {S.outcomes[shot.event.outcome] ?? shot.event.outcome.replaceAll("_", " ")}
+        {shot.xg !== null && ` · ${S.xg(shot.xg)}`}
+      </p>
+    </div>
   );
 }
 
@@ -117,6 +194,7 @@ export function ShotMapPanel({ className }: { className?: string }) {
   const meta = useLive((s) => s.meta);
   const timeline = useLive((s) => s.timeline);
   const [active, setActive] = useState<string | null>(null);
+  const [tip, setTip] = useState<TipState>(null);
   const [team, setTeam] = useState<"both" | Side>("both");
   if (!meta) return null;
   const all = timeline.filter((e) => e.type === "shot").flatMap((e) => plot(e, meta) ?? []);
@@ -147,6 +225,7 @@ export function ShotMapPanel({ className }: { className?: string }) {
       />
       <div className="grid gap-4 @3xl:grid-cols-[minmax(0,34rem)_minmax(0,1fr)]">
         <figure className="flex min-w-0 flex-col gap-2">
+          <div className="relative" onClick={() => setTip(null)}>
           <svg
             viewBox={`-3 -3 ${W + 6} ${VIEW_H + 3}`}
             role="img"
@@ -154,27 +233,12 @@ export function ShotMapPanel({ className }: { className?: string }) {
             className="w-full rounded-md bg-turf"
           >
             <HalfPitch />
-            {[...shots].sort((x, y) => Number(x.event.outcome === "goal") - Number(y.event.outcome === "goal")).map((shot) => {
-              const dim = active !== null && active !== shot.event.event_id;
-              const [dx, dy] = jitter(shot.event.event_id);
-              const goal = shot.event.outcome === "goal";
-              return (
-                <g
-                  key={shot.event.event_id}
-                  transform={`translate(${shot.x + dx} ${Math.max(0.5, shot.y + dy)})`}
-                  className={cn(sideTone[shot.side].text, "transition-opacity", dim && "opacity-25")}
-                >
-                  <Mark outcome={shot.event.outcome} r={markSize(shot.xg)} className="stroke-current" />
-                  {goal && (
-                    <text y={0.9} textAnchor="middle" fontSize={2.4} fontWeight={700} className="fill-background">
-                      {goalNumber.get(shot.event.event_id)}
-                    </text>
-                  )}
-                  <title>{describeShot(shot, meta)}</title>
-                </g>
-              );
-            })}
+            <ShotMarks shots={shots} meta={meta} active={active} goalNumber={goalNumber} tip={tip} setTip={setTip} />
           </svg>
+          {tip && shots.find((x) => x.event.event_id === tip.id) && (
+            <Tooltip shot={shots.find((x) => x.event.event_id === tip.id)!} meta={meta} box={{ x: -3, y: -3, w: W + 6, h: VIEW_H + 3 }} />
+          )}
+          </div>
           <figcaption className="flex flex-col gap-1.5">
             <Legend />
             <p className="flex gap-4 text-xs">
@@ -189,7 +253,33 @@ export function ShotMapPanel({ className }: { className?: string }) {
             </p>
           </figcaption>
         </figure>
-        <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex min-w-0 flex-col gap-3">
+          <figure className="flex flex-col gap-1.5">
+            <figcaption className="text-sm font-medium">{S.zoom}</figcaption>
+            <div className="relative max-w-sm" onClick={() => setTip(null)}>
+              <svg
+                viewBox={`${ZOOM.x} ${ZOOM.y} ${ZOOM.w} ${ZOOM.h}`}
+                role="img"
+                aria-label={S.zoom}
+                className="w-full rounded-md bg-turf ring-1 ring-border"
+              >
+                <HalfPitch />
+                <ShotMarks
+                  shots={shots.filter((x) => x.x >= ZOOM.x && x.x <= ZOOM.x + ZOOM.w && x.y <= ZOOM.y + ZOOM.h)}
+                  meta={meta}
+                  active={active}
+                  goalNumber={goalNumber}
+                  tip={tip}
+                  setTip={setTip}
+                  radius={0.7}
+                  spread={1.7}
+                />
+              </svg>
+              {tip && shots.find((x) => x.event.event_id === tip.id) && (
+                <Tooltip shot={shots.find((x) => x.event.event_id === tip.id)!} meta={meta} box={ZOOM} />
+              )}
+            </div>
+          </figure>
           <h3 className="text-sm font-medium">{S.latest}</h3>
           {latest.length === 0 ? (
             <p className="text-sm text-muted-foreground">{S.empty}</p>

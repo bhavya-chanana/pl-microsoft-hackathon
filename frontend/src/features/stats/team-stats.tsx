@@ -1,5 +1,6 @@
 "use client";
 
+import { useAnalystWording } from "@/features/coach/use-analyst";
 import { RotateCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -92,6 +93,8 @@ function Failed({ retry }: { retry: () => void }) {
 }
 
 export function TeamComparison() {
+  const analyst = useAnalystWording();
+  const xgLabel = analyst ? "xG" : L.xg;
   const meta = useLive((s) => s.meta);
   const home = useTeamStats(meta?.home.team_id ?? null);
   const away = useTeamStats(meta?.away.team_id ?? null);
@@ -121,7 +124,7 @@ export function TeamComparison() {
       <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0">
         <Kpi label={L.possession} home={possession.home} away={possession.away} unit="%" />
         <Kpi label={L.shots} home={h.shots} away={a.shots} />
-        <Kpi label={L.xg} home={h.xg} away={a.xg} digits={2} />
+        <Kpi label={xgLabel} home={h.xg} away={a.xg} digits={2} />
       </ul>
       <div className="mt-2 flex flex-col gap-5">
         <StatRow label={L.onTarget} home={h.shots_on_target} away={a.shots_on_target} />
@@ -134,6 +137,7 @@ export function TeamComparison() {
 }
 
 export function PlayerCard() {
+  const analyst = useAnalystWording();
   const meta = useLive((s) => s.meta);
   const playerId = useProfile((s) => s.playerId);
   const query = usePlayerStats(playerId);
@@ -149,7 +153,7 @@ export function PlayerCard() {
     [L.goals, String(p.goals)],
     [L.assists, String(p.assists)],
     [L.shots, `${p.shots} (${p.shots_on_target})`],
-    [L.xg, p.xg.toFixed(2)],
+    [analyst ? "xG" : L.xg, p.xg.toFixed(2)],
     [L.touches, String(p.touches)],
     [L.passAccuracy, p.pass_accuracy === null ? "–" : `${formatNumber(p.pass_accuracy)}%`],
     [L.keyPasses, String(p.key_passes)],

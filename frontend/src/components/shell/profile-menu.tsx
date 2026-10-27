@@ -82,8 +82,8 @@ export function ProfileMenu() {
             <ChevronDown aria-hidden className="size-4 transition-transform group-open:rotate-180" />
           </summary>
           <div className="flex flex-col gap-3 pt-2">
-            <MoreFields />
-            <ListenToggle />
+            {!coachMode && <MoreFields />}
+            {!coachMode && <ListenToggle />}
             {showDev && (
               <Button variant="ghost" className="h-11 justify-start gap-3 px-2" onClick={() => setDev(true)}>
                 <Code2 aria-hidden />
