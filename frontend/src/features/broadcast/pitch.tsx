@@ -48,7 +48,7 @@ type DotProps = {
   tweenMs: number;
   favourite: boolean;
   selected: boolean;
-  /** Marker size multiplier, so dots stay at least 16px across on a phone-sized pitch. */
+  /** Marker size multiplier, so dots stay at least 19px across on a phone-sized pitch. */
   scale: number;
   /** Draw each player's name under the dot (the Names layer). */
   names?: boolean;
@@ -270,7 +270,7 @@ export function Pitch({
     if (!svg) return;
     const ro = new ResizeObserver(() => {
       const px = svg.getBoundingClientRect().width;
-      if (px > 0) setScale(Math.min(1.8, Math.max(1, 8 / (1.55 * (px / (W + 6))))));
+      if (px > 0) setScale(Math.min(2, Math.max(1, 9.5 / (1.55 * (px / (W + 6))))));
     });
     ro.observe(svg);
     return () => ro.disconnect();

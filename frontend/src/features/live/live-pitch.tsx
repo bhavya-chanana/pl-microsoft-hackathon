@@ -136,7 +136,7 @@ export function LivePitch() {
   const [names, setNames] = useState(false);
   const label = replay ? (signalLabels[replay.moment.signal_type] ?? replay.moment.signal_type) : null;
   return (
-    <section aria-label={copy.pitch.label} data-monitor="main" className="@container flex flex-col gap-2 rounded-2xl border bg-card p-3 shadow-raised max-md:-mx-4 max-md:rounded-none max-md:border-x-0">
+    <section aria-label={copy.pitch.label} data-monitor="main" className="@container flex flex-col gap-2 rounded-2xl border bg-card p-3 shadow-raised md:max-[1099px]:border-transparent md:max-[1099px]:bg-transparent md:max-[1099px]:shadow-none md:max-[1099px]:p-0 max-md:-mx-4 max-md:rounded-none max-md:border-x-0">
       <div className="relative isolate aspect-[111/74] w-full overflow-hidden rounded-xl bg-turf max-md:-mx-3 max-md:w-[calc(100%+1.5rem)] max-md:rounded-none md:mx-auto md:w-[min(100%,calc(min(52vh,560px)*111/74))]">
         <Pitch
           tilt={tilt}

@@ -114,7 +114,7 @@ export function PastMatches({ className }: { className?: string }) {
           <ul className="flex flex-col divide-y">
             {feeds.data.map((name) => (
               <li key={name} className="flex items-center gap-3 py-2">
-                <span className="min-w-0 flex-1 truncate font-mono text-sm">{name}</span>
+                <span className="min-w-0 flex-1 truncate text-sm">{name.replace(/^video-/, "").replaceAll(/[-_]+/g, " ")}</span>
                 <Button variant="outline" className="h-11" disabled={busy} onClick={() => play.mutate(name)}>
                   <Play aria-hidden />
                   {T.play}

@@ -541,7 +541,7 @@ export const copy = {
       failed: "The board could not be completed.",
       notes: {
         recipes: (n: number, total: number) =>
-          `${n} of ${total} ${total === 1 ? "idea" : "ideas"} came from built-in recipes because the AI did not answer in time.`,
+          total === n ? "Our AI was slow, so these come from built-in plays." : `Our AI was slow, so ${n} of ${total} ${total === 1 ? "idea comes" : "ideas come"} from built-in plays.`,
         dataVerdict: "The verdict is a data-only summary of the scores.",
         other: "Some steps did not finish, so this board may be thinner than usual.",
       },
@@ -645,7 +645,7 @@ export const copy = {
       restDefence: (n: number) => `${n} stay behind the ball`,
     },
     personas: {
-      recipe: "Standard play (AI unavailable)",
+      recipe: "Built-in idea",
       positional: "Positional",
       gegenpress: "Gegenpress",
       direct: "Direct",
@@ -920,8 +920,8 @@ export const copy = {
     xg: "xG",
     passes: "Passes",
     defence: "Tackles + interceptions",
-    defenceShort: "T+I",
-    distance: "Km",
+    defenceShort: "Tackles + int.",
+    distance: "Distance (km)",
     vote: "Rate this player",
     voteHelp: "Your score, 1 to 10",
     sortBy: (c: string) => `Sort by ${c}`,

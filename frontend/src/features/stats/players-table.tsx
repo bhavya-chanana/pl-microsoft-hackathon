@@ -62,7 +62,7 @@ function Th({ label, full, k, sort, dir, onSort, className }: { label: string; f
   const active = sort === k;
   return (
     <th scope="col" aria-sort={active ? (dir === 1 ? "ascending" : "descending") : "none"} className={cn("px-3 py-0 font-medium", className)}>
-      <button type="button" aria-label={T.sortBy(full ?? label)} title={full} onClick={() => onSort(k)} className={cn("inline-flex h-11 items-center gap-1 rounded-md hover:text-foreground", active && "text-foreground")}>
+      <button type="button" aria-label={T.sortBy(full ?? label)} title={full} onClick={() => onSort(k)} className={cn("inline-flex h-11 items-center gap-1 whitespace-nowrap rounded-md hover:text-foreground", active && "text-foreground")}>
         {label}
         {active && (dir === 1 ? <ArrowUp aria-hidden className="size-3.5" /> : <ArrowDown aria-hidden className="size-3.5" />)}
       </button>

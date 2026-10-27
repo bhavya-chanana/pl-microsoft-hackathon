@@ -142,6 +142,7 @@ function Rows() {
 export function ExplorePage() {
   const setDev = useShell((s) => s.setDev);
   const coachMode = useCoach((s) => s.coachMode);
+  const showDev = useShell((s) => s.showDev);
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6 xl:px-8">
       <header className="flex flex-col gap-1">
@@ -168,11 +169,13 @@ export function ExplorePage() {
             <Body icon={FlaskConical} title={T.lab.title} body={T.lab.body} preview={<Spark />} />
           </Link>
         </li>
+        {showDev && (
         <li className="md:col-span-2">
           <button type="button" className={tileClass} onClick={() => setDev(true)} onPointerMove={spot}>
             <Body wide icon={History} title={T.replay.title} body={T.replay.body} preview={<Rows />} />
           </button>
         </li>
+        )}
       </ul>
     </div>
   );

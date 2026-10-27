@@ -2,6 +2,7 @@ import { CheckCircle2, CircleDashed, LoaderCircle, XCircle } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge";
 import type { TacticStatus, TacticsBoard } from "@/lib/contract";
+import { useShell } from "@/components/shell/shell-store";
 import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
@@ -54,23 +55,28 @@ export function AgentTrace({ board, noise = false }: { board: TacticsBoard; nois
   const settled = board.tactics.filter((x) => x.status === "ready" || x.status === "rejected").length;
   const verdictState = board.verdict ? "ready" : board.status === "failed" ? "rejected" : "pending";
   const notes = summarise(board);
+  const dev = useShell((s) => s.showDev);
   return (
     <section aria-labelledby="trace-heading" className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-raised">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <h2 id="trace-heading" className="font-display text-lg font-semibold">
           {t.heading}
         </h2>
-        <Badge variant="outline">
-          {t.model}: {board.model_label}
-        </Badge>
-        {board.recorded && (
-          <Badge className="bg-rewritten/15 text-rewritten" title={t.recordedHelp}>
-            {t.recorded}
-          </Badge>
+        {dev && (
+          <>
+            <Badge variant="outline">
+              {t.model}: {board.model_label}
+            </Badge>
+            {board.recorded && (
+              <Badge className="bg-rewritten/15 text-rewritten" title={t.recordedHelp}>
+                {t.recorded}
+              </Badge>
+            )}
+            <span className="text-xs text-muted-foreground">
+              {t.evaluator}: {board.evaluator}
+            </span>
+          </>
         )}
-        <span className="text-xs text-muted-foreground">
-          {t.evaluator}: {board.evaluator}
-        </span>
       </div>
       <p role="status" aria-live="polite" className={cn("text-sm font-medium tabular-nums", board.status === "failed" && "text-blocked")}>
         {board.status === "failed" ? t.failed : t.statusLine(ready, board.tactics.length)}
@@ -91,6 +97,7 @@ export function AgentTrace({ board, noise = false }: { board: TacticsBoard; nois
               ))}
             </ul>
           )}
+          {dev && (
           <details className="text-xs text-muted-foreground">
             <summary className="flex min-h-11 cursor-pointer items-center focus-visible:outline-2 focus-visible:outline-ring">{t.details}</summary>
             <ul className="list-disc pl-5 font-mono">
@@ -99,6 +106,7 @@ export function AgentTrace({ board, noise = false }: { board: TacticsBoard; nois
               ))}
             </ul>
           </details>
+          )}
         </div>
       )}
     </section>
