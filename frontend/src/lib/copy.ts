@@ -486,6 +486,7 @@ export const copy = {
     coachEmpty: "The bench brief appears once there is something to change.",
   },
   tactics: {
+    changeSituation: "Change situation",
     heading: "Tactics",
     intro:
       "Freeze a moment, ask for ideas, and watch each one played out ten seconds at a time. Every tactic is tried against the same situation many times, so you see what usually happens, not just what could.",

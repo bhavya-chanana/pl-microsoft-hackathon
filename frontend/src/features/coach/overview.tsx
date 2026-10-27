@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils";
 
 import { briefKey, useCoach } from "./coach-store";
 import { RatingBadge } from "./rating";
-import { useAnalystWording } from "./use-analyst";
 
 const CONFIDENCE_TONE: Record<Confidence, string> = {
   high: "bg-verified/15 text-verified",
@@ -141,7 +140,6 @@ function SplitBar({ label, home, away }: { label: string; home: number; away: nu
 
 /** xG race, momentum, territory and possession. Thin samples say so instead of showing 0.00. */
 function GameSoFar({ meta, half, wide }: { meta: MatchMeta; half: boolean; wide: boolean }) {
-  const analyst = useAnalystWording();
   const timeline = useLive((s) => s.timeline);
   const elapsed = useLive((s) => s.state?.elapsed ?? 0);
   const home = useTeamStats(meta.home.team_id).data;
@@ -162,13 +160,12 @@ function GameSoFar({ meta, half, wide }: { meta: MatchMeta; half: boolean; wide:
         {copy.coachPage.gameSoFar}
         {half && <span className="ml-2 text-[13px] font-normal text-muted-foreground">{copy.coachPage.firstHalf}</span>}
       </h2>
-      <div className="grid gap-4 min-[700px]:grid-cols-2 min-[700px]:gap-6 min-[1100px]:grid-cols-1">
+      <div className="grid gap-4 min-[700px]:grid-cols-[340px_minmax(0,1fr)] min-[700px]:gap-6 min-[1100px]:grid-cols-1">
       {thin ? (
         <p className="text-[15px] text-muted-foreground">{copy.coachPage.earlyDays}</p>
       ) : (
         <div className="flex flex-col gap-1">
-          <span className="text-[13px] font-medium text-muted-foreground">{analyst ? "xG" : copy.stats.labels.xg}</span>
-          <div className="max-w-md min-[700px]:max-w-none"><XgTimeline meta={meta} timeline={shown} minutes={half ? 45 : 90} /></div>
+          <div className="flex flex-col gap-1 min-[700px]:max-w-[340px] min-[1100px]:max-w-none"><span className="text-[13px] font-medium text-muted-foreground">xG</span><XgTimeline meta={meta} timeline={shown} minutes={half ? 45 : 90} /></div>
         </div>
       )}
       <div className="flex flex-col gap-4">

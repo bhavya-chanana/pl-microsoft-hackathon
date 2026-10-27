@@ -163,6 +163,7 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
   const [pickedTeam, setPickedTeam] = useState<string | null>(null);
   const [settings, setSettings] = useState<PromptSettings>({ prompt: "", risk: "balanced", n: 4, horizon: 10 });
   const [boardId, setBoardId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(true);
   const [pickedBranch, setPickedBranch] = useState<string | null>(null);
   const [compareWith, setCompareWith] = useState<string | null>(null);
   const [comparing, setComparing] = useState<string | null>(null);
@@ -193,6 +194,7 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
     create.mutate(request, {
       onSuccess: (created) => {
         setBoardId(created.board_id);
+        setEditing(false);
         setPickedBranch(null);
         setComparing(null);
         setCompareWith(null);
@@ -253,7 +255,7 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
           <h1 className="sr-only">{t.heading}</h1>
           {fixture && <Badge className="bg-rewritten/15 text-rewritten">{t.fixtureBanner}</Badge>}
         </div>
-        <p className="max-w-prose text-sm text-muted-foreground">{t.intro}</p>
+        {!boardId && <p className="max-w-prose text-sm text-muted-foreground">{t.intro}</p>}
       </div>
 
       <div className="flex flex-col gap-6">
@@ -265,11 +267,20 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
             if (canBuild) build();
           }}
         >
-          <ScenarioPrompt
-            {...settings}
-            onChange={(next) => setSettings((s) => ({ ...s, ...next }))}
-            extra={<MomentPicker source={source} onSource={setSource} moments={moments} maxElapsed={maxElapsed} teams={teams} teamId={teamId} onTeam={setPickedTeam} />}
-          />
+          {boardId && !editing ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="min-w-0 flex-1 truncate text-base font-medium">{t.goalFirst.goals.find((x) => x.text === settings.prompt)?.label ?? (settings.prompt.trim() || t.goalFirst.question)}</p>
+              <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setEditing(true)}>
+                {t.changeSituation}
+              </Button>
+            </div>
+          ) : (
+            <ScenarioPrompt
+              {...settings}
+              onChange={(next) => setSettings((s) => ({ ...s, ...next }))}
+              extra={<MomentPicker source={source} onSource={setSource} moments={moments} maxElapsed={maxElapsed} teams={teams} teamId={teamId} onTeam={setPickedTeam} />}
+            />
+          )}
           <div className="flex flex-col gap-3">
             <Button type="submit" size="lg" className="h-12 w-full gap-2 px-6 text-base sm:w-fit" disabled={!canBuild || working}>
               {working ? <LoaderCircle aria-hidden className="motion-safe:animate-spin" /> : <Hammer aria-hidden />}
@@ -301,7 +312,6 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
           ) : (
             <>
               <SituationBar board={{ situation }} teams={teams} />
-              {board && <AgentTrace board={board} noise={withinNoise(board)} />}
               {query.isError && !board && (
                 <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-blocked/40 p-4 text-sm">
                   {t.stage.loadFailed}
@@ -325,9 +335,9 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
                 />
               ) : null}
 
-              <div className={cn("grid items-start gap-6", !comparing && "xl:grid-cols-[minmax(0,1fr)_24rem]")}>
+              <div className={cn("grid items-start gap-6", !comparing && "min-[1100px]:grid-cols-[minmax(0,1fr)_26rem]")}>
                 {!comparing && (
-                  <div className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-[calc(var(--stack-h)+1rem)]">
+                  <div className="flex min-w-0 flex-col gap-4 min-[1100px]:sticky min-[1100px]:top-[calc(var(--stack-h)+4.5rem)]">
                     {board && active ? (
                       <>
                         <div className="rounded-lg border bg-card p-4 shadow-raised">
@@ -393,6 +403,16 @@ export function TacticsBoardView({ fixture }: { fixture: boolean }) {
                         ))}
                     </ul>
                   </section>
+                  {board && (
+                    <details className="group rounded-lg border bg-card p-3">
+                      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-medium [&::-webkit-details-marker]:hidden">
+                        {t.trace.heading}
+                      </summary>
+                      <div className="pt-2">
+                        <AgentTrace board={board} noise={withinNoise(board)} />
+                      </div>
+                    </details>
+                  )}
                 </div>
               </div>
             </>

@@ -66,7 +66,7 @@ function place(meta: MatchMeta, team: Team): Spot[] {
 type Layout = "vertical" | "home" | "away";
 function toXY(s: Spot, layout: Layout): { x: number; y: number } {
   if (layout === "vertical") return { x: 12 + s.across * 76, y: 91 - s.along * 77 };
-  const x = 5 + s.along * 41;
+  const x = 5 + s.along * 37;
   // Home attacks right (its left is the top of the screen); away attacks left (its left is the bottom).
   return layout === "home" ? { x, y: 12 + s.across * 76 } : { x: 100 - x, y: 12 + (1 - s.across) * 76 };
 }
@@ -88,6 +88,8 @@ function Icons({ m }: { m: Marks }) {
     </>
   );
 }
+
+const short = (name: string) => (name.length > 9 ? `${name.slice(0, 8)}…` : name);
 
 function lensText(lens: Lens, s: PlayerStats | undefined): string | null {
   if (!s) return null;
@@ -128,6 +130,7 @@ function Marker({ spot, layout, meta, rating, stats, marks, lens, potm, side, in
             "grid size-10 place-items-center rounded-full font-display text-base font-bold ring-[1.5px] transition-transform group-hover:scale-105 group-focus-visible:ring-2 group-focus-visible:ring-ring",
             side === "home" ? "bg-home/35 ring-home" : "bg-away/35 ring-away",
             poor && "ring-2 ring-[var(--rating-poor)]",
+            rating && rating.data_rating >= 7 && "ring-2 ring-[var(--rating-good)]",
           )}
         >
           {p.shirt}
@@ -139,7 +142,7 @@ function Marker({ spot, layout, meta, rating, stats, marks, lens, potm, side, in
         ) : null}
         <Icons m={marks} />
       </span>
-      <span className="max-w-[96px] max-sm:max-w-[68px] truncate rounded-full bg-black/45 px-1.5 text-[13px] leading-5 font-medium text-white">{p.short_name}</span>
+      <span title={p.name} className="rounded-full bg-black/45 px-1.5 text-xs leading-5 font-medium whitespace-nowrap text-white">{short(p.short_name)}</span>
     </button>
   );
 }
@@ -173,7 +176,7 @@ function PitchFrame({ horizontal, label, children }: { horizontal: boolean; labe
   return (
     <div
       className="relative mx-auto w-full overflow-hidden rounded-2xl border bg-turf"
-      style={horizontal ? { aspectRatio: "105 / 68", maxHeight: "min(600px, 72vh)", maxWidth: "calc(min(600px, 72vh) * 105 / 68)" } : { aspectRatio: "3 / 4", maxHeight: "min(640px, 70vh)", maxWidth: "calc(min(640px, 70vh) * 3 / 4)" }}
+      style={horizontal ? { aspectRatio: "105 / 68", width: "min(100%, calc(clamp(360px, calc(100dvh - 270px), 640px) * 105 / 68))" } : { aspectRatio: "3 / 4", width: "min(100%, calc(clamp(360px, calc(100dvh - 330px), 640px) * 3 / 4))" }}
     >
       <PitchLines horizontal={horizontal} />
       <div role="group" aria-label={label} className="absolute inset-0">
@@ -272,25 +275,24 @@ export function LineupTab() {
       <Marker key={spot.id} spot={spot} layout={wide ? side : "vertical"} meta={meta} rating={map.get(spot.id)} stats={stats.get(spot.id)} marks={marks.get(spot.id) ?? NONE} lens={lens} potm={potmId === spot.id} side={side} index={i} onKey={moveFocus} />
     ));
   return (
-    <div className="flex flex-col gap-4 py-4">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+    <div className="flex flex-col gap-3 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         {sides.map((s) => (
           <TeamStrip key={s} meta={meta} side={s} ratings={map} />
         ))}
+        {lenses.length > 1 && (
+          <div role="radiogroup" aria-label={copy.coachPage.lensLabel} title={copy.coachPage.legend} className="order-last flex w-full gap-2 overflow-x-auto sm:order-none sm:w-auto [scrollbar-width:none]">
+            {lenses.map(([l, label]) => (
+              <button key={l} type="button" role="radio" aria-checked={lens === l} onClick={() => setLens(l)} className={cn("h-11 shrink-0 rounded-full px-4 text-sm font-medium ring-1", lens === l ? "bg-foreground text-background ring-foreground" : "bg-raised text-muted-foreground ring-border hover:text-foreground")}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      {lenses.length > 1 && (
-        <div role="radiogroup" aria-label={copy.coachPage.lensLabel} className="flex gap-2 overflow-x-auto [scrollbar-width:none]">
-          {lenses.map(([l, label]) => (
-            <button key={l} type="button" role="radio" aria-checked={lens === l} onClick={() => setLens(l)} className={cn("h-11 shrink-0 rounded-full px-4 text-sm font-medium ring-1", lens === l ? "bg-foreground text-background ring-foreground" : "bg-raised text-muted-foreground ring-border hover:text-foreground")}>
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
       <PitchFrame horizontal={wide} label={sides.map((s) => `${meta[s].name} ${meta[s].formation}`).join(", ")}>
         {sides.flatMap((s) => marker(s))}
       </PitchFrame>
-      <p className="text-[13px] text-muted-foreground">{copy.coachPage.legend}</p>
       <div className={cn("grid gap-x-8 gap-y-4", wide && "grid-cols-2")}>
         {sides.map((s) => (
           <Subs key={s} meta={meta} team={meta[s]} ratings={map} marks={marks} side={s} />

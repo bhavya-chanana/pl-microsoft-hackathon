@@ -38,7 +38,7 @@ export function ScenarioPrompt({ prompt, risk, n, horizon, onChange, extra }: Pr
         <p id={`${id}-goal`} className="text-lg font-semibold">
           {g.question}
         </p>
-        <ul aria-labelledby={`${id}-goal`} className="grid gap-3 sm:grid-cols-2">
+        <ul aria-labelledby={`${id}-goal`} className="grid gap-3 sm:grid-cols-2 min-[1100px]:grid-cols-4">
           {g.goals.map((goal) => {
             const custom = goal.text === "";
             const active = custom ? prompt !== "" && !g.goals.some((x) => x.text && x.text === prompt) : prompt === goal.text;

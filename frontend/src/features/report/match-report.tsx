@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { briefKey, useCoach } from "@/features/coach/coach-store";
 import { RatingBadge } from "@/features/coach/rating";
-import { useAnalystWording } from "@/features/coach/use-analyst";
 import { useLive } from "@/features/live/live-store";
 import { useCoachBrief, usePlayersStats, useRatings, useTeamStats } from "@/features/live/queries";
 import { useProfile } from "@/features/profile/profile-store";
@@ -256,7 +255,6 @@ export function MatchReport() {
   const fetched = useCoachBrief(finished ? null : teamId, language);
   const brief = fetched.data ?? stored;
   const { resolvedTheme, setTheme } = useTheme();
-  const analyst = useAnalystWording();
   if (!meta || !state) return null;
   const phase = finished ? R.phase.full : state.elapsed >= 2700 && state.elapsed <= 3600 ? R.phase.half : R.phase.latest;
   /** Print on paper colours, then put the viewer's theme back. */
@@ -345,7 +343,7 @@ export function MatchReport() {
               <p className="text-sm text-muted-foreground">{R.noActions}</p>
             )}
           </Section>
-          <Section title={analyst ? R.xgTimelineAnalyst : R.xgTimeline}>
+          <Section title={R.xgTimelineAnalyst}>
             <XgTimeline meta={meta} timeline={timeline} />
           </Section>
           <Section title={R.possession}>

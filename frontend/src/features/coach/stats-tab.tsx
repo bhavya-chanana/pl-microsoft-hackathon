@@ -7,7 +7,7 @@ import { TeamStatRows } from "@/features/stats/stat-rows";
 export function StatsTab() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6 py-4">
-      <TeamStatRows />
+      <TeamStatRows coach />
       <ShotMapPanel />
     </div>
   );

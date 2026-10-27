@@ -44,9 +44,9 @@ function cards(meta: MatchMeta, timeline: MatchEvent[], side: "home" | "away") {
   return { yellow: own.filter((e) => !red(e)).length, red: own.filter(red).length };
 }
 
-function useGroups(meta: MatchMeta, period: Period, h: TeamStats, a: TeamStats): Group[] {
+function useGroups(meta: MatchMeta, period: Period, h: TeamStats, a: TeamStats, coach: boolean): Group[] {
   const timeline = useLive((s) => s.timeline);
-  const analyst = useAnalystWording();
+  const analyst = useAnalystWording() || coach;
   const ratings = useRatings().data;
   const players = usePlayersStats((ratings ?? []).map((r) => r.player_id));
   return useMemo(() => {
@@ -170,7 +170,7 @@ function PeriodFilter({ value, onChange, second }: { value: Period; onChange: (p
 }
 
 /** The whole team comparison: filter, possession bar, then grouped rows. Rows the feed lacks are left out. */
-export function TeamStatRows() {
+export function TeamStatRows({ coach = false }: { coach?: boolean }) {
   const meta = useLive((s) => s.meta);
   const state = useLive((s) => s.state);
   const half = Boolean(state && state.elapsed >= 2700 && state.elapsed <= 3600 && state.status !== "full_time");
@@ -186,19 +186,18 @@ export function TeamStatRows() {
       </div>
     );
   }
-  return <Rows meta={meta} h={home} a={away} period={period} setPeriod={setPeriod} second={(state?.period ?? 1) >= 2} />;
+  return <Rows meta={meta} h={home} a={away} period={period} setPeriod={setPeriod} second={(state?.period ?? 1) >= 2} coach={coach} />;
 }
 
-function Rows({ meta, h, a, period, setPeriod, second }: { meta: MatchMeta; h: TeamStats; a: TeamStats; period: Period; setPeriod: (p: Period) => void; second: boolean }) {
-  const groups = useGroups(meta, period, h, a);
+function Rows({ meta, h, a, period, setPeriod, second, coach }: { meta: MatchMeta; h: TeamStats; a: TeamStats; period: Period; setPeriod: (p: Period) => void; second: boolean; coach: boolean }) {
+  const groups = useGroups(meta, period, h, a, coach);
   return (
     <section aria-labelledby="stat-rows" className="flex flex-col gap-4">
       <h2 id="stat-rows" className="sr-only">{copy.stats.team}</h2>
-      <PeriodFilter value={period} onChange={setPeriod} second={second} />
-      <div className="grid grid-cols-[5rem_minmax(0,1fr)_5rem] items-center text-center font-display text-lg font-semibold">
-        <span className="text-home-text">{meta.home.short_name}</span>
-        <span />
-        <span className="text-away-text">{meta.away.short_name}</span>
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-display text-lg font-semibold text-home-text">{meta.home.short_name}</span>
+        <PeriodFilter value={period} onChange={setPeriod} second={second} />
+        <span className="font-display text-lg font-semibold text-away-text">{meta.away.short_name}</span>
       </div>
       {groups.map((g) => (
         <div key={g.title} className="flex flex-col rounded-2xl bg-card p-4">

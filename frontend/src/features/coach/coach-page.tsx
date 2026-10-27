@@ -4,7 +4,7 @@ import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { LayoutGroup, m } from "motion/react";
 import { RotateCw } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useId, useState } from "react";
+import { Suspense, useEffect, useId, useRef, useState } from "react";
 
 import { StablePanel } from "@/components/ui/stable-panel";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,7 @@ function CoachTabs({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) 
   const id = useId();
   return (
     <LayoutGroup id={id}>
-      <div role="tablist" aria-label={copy.coachPage.tabs} className="-mb-px flex overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
+      <div role="tablist" aria-label={copy.coachPage.tabs} className="-mb-px flex max-w-full overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
         {TABS.map((t) => {
           const active = t.id === tab;
           return (
@@ -80,13 +80,25 @@ function Header({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
   const picked = useCoach((s) => s.teamId);
   const client = useQueryClient();
   const fetching = useIsFetching({ queryKey: ["coach"] }) > 0;
+  const sentinel = useRef<HTMLDivElement>(null);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el) return;
+    const offset = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--stack-h")) || 52;
+    const io = new IntersectionObserver(([entry]) => setStuck(!entry.isIntersecting), { rootMargin: `-${offset}px 0px 0px 0px`, threshold: 0 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   const teamId = picked ?? meta?.home.team_id ?? null;
   const half = state ? state.elapsed >= 2700 && state.elapsed <= 3600 && !finished : false;
   const phase = finished ? copy.report.phase.full : half ? copy.report.phase.half : state ? copy.coachPage.liveAt(state.minute_label) : "";
   return (
-    <div className="sticky top-[var(--stack-h)] z-30 -mx-4 border-b bg-background/90 px-4 backdrop-blur-xl md:-mx-6 md:px-6 xl:-mx-8 xl:px-8 print:hidden">
-      <div className="mx-auto max-w-7xl">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-2">
+    <>
+    <div ref={sentinel} aria-hidden className="h-px" />
+    <div className={cn("sticky top-[var(--stack-h)] z-30 border-b transition-colors print:hidden", stuck ? "glass-strong" : "bg-background/90")}>
+      <div className="mx-auto flex max-w-7xl flex-wrap items-end justify-between gap-x-4 px-4 md:px-6 xl:px-8">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5">
         {meta && teamId && (
           <div role="radiogroup" aria-label={copy.coachPage.team} className="flex gap-2">
             {(["home", "away"] as const).map((side) => {
@@ -121,6 +133,7 @@ function Header({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
       <CoachTabs tab={tab} onChange={onChange} />
       </div>
     </div>
+    </>
   );
 }
 
@@ -136,9 +149,9 @@ function Body() {
     window.history.replaceState(null, "", next === "overview" ? "/coach" : `/coach?tab=${next}`);
   };
   return (
-    <div className="flex flex-col gap-4 px-4 pb-8 md:px-6 xl:px-8" style={{ ["--accent-team" as string]: side === "home" ? "var(--team-home)" : "var(--team-away)" }}>
+    <div className="flex flex-col gap-4 pb-8" style={{ ["--accent-team" as string]: side === "home" ? "var(--team-home)" : "var(--team-away)" }}>
       <Header tab={tab} onChange={change} />
-      <div className="mx-auto w-full max-w-7xl">
+      <div className="mx-auto w-full max-w-7xl px-4 md:px-6 xl:px-8">
         <StablePanel panelKey={tab}>
           <div id="coach-panel" role="tabpanel" aria-labelledby={`coach-tab-${tab}`}>
             {tab === "overview" ? (
