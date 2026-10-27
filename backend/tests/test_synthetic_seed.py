@@ -77,8 +77,11 @@ def test_seed_resume_and_idempotency(single_match, monkeypatch):
         assert any(item['signal_type'] == 'goal' for item in feed)
         vote = to_doc('later-vote',run_id,{'kind':'rating','value':5})
         await store.upsert_many('fan_votes',run_id,[vote])
+        decision = to_doc('later-decision',run_id,{'agent':'narrator','reason':'fan asked'})
+        await store.upsert_many('decisions',run_id,[decision])
         await seed.seed_dataset(store,folder)
         assert await store.read('fan_votes',run_id,'later-vote') == vote
+        assert await store.read('decisions',run_id,'later-decision') == decision
     asyncio.run(check())
 
 

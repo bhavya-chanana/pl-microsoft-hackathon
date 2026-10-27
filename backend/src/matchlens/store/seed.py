@@ -166,7 +166,7 @@ async def seed_dataset(store: Store, folder: Path, manifest: dict | None = None)
                     await store.upsert_many(container,run_id,rows[i:i+100])
         # Seed-owned documents are exact; later fan interactions and their
         # agent-run records are outside the seed's ownership.
-        for container in ('runs','events','frames','signals','insights','overlays','decisions'):
+        for container in ('runs','events','frames','signals','insights','overlays'):
             rows = docs.get(container,[])
             expected = {d['id']:from_doc(d) for d in rows}
             if len(expected) != len(rows):
