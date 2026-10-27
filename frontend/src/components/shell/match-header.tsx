@@ -21,6 +21,8 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
+const abbr = (t: Team) => (t.short_name || t.name).replace(/[^\p{L}]/gu, "").slice(0, 3).toUpperCase();
+
 function Crest({ team, side, className }: { team: Team; side: "home" | "away"; className?: string }) {
   return (
     <span
@@ -157,14 +159,14 @@ export function MatchHeader({ hero }: { hero: boolean }) {
       <m.div
         style={{ opacity: barOpacity }}
         aria-hidden={!collapsed || undefined}
-        className="absolute inset-x-0 top-0 mx-auto flex h-[var(--hdr-min)] max-w-7xl items-center justify-center gap-3 px-4 pr-28 md:pr-4"
+        className="absolute inset-x-0 top-0 mx-auto flex h-[var(--hdr-min)] max-w-7xl items-center justify-center gap-2 px-4 pr-[10.5rem] md:gap-3 md:pr-4"
       >
         {meta && home && away && hs !== null && as !== null ? (
           <>
             <Crest team={home} side="home" className="size-6 text-[10px]" />
-            <span className="font-display text-xl font-bold tnum">
+            <span className="truncate font-display text-lg font-bold whitespace-nowrap tnum md:text-xl">
               <span className="sr-only">{home.name} </span>
-              <span aria-hidden>{home.short_name}</span> {hs} - {as} <span aria-hidden>{away.short_name}</span>
+              <span aria-hidden className="max-sm:hidden">{home.short_name}</span><span aria-hidden className="sm:hidden">{abbr(home)}</span> {hs} - {as} <span aria-hidden className="max-sm:hidden">{away.short_name}</span><span aria-hidden className="sm:hidden">{abbr(away)}</span>
               <span className="sr-only"> {away.name}</span>
             </span>
             <Crest team={away} side="away" className="size-6 text-[10px]" />

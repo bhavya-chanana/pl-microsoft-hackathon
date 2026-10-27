@@ -397,3 +397,18 @@
     left: 100%;
   }
 }
+
+/* Player rating colours (FotMob-style badge): potm or 10 blue, 7+ green, 5+ orange, under 5 red. */
+:root {
+  --rating-potm: #14a0ff;
+  --rating-good: #33c771;
+  --rating-ok: #f08022;
+  --rating-poor: #dd3636;
+  --rating-ink: #fff;
+  --accent-team: var(--team-home);
+}
+.dark {
+  --rating-ok: #ff963f;
+  --rating-poor: #ff3939;
+  --rating-ink: #000;
+}

@@ -6,7 +6,7 @@ import { useShell } from "@/components/shell/shell-store";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Segmented } from "@/components/ui/segmented";
 import { ListenToggle, Narrator } from "@/features/companion/narration";
 import { LanguageField } from "@/features/profile/profile-panel";
 import { PastMatches } from "@/features/replay/past-matches";
@@ -17,7 +17,6 @@ import { useReplayControl, useReplayStatus, useRestart, useSourceLabel } from ".
 
 const SPEEDS = [1, 5, 15, 30, 60] as const;
 const STARTS = [0, 20, 45, 60, 75] as const;
-const tile = "h-11 flex-1 px-2 aria-pressed:bg-primary aria-pressed:text-primary-foreground";
 
 function Section({ title, help, children }: { title: string; help?: string; children: React.ReactNode }) {
   return (
@@ -43,35 +42,29 @@ function Playback() {
     <div className="flex flex-col gap-4">
       {status.isError && <p className="rounded-lg border border-dashed p-3 text-[13px] text-muted-foreground">{copy.stream.unavailable}</p>}
       <div className="flex flex-col gap-1.5">
-        <span id="speed-label" className="text-[13px] font-medium text-muted-foreground">{copy.replay.speed}</span>
-        <ToggleGroup
-          aria-labelledby="speed-label"
-          value={speed === undefined ? [] : [String(speed)]}
-          onValueChange={(v: string[]) => v[0] && control.mutate({ speed: Number(v[0]) })}
-          variant="outline"
-          spacing={0}
-          className="w-full"
+        <span className="text-[13px] font-medium text-muted-foreground">{copy.replay.speed}</span>
+        <Segmented
+          label={copy.replay.speed}
+          value={speed === undefined ? ("" as string) : String(speed)}
+          onChange={(v) => control.mutate({ speed: Number(v) })}
+          options={SPEEDS.map((s) => ({ value: String(s), label: copy.replay.speedValue(s) }))}
+          className="w-full max-w-none"
           disabled={status.isError}
-        >
-          {SPEEDS.map((s) => (
-            <ToggleGroupItem key={s} value={String(s)} className={tile}>{copy.replay.speedValue(s)}</ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+          title={status.isError ? copy.stream.unavailable : undefined}
+        />
       </div>
       <div className="flex flex-col gap-1.5">
-        <span id="start-label" className="text-[13px] font-medium text-muted-foreground">{copy.replay.from}</span>
-        <ToggleGroup
-          aria-labelledby="start-label"
-          value={[String(startMinute)]}
-          onValueChange={(v: string[]) => v[0] && setStartMinute(Number(v[0]))}
-          variant="outline"
-          spacing={0}
-          className="w-full"
-        >
-          {STARTS.map((m) => (
-            <ToggleGroupItem key={m} value={String(m)} className={tile}>{m}&apos;</ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+        <span className="text-[13px] font-medium text-muted-foreground">{copy.replay.from}</span>
+        <Segmented
+          label={copy.replay.from}
+          value={String(startMinute)}
+          onChange={(v) => setStartMinute(Number(v))}
+          options={STARTS.map((m) => ({ value: String(m), label: `${m}'` }))}
+          className="w-full max-w-none"
+          disabled={status.isError}
+          title={status.isError ? copy.stream.unavailable : undefined}
+        />
+        <p className="text-[13px] text-muted-foreground">{copy.stream.replaysOnly}</p>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Button variant="outline" className="h-11" onClick={() => control.mutate({ paused: !paused })} disabled={control.isPending || status.isError}>

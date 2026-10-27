@@ -6,6 +6,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCoach } from "@/features/coach/coach-store";
+import { RatingBadge } from "@/features/coach/rating";
 import { useLive } from "@/features/live/live-store";
 import { usePlayersStats, useRatings } from "@/features/live/queries";
 import { PlayerSheet } from "@/features/player/player-sheet";
@@ -108,7 +109,6 @@ export function PlayersTable({ team }: { team: Team }) {
   }
   const hasVotes = rows.some((r) => r.fan_votes > 0);
   const showFans = !coachMode && hasVotes;
-  const best = Math.max(10, ...rows.map((r) => r.data_rating));
   return (
     <div className="flex flex-col gap-3">
       <div className="min-w-0 overflow-x-auto rounded-2xl border bg-card">
@@ -145,12 +145,7 @@ export function PlayersTable({ team }: { team: Team }) {
                   </th>
                   <td className="border-t px-3 text-muted-foreground">{r.position}</td>
                   <td className="border-t px-3">
-                    <span className="flex items-center gap-2">
-                      <span className="w-9 font-display text-lg font-semibold tabular-nums">{formatNumber(r.data_rating, 1)}</span>
-                      <span aria-hidden className="h-1.5 w-16 overflow-hidden rounded-full bg-raised">
-                        <span className={cn("block h-full rounded-full", home ? "bg-home" : "bg-away")} style={{ width: `${(r.data_rating / best) * 100}%` }} />
-                      </span>
-                    </span>
+                    <RatingBadge value={r.data_rating} size="md" />
                   </td>
                   {NUM_COLS.map((c) => {
                     const v = num(c.key, stats.get(r.player_id));

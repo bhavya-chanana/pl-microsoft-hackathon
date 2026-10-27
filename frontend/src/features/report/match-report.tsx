@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { briefKey, useCoach } from "@/features/coach/coach-store";
+import { RatingBadge } from "@/features/coach/rating";
 import { useAnalystWording } from "@/features/coach/use-analyst";
 import { useLive } from "@/features/live/live-store";
 import { useCoachBrief, usePlayersStats, useRatings, useTeamStats } from "@/features/live/queries";
@@ -187,29 +188,22 @@ function KeyPlayers({ meta }: { meta: MatchMeta }) {
             <span className="font-medium">{p.name}</span>
             <span className="text-[13px] text-muted-foreground">{whyLine(stats.get(p.player_id))}</span>
           </span>
-          <span className="font-display text-xl font-semibold tabular-nums">{p.data_rating.toFixed(1)}</span>
+          <RatingBadge value={p.data_rating} size="lg" />
         </li>
       ))}
     </ol>
   );
 }
 
-/** Goalscorers under the scoreline, one line per side. */
-function Scorers({ meta, timeline }: { meta: MatchMeta; timeline: MatchEvent[] }) {
-  const goals = timeline.filter((e) => e.type === "goal");
+/** Goalscorers under one team's name. */
+function Scorers({ meta, timeline, only }: { meta: MatchMeta; timeline: MatchEvent[]; only: "home" | "away" }) {
+  const goals = timeline.filter((e) => e.type === "goal" && sideOf(meta, e.team_id) === only);
   if (!goals.length) return null;
   return (
-    <div className="flex flex-wrap gap-x-6 gap-y-0.5 text-[13px] text-muted-foreground">
-      {(["home", "away"] as const).map((side) => (
-        <p key={side} className={cn(!goals.some((e) => sideOf(meta, e.team_id) === side) && "hidden")}>
-          <span className={cn("font-medium", sideTone[side].text)}>{meta[side].short_name}</span> <span className="sr-only">{R.scorers}: </span>
-          {goals
-            .filter((e) => sideOf(meta, e.team_id) === side)
-            .map((e) => `${playerName(meta, e.player_id, true)} ${e.minute_label}`)
-            .join(", ")}
-        </p>
-      ))}
-    </div>
+    <p className="text-[13px] text-muted-foreground">
+      <span className="sr-only">{R.scorers}: </span>
+      {goals.map((e) => `${playerName(meta, e.player_id, true)} ${e.minute_label}`).join(", ")}
+    </p>
   );
 }
 
@@ -289,28 +283,44 @@ export function MatchReport() {
   };
   return (
     <article className="match-report flex flex-col gap-4">
-      <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4 shadow-raised sm:p-5 print:shadow-none">
-        <div className="flex flex-col gap-1">
-          <p className="text-[13px] font-medium text-muted-foreground">
-            {R.heading} · {phase} · {state.minute_label}
-          </p>
-          <p className="flex items-center gap-3 font-display text-3xl font-bold tabular-nums">
-            <span className={sideTone.home.text}>{meta.home.name}</span>
+      <header className="flex flex-col gap-4 rounded-2xl border bg-card p-4 sm:p-5 print:shadow-none">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="rounded-full bg-raised px-3 py-1.5 text-[13px] font-medium ring-1 ring-border tabular-nums">
+            {phase} · {state.minute_label}
+          </span>
+          <div className="flex gap-2 print:hidden">
+            <Button variant="secondary" className="h-11 gap-2 px-4" onClick={() => void copyLink()}>
+              <Link2 aria-hidden />
+              {R.copyLink}
+            </Button>
+            <Button className="h-11 gap-2 px-4" onClick={() => printLight()}>
+              <Printer aria-hidden />
+              {R.export}
+            </Button>
+          </div>
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-3 sm:gap-6">
+          <div className="flex min-w-0 flex-col items-end gap-1 text-right">
+            <span className={cn("flex items-center gap-2 text-lg font-medium", sideTone.home.text)}>
+              <span className="truncate">{meta.home.name}</span>
+              <span aria-hidden className="size-3 shrink-0 rounded-full bg-home" />
+            </span>
+            <Scorers meta={meta} timeline={timeline} only="home" />
+          </div>
+          <p className="font-display text-[44px] leading-[48px] font-bold whitespace-nowrap tabular-nums sm:text-[56px] sm:leading-[56px]">
             {state.score[meta.home.team_id] ?? 0} - {state.score[meta.away.team_id] ?? 0}
-            <span className={sideTone.away.text}>{meta.away.name}</span>
           </p>
-          <Scorers meta={meta} timeline={timeline} />
+          <div className="flex min-w-0 flex-col items-start gap-1">
+            <span className={cn("flex items-center gap-2 text-lg font-medium", sideTone.away.text)}>
+              <span aria-hidden className="size-3 shrink-0 rounded-full bg-away" />
+              <span className="truncate">{meta.away.name}</span>
+            </span>
+            <Scorers meta={meta} timeline={timeline} only="away" />
+          </div>
         </div>
-        <div className="flex gap-2 print:hidden">
-          <Button variant="secondary" className="h-11 gap-2 px-4" onClick={() => void copyLink()}>
-            <Link2 aria-hidden />
-            {R.copyLink}
-          </Button>
-          <Button className="h-11 gap-2 px-4" onClick={() => printLight()}>
-            <Printer aria-hidden />
-            {R.export}
-          </Button>
-        </div>
+        <p className="border-t pt-3 text-center text-[13px] text-muted-foreground">
+          {meta.competition} · {meta.venue}
+        </p>
       </header>
       <div className="grid items-start gap-4 lg:grid-cols-2 [&>*]:min-w-0">
         <div className="flex min-w-0 flex-col gap-4">

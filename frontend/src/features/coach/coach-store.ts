@@ -16,6 +16,9 @@ type CoachState = {
   briefs: Record<string, Cached>;
   pinned: string[];
   dismissed: string[];
+  /** Action cards opened to show Evidence and Trade-off. */
+  expanded: string[];
+  toggleExpanded: (id: string) => void;
   setTeam: (id: string) => void;
   setCoachMode: (on: boolean) => void;
   save: (key: string, brief: CoachBrief) => void;
@@ -34,6 +37,8 @@ export const useCoach = create<CoachState>()(
       briefs: {},
       pinned: [],
       dismissed: [],
+      expanded: [],
+      toggleExpanded: (id) => set({ expanded: get().expanded.includes(id) ? get().expanded.filter((p) => p !== id) : [...get().expanded, id] }),
       setTeam: (teamId) => set({ teamId }),
       setCoachMode: (coachMode) => set({ coachMode }),
       save: (key, brief) => {
@@ -51,7 +56,7 @@ export const useCoach = create<CoachState>()(
     {
       name: "matchlens.coach.v1",
       version: 1,
-      partialize: (s) => ({ coachMode: s.coachMode, briefs: s.briefs, pinned: s.pinned, dismissed: s.dismissed }),
+      partialize: (s) => ({ coachMode: s.coachMode, briefs: s.briefs, pinned: s.pinned, dismissed: s.dismissed, expanded: s.expanded }),
       skipHydration: true,
     },
   ),
