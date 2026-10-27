@@ -69,7 +69,7 @@ export function InsightFeed({
     return <EmptyState>{copy.feed.empty}</EmptyState>;
   }
   return (
-    <ol className="flex flex-col gap-3" aria-label={copy.feed.heading}>
+    <ol className="flex flex-col gap-2" aria-label={copy.feed.heading}>
       <AnimatePresence initial={false}>
         {items.map((item) => (
           <li key={item.insight_id}>
