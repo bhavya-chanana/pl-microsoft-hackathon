@@ -42,7 +42,7 @@ export function PaletteSearch({ close }: { close: () => void }) {
     const insightRows = Object.values(insights)
       .filter((i) => i.stage !== "retracted")
       .sort((a, b) => b.elapsed - a.elapsed)
-      .map((i) => ({ id: i.insight_id, minute: i.minute_label, label: i.headline, value: `${i.minute_label} ${i.headline} ${i.signal_type}` }));
+      .map((i) => ({ id: i.insight_id, minute: i.minute_label, label: i.headline, value: `${i.minute_label} ${i.headline}` }));
     return [...insightRows, ...events].slice(0, 80);
   }, [timeline, insights, meta]);
 

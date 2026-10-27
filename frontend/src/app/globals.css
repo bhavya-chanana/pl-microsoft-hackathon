@@ -142,7 +142,7 @@
 
   --elevation-1: 0 1px 2px oklch(0.3 0.03 255 / 0.06), 0 2px 8px oklch(0.3 0.03 255 / 0.05);
   --glass-fill: oklch(1 0 0 / 0.6);
-  --glass-fill-strong: oklch(1 0 0 / 0.8);
+  --glass-fill-strong: oklch(1 0 0 / 0.94);
   --glass-border: oklch(1 0 0 / 0.7);
   --glass-border-bottom: oklch(0.21 0.01 265 / 0.08);
   --glass-highlight: oklch(1 0 0 / 0.9);
@@ -205,7 +205,7 @@
   --elevation-2: 0 8px 24px -8px oklch(0 0 0 / 0.5);
 
   --glass-fill: oklch(0.22 0.01 265 / 0.55);
-  --glass-fill-strong: oklch(0.2 0.01 265 / 0.78);
+  --glass-fill-strong: oklch(0.2 0.01 265 / 0.93);
   --glass-border: oklch(1 0 0 / 0.14);
   --glass-border-bottom: oklch(1 0 0 / 0.04);
   --glass-highlight: oklch(1 0 0 / 0.14);

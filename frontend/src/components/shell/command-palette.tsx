@@ -30,6 +30,18 @@ export function CommandChip() {
   );
 }
 
+/** Whole-word-prefix matching, so "goals" finds goals and never "hits 32.1 km/h". Plurals match their singular. */
+export function wordFilter(value: string, search: string, keywords?: string[]): number {
+  const words = `${value} ${(keywords ?? []).join(" ")}`.toLowerCase().split(/[^\p{L}\p{N}.]+/u).filter(Boolean);
+  const terms = search.toLowerCase().split(/[^\p{L}\p{N}.]+/u).filter(Boolean);
+  if (terms.length === 0) return 1;
+  const ok = terms.every((t) => {
+    const stem = t.length > 3 && t.endsWith("s") ? t.slice(0, -1) : t;
+    return words.some((w) => w.startsWith(t) || w.startsWith(stem));
+  });
+  return ok ? 1 : 0;
+}
+
 /** Go-to and do-this commands. Opens with ⌘K or Ctrl-K. */
 export function CommandPalette() {
   const router = useRouter();
@@ -61,7 +73,7 @@ export function CommandPalette() {
   };
   return (
     <CommandDialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQuery(""); }} title={copy.palette.title} description={copy.palette.placeholder} className="glass-strong sm:max-w-xl">
-      <Command className="bg-transparent">
+      <Command className="bg-transparent" filter={wordFilter}>
       <CommandInput placeholder={copy.palette.placeholder} value={query} onValueChange={setQuery} />
       <CommandList className="max-h-[60dvh] overscroll-contain">
         {query.trim().length >= 2 && <PaletteSearch close={() => setOpen(false)} />}

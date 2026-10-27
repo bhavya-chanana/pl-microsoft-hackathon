@@ -81,8 +81,10 @@ export function MatchHeader({ hero }: { hero: boolean }) {
   const { scrollY } = useScroll();
   const progress = useTransform(scrollY, (y) => (hero ? Math.min(1, Math.max(0, y / collapseRange())) : 1));
   const height = useMotionTemplate`calc(var(--hdr-max) - (var(--hdr-max) - var(--hdr-min)) * ${progress})`;
-  const heroOpacity = useTransform(progress, [0, 0.6], [1, 0]);
-  const barOpacity = useTransform(progress, [0.4, 1], [0, 1]);
+  const heroOpacity = useTransform(progress, [0, 0.45], [1, 0]);
+  const barOpacity = useTransform(progress, [0.4, 0.75], [0, 1]);
+  // Page content scrolls under this fixed header, so the backing turns solid as soon as scrolling starts.
+  const backing = useTransform(scrollY, [0, 12], [0, 1]);
 
   // Only one of the two layers is exposed at a time, so the score and clock are announced once.
   const [collapsed, setCollapsed] = useState(!hero);
@@ -101,8 +103,8 @@ export function MatchHeader({ hero }: { hero: boolean }) {
     >
       <m.div
         aria-hidden
-        style={{ opacity: barOpacity }}
-        className="glass absolute inset-0 border-x-0 border-t-0 shadow-none"
+        style={{ opacity: hero ? backing : barOpacity }}
+        className="glass-strong absolute inset-0 border-x-0 border-t-0 shadow-none"
       />
       {/* Hero state */}
       {hero && (

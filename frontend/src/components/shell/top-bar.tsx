@@ -16,7 +16,7 @@ import { ProfileMenu } from "./profile-menu";
 export function TopBar() {
   const pathname = usePathname();
   return (
-    <header className="glass fixed inset-x-0 top-0 z-50 hidden h-14 items-center gap-4 border-x-0 border-t-0 px-4 md:flex lg:px-6">
+    <header className="glass-strong fixed inset-x-0 top-0 z-50 hidden h-14 items-center gap-4 border-x-0 border-t-0 px-4 md:flex lg:px-6">
       <Link href="/" className="font-display text-xl font-bold tracking-tight uppercase">
         {copy.product}
       </Link>

@@ -69,7 +69,7 @@ export function OnboardingSheet() {
               aria-checked={clubId === c.id}
               onClick={() => setClub(c.id)}
               className={cn(
-                "relative flex h-28 flex-col items-center justify-start gap-2 rounded-2xl px-2 pt-4 text-center text-sm font-medium outline-none ring-1 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+                "relative flex h-28 flex-col items-center justify-start gap-2 rounded-2xl px-2 pt-4 text-center text-sm font-medium outline-none ring-1 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
                 clubId === c.id ? "bg-primary text-primary-foreground ring-primary" : "ring-border hover:bg-raised",
               )}
             >
