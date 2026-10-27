@@ -7,11 +7,13 @@ import { playerName } from "@/lib/match";
 import { OnboardingSheet } from "./onboarding";
 import { useEffect, type ReactNode } from "react";
 
+import { usePrefs } from "@/features/profile/prefs-store";
 import { useLive } from "@/features/live/live-store";
 import { copy } from "@/lib/copy";
 import { routes } from "@/lib/routes";
 
 import { CatchupDialog, RecapDialog } from "@/features/companion/catchup-dialog";
+import { PlayerSheet } from "@/features/player/player-sheet";
 import { PunditPanel } from "@/features/pundit/pundit-panel";
 import { useShell } from "./shell-store";
 import { CommandPalette } from "./command-palette";
@@ -46,8 +48,9 @@ function GoalToaster() {
   const router = useRouter();
   const meta = useLive((s) => s.meta);
   const id = goal?.signal_id;
+  const notify = usePrefs((s) => s.notifyGoals);
   useEffect(() => {
-    if (!goal || pathname === routes.live) return;
+    if (!goal || pathname === routes.live || !notify) return;
     const scorer = playerName(meta, goal.player_ids[0]);
     toast(`GOAL ${goal.minute_label}${scorer ? ` ${scorer}` : ""}`, { action: { label: copy.toast.view, onClick: () => router.push(routes.live) } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -60,12 +63,14 @@ function Drawers() {
   const catchup = useShell((s) => s.catchupOpen);
   const recap = useShell((s) => s.recapOpen);
   const pundit = useShell((s) => s.punditOpen);
+  const playerId = useShell((s) => s.playerId);
   const { setCatchup, setRecap, setPundit } = useShell.getState();
   return (
     <>
       <CatchupDialog open={catchup} onOpenChange={setCatchup} />
       <RecapDialog open={recap} onOpenChange={setRecap} />
       <PunditPanel open={pundit} onOpenChange={setPundit} />
+      <PlayerSheet playerId={playerId} onClose={() => useShell.getState().setPlayerId(null)} returnFocus={() => {}} />
     </>
   );
 }

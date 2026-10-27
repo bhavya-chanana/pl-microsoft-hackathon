@@ -124,22 +124,11 @@ export function TeamComparison() {
         <Kpi label={L.xg} home={h.xg} away={a.xg} digits={2} />
       </ul>
       <div className="mt-2 flex flex-col gap-5">
-        <StatRow label={L.possession} home={possession.home} away={possession.away} unit="%" />
-        <StatRow label={L.shots} home={h.shots} away={a.shots} />
         <StatRow label={L.onTarget} home={h.shots_on_target} away={a.shots_on_target} />
-        <StatRow label={L.xg} home={h.xg} away={a.xg} digits={2} />
+        <StatRow label={L.passes} home={h.passes} away={a.passes} />
+        <StatRow label={L.corners} home={h.corners} away={a.corners} />
+        <StatRow label={L.fouls} home={h.fouls} away={a.fouls} />
       </div>
-      <details className="group mt-1 rounded-2xl border px-4 py-1 open:pb-4">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-medium [&::-webkit-details-marker]:hidden">
-          {copy.stats.moreStats}
-          <span aria-hidden className="text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
-        </summary>
-        <div className="mt-3 flex flex-col gap-5">
-          <StatRow label={L.passes} home={h.passes} away={a.passes} />
-          <StatRow label={L.corners} home={h.corners} away={a.corners} />
-          <StatRow label={L.fouls} home={h.fouls} away={a.fouls} />
-        </div>
-      </details>
     </section>
   );
 }

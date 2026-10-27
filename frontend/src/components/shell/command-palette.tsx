@@ -3,13 +3,14 @@
 import { Code2, Compass, History, MessageCircleQuestion, Moon, Newspaper, Radio, Search, Sparkles, ChartColumn, ClipboardList, Route } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { copy } from "@/lib/copy";
 import { routes } from "@/lib/routes";
 
+import { PaletteSearch } from "./palette-search";
 import { useShell } from "./shell-store";
 
 /** The ⌘K chip in the top bar (icon only below 1024px). */
@@ -37,6 +38,7 @@ export function CommandPalette() {
   const setDev = useShell((s) => s.setDev);
   const showDev = useShell((s) => s.showDev);
   const { resolvedTheme, setTheme } = useTheme();
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -58,10 +60,11 @@ export function CommandPalette() {
     fn();
   };
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} title={copy.palette.title} description={copy.palette.placeholder} className="glass-strong sm:max-w-xl">
+    <CommandDialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQuery(""); }} title={copy.palette.title} description={copy.palette.placeholder} className="glass-strong sm:max-w-xl">
       <Command className="bg-transparent">
-      <CommandInput placeholder={copy.palette.placeholder} />
+      <CommandInput placeholder={copy.palette.placeholder} value={query} onValueChange={setQuery} />
       <CommandList className="max-h-[60dvh] overscroll-contain">
+        {query.trim().length >= 2 && <PaletteSearch close={() => setOpen(false)} />}
         <CommandEmpty>{copy.palette.empty}</CommandEmpty>
         <CommandGroup heading={copy.palette.do}>
           <CommandItem onSelect={run(() => useShell.getState().setCatchup(true))}>

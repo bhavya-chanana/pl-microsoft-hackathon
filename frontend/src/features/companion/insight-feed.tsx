@@ -9,7 +9,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useFeed } from "@/features/live/queries";
 import { useFanProfile } from "@/features/profile/profile-store";
 import { copy } from "@/lib/copy";
-import { cn } from "@/lib/utils";
 
 import type { FeedItem } from "@/lib/contract";
 
@@ -32,12 +31,10 @@ export function FeedSkeleton() {
 /** Personalised, fact-checked insight feed. Newest first. */
 export function InsightFeed({
   limit,
-  carousel = false,
   highlights = false,
   filter,
 }: {
   limit?: number;
-  carousel?: boolean;
   /** Only the big moments plus the very latest item. */
   highlights?: boolean;
   filter?: (item: FeedItem) => boolean;
@@ -72,10 +69,10 @@ export function InsightFeed({
     return <EmptyState>{copy.feed.empty}</EmptyState>;
   }
   return (
-    <ol className={cn("flex gap-3", carousel ? "snap-x snap-mandatory overflow-x-auto overscroll-x-contain pb-2 md:snap-none md:flex-col md:overflow-visible md:pb-0" : "flex-col")} aria-label={copy.feed.heading}>
+    <ol className="flex flex-col gap-3" aria-label={copy.feed.heading}>
       <AnimatePresence initial={false}>
         {items.map((item) => (
-          <li key={item.insight_id} className={cn(carousel && "w-[85%] shrink-0 snap-start md:w-full")}>
+          <li key={item.insight_id}>
             <InsightCard item={item} language={language} />
           </li>
         ))}

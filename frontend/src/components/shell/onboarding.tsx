@@ -53,6 +53,7 @@ export function OnboardingSheet() {
     <Dialog open={open} onOpenChange={(o) => !o && done()}>
       <DialogContent
         showCloseButton={false}
+        initialFocus={(type) => type === "keyboard"}
         className="gap-5 p-6 sm:max-w-md max-sm:top-auto max-sm:bottom-0 max-sm:max-w-none max-sm:translate-y-0 max-sm:rounded-b-none max-sm:rounded-t-[28px] max-sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
       >
         <div className="flex flex-col gap-1">
@@ -68,14 +69,14 @@ export function OnboardingSheet() {
               aria-checked={clubId === c.id}
               onClick={() => setClub(c.id)}
               className={cn(
-                "relative flex h-28 flex-col items-center justify-start gap-2 rounded-2xl px-2 pt-4 text-center text-sm font-medium ring-1 transition-colors",
-                clubId === c.id ? "bg-raised ring-2 ring-primary" : "ring-border hover:bg-raised",
+                "relative flex h-28 flex-col items-center justify-start gap-2 rounded-2xl px-2 pt-4 text-center text-sm font-medium outline-none ring-1 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+                clubId === c.id ? "bg-primary text-primary-foreground ring-primary" : "ring-border hover:bg-raised",
               )}
             >
               <span aria-hidden className={cn("size-9 rounded-full", c.tone)} />
               <span className="line-clamp-2 min-h-10 leading-5">{c.name}</span>
               {clubId === c.id && (
-                <span aria-hidden className="absolute top-1.5 right-1.5 grid size-5 place-items-center rounded-full bg-primary text-primary-foreground">
+                <span aria-hidden className="absolute top-1.5 right-1.5 grid size-5 place-items-center rounded-full bg-primary-foreground text-primary">
                   <Check className="size-3.5" />
                 </span>
               )}

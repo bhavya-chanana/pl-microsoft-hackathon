@@ -184,7 +184,7 @@ function MomentCard({ item, language }: { item: FeedItem; language: Language }) 
               <dt className="text-[13px] text-muted-foreground">{n.label}</dt>
               <dd className="font-display text-lg font-semibold tnum">
                 {n.value}
-                {n.unit && <span className="ml-0.5 text-xs font-normal">{n.unit}</span>}
+                {n.unit && !n.value.trim().endsWith(n.unit) && <span className="ml-0.5 text-xs font-normal">{n.unit}</span>}
               </dd>
             </div>
           ))}
@@ -237,7 +237,7 @@ function MomentRow({ item, language }: { item: FeedItem; language: Language }) {
         <span aria-hidden className={cn("mt-2 size-2 shrink-0 rounded-full", side ? sideTone[side].bg : "bg-subtle")} />
         <div className="min-w-0 flex-1">
           <p className="text-[15px] leading-6 font-medium">{item.headline}</p>
-          {item.body && <p className="line-clamp-1 text-[14px] text-muted-foreground">{item.body}</p>}
+          {item.body && <p className="line-clamp-2 text-[14px] text-muted-foreground">{item.body}</p>}
         </div>
         <span aria-hidden className="mt-0.5 flex shrink-0 items-center gap-1 text-[13px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
           {copy.feed.details}

@@ -1,5 +1,6 @@
 "use client";
 
+import { usePrefs } from "@/features/profile/prefs-store";
 import { useCoach } from "@/features/coach/coach-store";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { LazyMotion, MotionConfig } from "motion/react";
@@ -19,6 +20,7 @@ function LiveStream({ children }: { children: ReactNode }) {
     void profileStore.persist.rehydrate();
     void useFans.persist.rehydrate();
     void useCoach.persist.rehydrate();
+    void usePrefs.persist.rehydrate();
   }, []);
   return <LiveStreamContext value={stream}>{children}</LiveStreamContext>;
 }

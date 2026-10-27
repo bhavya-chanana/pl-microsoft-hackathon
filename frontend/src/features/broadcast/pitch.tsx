@@ -101,9 +101,11 @@ function Dot({ entity, meta, tweenMs, favourite, selected, scale, onSelect, onHo
             onSelect?.(id, e.currentTarget);
           }
         },
-        onPointerEnter: () => onHover?.(id),
+        // Name tags are for a mouse hover or keyboard focus only; touch taps and programmatic focus
+        // (returning from a sheet) must not leave one stuck on the pitch.
+        onPointerEnter: (e: React.PointerEvent<SVGGElement>) => onHover?.(e.pointerType === "mouse" ? id : null),
         onPointerLeave: () => onHover?.(null),
-        onFocus: () => onHover?.(id),
+        onFocus: (e: React.FocusEvent<SVGGElement>) => onHover?.(e.currentTarget.matches(":focus-visible") ? id : null),
         onBlur: () => onHover?.(null),
       })}
     >

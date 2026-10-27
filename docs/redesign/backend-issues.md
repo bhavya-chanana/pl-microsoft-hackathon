@@ -27,3 +27,7 @@ Frontend only renders backend text and numbers here. I did not touch the backend
    not yet `full_time` when the brief was generated (stoppage time), or the extra-man detector is not in LIVE_ONLY
    (LIVE_ONLY = _game_state, _card_risk, _fresh_legs). Also the brief is cached with "As of 90+5'" and not regenerated on
    the status change. Fix: add the extra-man detector to LIVE_ONLY and invalidate the cached brief on full time.
+
+## From fan review 2
+- Engine emits a `kickoff` event after every goal (restart), with minute labels such as 90+3'. The frontend now keeps only the first kick-off per half; the backend should emit these as `restart` or omit them.
+- Insight key_numbers sometimes carry the unit inside `value` ("12.7 m") as well as in `unit`. The frontend now drops the duplicate; the backend should send one or the other.

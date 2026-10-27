@@ -21,6 +21,21 @@ export type ConnectionStatus = "connecting" | "live" | "finished" | "archived" |
 /** Event types that belong on the fan timeline (passes and carries stay in the engine). */
 const KEY_EVENTS = new Set(["goal", "shot", "save", "card", "substitution", "kickoff", "half_time", "full_time"]);
 
+/**
+ * Keeps the fan timeline to real match events. The engine also emits a "kickoff" after every goal
+ * (a restart); only the first kick-off of each half belongs here.
+ */
+function fanEvents(events: MatchEvent[]): MatchEvent[] {
+  const started = new Set<number>();
+  return events.filter((e) => {
+    if (!KEY_EVENTS.has(e.type)) return false;
+    if (e.type !== "kickoff") return true;
+    if (started.has(e.period)) return false;
+    started.add(e.period);
+    return true;
+  });
+}
+
 type LiveStore = {
   status: ConnectionStatus;
   meta: MatchMeta | null;
@@ -92,7 +107,7 @@ export const useLive = create<LiveStore>()((set) => ({
   polls: {},
   fanVersion: 0,
   setStatus: (status) => set({ status }),
-  setTimeline: (timeline) => set({ timeline: timeline.filter((e) => KEY_EVENTS.has(e.type)) }),
+  setTimeline: (timeline) => set({ timeline: fanEvents(timeline) }),
   apply: (message) =>
     set((s) => {
       switch (message.type) {
@@ -101,7 +116,7 @@ export const useLive = create<LiveStore>()((set) => ({
             status: message.archived ? "archived" : message.finished ? "finished" : "live",
             meta: message.meta,
             state: message.state,
-            timeline: message.timeline.filter((e) => KEY_EVENTS.has(e.type)),
+            timeline: fanEvents(message.timeline),
             recentPasses: [],
             insights: Object.fromEntries(message.insights.map((i) => [i.insight_id, i])),
             overlays: Object.fromEntries(message.overlays.map((o) => [o.overlay_id, o])),
@@ -133,7 +148,7 @@ export const useLive = create<LiveStore>()((set) => ({
         }
         case "event":
           if (message.event.type === "pass") return { recentPasses: [...s.recentPasses, message.event].slice(-PASSES_KEEP) };
-          return KEY_EVENTS.has(message.event.type) ? { timeline: [...s.timeline, message.event] } : {};
+          return KEY_EVENTS.has(message.event.type) ? { timeline: fanEvents([...s.timeline, message.event]) } : {};
         case "correction":
           return { correctionsVersion: s.correctionsVersion + 1 };
         case "signal":
