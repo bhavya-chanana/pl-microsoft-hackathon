@@ -30,12 +30,12 @@ function Section({ title, children, className }: { title: string; children: Reac
 }
 
 /** Cumulative chances created per team as a step chart: minute ticks, goal dots on the line, end totals. */
-export function XgTimeline({ meta, timeline }: { meta: MatchMeta; timeline: MatchEvent[] }) {
+export function XgTimeline({ meta, timeline, minutes = 90 }: { meta: MatchMeta; timeline: MatchEvent[]; minutes?: number }) {
   const series = useMemo(() => {
     const out = { home: [{ t: 0, v: 0 }], away: [{ t: 0, v: 0 }] };
     const total = { home: 0, away: 0 };
     const goals: { t: number; v: number; side: "home" | "away" }[] = [];
-    let end = 90 * 60;
+    let end = minutes * 60;
     for (const e of timeline) {
       end = Math.max(end, e.elapsed);
       const side = sideOf(meta, e.team_id);
@@ -45,7 +45,7 @@ export function XgTimeline({ meta, timeline }: { meta: MatchMeta; timeline: Matc
       if (e.outcome === "goal") goals.push({ t: e.elapsed, v: total[side], side });
     }
     return { ...out, goals, end, max: Math.max(0.5, total.home, total.away), total };
-  }, [meta, timeline]);
+  }, [meta, timeline, minutes]);
   const W = 300;
   const H = 120;
   const pad = { l: 26, r: 8, t: 8, b: 20 };
@@ -53,7 +53,7 @@ export function XgTimeline({ meta, timeline }: { meta: MatchMeta; timeline: Matc
   const Y = (v: number) => H - pad.b - (v / series.max) * (H - pad.t - pad.b);
   const path = (pts: { t: number; v: number }[]) =>
     pts.map((p, i) => `${i === 0 ? "M" : "L"} ${X(p.t)} ${Y(pts[i - 1]?.v ?? 0)} L ${X(p.t)} ${Y(p.v)}`).join(" ") + ` L ${X(series.end)} ${Y(pts[pts.length - 1].v)}`;
-  const ticks = [0, 45, 90].filter((m) => m * 60 <= series.end);
+  const ticks = (minutes < 90 ? [0, 15, 30, 45] : [0, 45, 90]).filter((m) => m * 60 <= series.end);
   const yTicks = [0, series.max / 2, series.max];
   return (
     <figure className="flex flex-col gap-2">
@@ -72,7 +72,7 @@ export function XgTimeline({ meta, timeline }: { meta: MatchMeta; timeline: Matc
           </g>
         ))}
         {ticks.map((m) => (
-          <text key={m} x={X(m * 60)} y={H - 6} textAnchor={m === 0 ? "start" : m === 90 ? "end" : "middle"} fontSize={8} className="fill-muted-foreground">
+          <text key={m} x={X(m * 60)} y={H - 6} textAnchor={m === 0 ? "start" : m === minutes ? "end" : "middle"} fontSize={8} className="fill-muted-foreground">
             {m}&prime;
           </text>
         ))}

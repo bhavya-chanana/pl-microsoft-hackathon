@@ -111,7 +111,7 @@ function MomentumStrip({ meta }: { meta: MatchMeta }) {
     ` L ${X(rows[rows.length - 1].elapsed)} ${H / 2} Z`;
   return (
     <figure className="flex flex-col gap-1">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-14 w-full" role="img" aria-label={copy.coachPage.momentum}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-14 w-full" role="img" aria-label={copy.coachPage.momentum}>
         <line x1={0} x2={W} y1={H / 2} y2={H / 2} className="stroke-border" strokeWidth={0.6} />
         <path d={area(1)} className="fill-home/35" />
         <path d={area(-1)} className="fill-away/35" />
@@ -127,18 +127,14 @@ function MomentumStrip({ meta }: { meta: MatchMeta }) {
   );
 }
 
-function SplitBar({ label, home, away, unit = "%" }: { label: string; home: number; away: number; unit?: string }) {
-  const total = home + away || 1;
+/** A 36px two-segment bar with the percentage inside (possession, territory). */
+function SplitBar({ label, home, away }: { label: string; home: number; away: number }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="font-display text-[28px] leading-8 font-semibold tabular-nums text-home-text">{formatNumber(home)}{unit}</span>
-        <span className="text-[13px] font-medium text-muted-foreground">{label}</span>
-        <span className="font-display text-[28px] leading-8 font-semibold tabular-nums text-away-text">{formatNumber(away)}{unit}</span>
-      </div>
-      <div aria-hidden className="flex h-2 gap-0.5 overflow-hidden rounded-full">
-        <span className="bg-home" style={{ flexGrow: home / total || 0.0001 }} />
-        <span className="bg-away" style={{ flexGrow: away / total || 0.0001 }} />
+      <span className="text-center text-sm text-muted-foreground">{label}</span>
+      <div className="flex h-9 gap-2" role="img" aria-label={`${label}: ${home}% to ${away}%`}>
+        <span className="flex items-center rounded-full bg-home px-3 text-sm font-medium text-white tabular-nums transition-[flex-grow] duration-500" style={{ flexGrow: home || 1, flexBasis: 0 }}>{home}%</span>
+        <span className="flex items-center justify-end rounded-full bg-away px-3 text-sm font-medium text-[#1d1d1d] tabular-nums transition-[flex-grow] duration-500" style={{ flexGrow: away || 1, flexBasis: 0 }}>{away}%</span>
       </div>
     </div>
   );
@@ -167,18 +163,22 @@ function GameSoFar({ meta, half, wide }: { meta: MatchMeta; half: boolean; wide:
         {copy.coachPage.gameSoFar}
         {half && <span className="ml-2 text-[13px] font-normal text-muted-foreground">{copy.coachPage.firstHalf}</span>}
       </h2>
+      <div className="grid gap-4 min-[700px]:grid-cols-2 min-[700px]:gap-6 min-[1100px]:grid-cols-1">
       {thin ? (
         <p className="text-[15px] text-muted-foreground">{copy.coachPage.earlyDays}</p>
       ) : (
         <div className="flex flex-col gap-1">
           <span className="text-[13px] font-medium text-muted-foreground">{analyst ? "xG" : copy.stats.labels.xg}</span>
-          <XgTimeline meta={meta} timeline={shown} />
+          <div className="max-w-md min-[700px]:max-w-none"><XgTimeline meta={meta} timeline={shown} minutes={half ? 45 : 90} /></div>
         </div>
       )}
-      <MomentumStrip meta={meta} />
       <div className="flex flex-col gap-4">
+      <MomentumStrip meta={meta} />
+      <div className="flex flex-col gap-3">
         {tilt && <SplitBar label={copy.coachPage.territory} home={tilt.home} away={tilt.away} />}
         {possession ? <SplitBar label={copy.stats.labels.possession} home={possession.home} away={possession.away} /> : <Skeleton className="h-12 w-full" aria-hidden />}
+      </div>
+      </div>
       </div>
     </section>
   );
