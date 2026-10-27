@@ -1,0 +1,81 @@
+{
+ "head": {
+  "vars": []
+ },
+ "results": {
+  "bindings": [
+   {
+    "comp": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q9448"
+    },
+    "season": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1"
+    },
+    "start": {
+     "type": "literal",
+     "value": "2019-08-09T00:00:00Z"
+    },
+    "winner": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q900001"
+    }
+   },
+   {
+    "comp": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q15804"
+    },
+    "season": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2"
+    },
+    "start": {
+     "type": "literal",
+     "value": "2021-08-21T00:00:00Z"
+    },
+    "winner": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q900001"
+    }
+   },
+   {
+    "comp": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q18756"
+    },
+    "season": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q3"
+    },
+    "start": {
+     "type": "literal",
+     "value": "2017-07-04T00:00:00Z"
+    },
+    "winner": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q900002"
+    }
+   },
+   {
+    "comp": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q9448"
+    },
+    "season": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4"
+    },
+    "start": {
+     "type": "literal",
+     "value": "2020-09-12T00:00:00Z"
+    },
+    "winner": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q999999"
+    }
+   }
+  ]
+ }
+}

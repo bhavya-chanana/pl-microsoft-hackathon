@@ -47,10 +47,14 @@ feed item ─▶ stats engine ─▶ publish to clients (immediately)
 - The live feed never waits for the database: score, clock and timeline still reach clients within a second
   (BRD §10.1). Writes are queued and flushed every 250 ms by one background task, grouped per container and run
   into transactional batches of up to 100 items.
-- Flushes run in order, so a stored event implies every earlier event of the run is stored. Several writes of the
-  same item between flushes (an insight upgraded by the agents, the run's position) collapse into one.
+- Flushes run serially. Several writes of the same item between flushes (an insight upgraded by the agents, the
+  run's position) collapse into one. Each container batch is atomic, but the whole run spans containers: a
+  persistent failure can leave an incomplete feed or a run position ahead of stored events. There is no
+  cross-container crash checkpoint guaranteeing every earlier item was stored.
 - A failed batch is retried three times with backoff. If the database stays unreachable the match keeps playing and
   `/api/health` reports `dropped` and `last_error`; it never stops the feed.
+- Graceful shutdown stops producers and lets the active writer flush finish before its final drain. An abrupt
+  process kill can still lose queued writes; recovery after a persistent failure is best effort.
 
 ## Read path and cache
 
@@ -83,6 +87,17 @@ A finished run, or none, starts a new run from kick-off. `POST /api/replay` alwa
   `"archived": true` so clients show it as a past match rather than waiting for more.
 
 Runs stored before team names were kept on the run document still open; the list shows their team ids instead.
+Reopening an archive does not requeue explanation jobs. The match feed stays fixed, while explicit fan requests
+such as a new catch-up or rating may still write fan output or votes; this is not a database-wide read-only mode.
+
+## Synthetic season data migration
+
+The optional [synthetic season seed](SYNTHETIC_SEASONS.md) imports independently generated fictional archives,
+using stable IDs and per-archive completion markers after document readback. It previews by default and requires
+an explicit local emulator/database for `--apply`; it does not use the live server's fallback-to-memory path or
+modify its `_active` pointer. An interrupted seed must be retried before treating its archive as complete.
+Container/schema creation remains in Bicep for Azure and in the emulator store's setup; this seed is a versioned
+data migration, separate from the local real-name Parquet knowledge warehouse.
 
 ## Running it
 

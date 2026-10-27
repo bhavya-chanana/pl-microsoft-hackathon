@@ -1,11 +1,13 @@
 "use client";
 
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { z } from "zod";
 
-import { getJson } from "@/lib/api";
+import { ApiError, getJson, postJson } from "@/lib/api";
 import {
+  BoardCreated,
+  type BoardRequest,
   Catchup,
   type CatchupWindow,
   CoachBrief,
@@ -21,10 +23,15 @@ import {
   ScriptCheck,
   PlayerStats,
   Recap,
+  RolloutView,
+  type RolloutVariant,
   RunSummary,
+  TacticsBoard,
   TeamStats,
 } from "@/lib/contract";
 import { profileQuery } from "@/features/profile/profile-store";
+
+import { FIXTURE_BOARD_PREFIX } from "@/features/tactics/constants";
 
 import { useLive } from "./live-store";
 
@@ -33,7 +40,7 @@ export const queryKeys = {
   catchup: (m: CatchupWindow, p: FanProfile) =>
     ["catchup", m, p.mode, p.language, p.clubId, p.playerId, p.metric] as const,
   recap: (p: FanProfile) => ["recap", p.mode, p.language, p.clubId, p.playerId, p.metric] as const,
-  coach: (teamId: string, language: string) => ["coach", teamId, language] as const,
+  coach: (teamId: string, language: string, runId: string | null) => ["coach", teamId, language, runId] as const,
   player: (id: string) => ["player", id] as const,
   playerEvents: (id: string) => ["player-events", id] as const,
   team: (id: string) => ["team", id] as const,
@@ -46,7 +53,12 @@ export const queryKeys = {
   pulse: ["pulse"] as const,
   scenarios: ["scenarios"] as const,
   scriptCheck: ["script-check"] as const,
+  tacticsBoard: (id: string) => ["tactics-board", id] as const,
+  rollout: (id: string, tacticId: string, variant: RolloutVariant) => ["rollout", id, tacticId, variant] as const,
 };
+
+/** Boards with the fixture id prefix are answered from bundled sample data (the `?fixture=1` demo), not the backend. */
+const isFixture = (id: string) => id.startsWith(FIXTURE_BOARD_PREFIX);
 
 /** Refresh live queries when new insights land, at most once a second. */
 function useInsightRefresh(prefix: string) {
@@ -94,13 +106,29 @@ export function useRecap(profile: FanProfile, enabled: boolean) {
 
 /** Coach brief for one side; refreshed as new moments land (the backend answers once per match minute). */
 export function useCoachBrief(teamId: string | null, language: string) {
+  const runId = useLive((s) => s.runId);
   useInsightRefresh("coach");
   return useQuery({
-    queryKey: queryKeys.coach(teamId ?? "", language),
+    queryKey: queryKeys.coach(teamId ?? "", language, runId),
     queryFn: ({ signal }) => getJson("coach", CoachBrief, { team_id: teamId, language }, signal),
-    enabled: Boolean(teamId),
-    placeholderData: keepPreviousData,
+    enabled: Boolean(teamId && runId),
   });
+}
+
+/** Stats for many players at once (the Players table), sharing the cache with the player sheet. */
+export function usePlayersStats(playerIds: string[]) {
+  const results = useQueries({
+    queries: playerIds.map((id) => ({
+      queryKey: queryKeys.player(id),
+      queryFn: ({ signal }: { signal: AbortSignal }) => getJson(`players/${id}`, PlayerStats, undefined, signal),
+      refetchInterval: 15_000,
+    })),
+  });
+  const map = new Map<string, PlayerStats>();
+  results.forEach((r, i) => {
+    if (r.data) map.set(playerIds[i], r.data);
+  });
+  return map;
 }
 
 export function usePlayerStats(playerId: string | null) {
@@ -125,11 +153,14 @@ export function usePlayerEvents(playerId: string | null) {
 }
 
 export function useTeamStats(teamId: string | null) {
+  const runId = useLive((s) => s.runId);
   return useQuery({
-    queryKey: queryKeys.team(teamId ?? ""),
+    queryKey: [...queryKeys.team(teamId ?? ""), runId],
     queryFn: ({ signal }) => getJson(`teams/${teamId}`, TeamStats, undefined, signal),
     enabled: Boolean(teamId),
-    refetchInterval: 5_000,
+    // A 404 means this team is not in the loaded match (stale ids); asking again will not help.
+    retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+    refetchInterval: (query) => (query.state.error instanceof ApiError && query.state.error.status === 404 ? false : 5_000),
   });
 }
 
@@ -231,5 +262,49 @@ export function useScriptCheck() {
     },
     refetchInterval: 5_000,
     placeholderData: keepPreviousData,
+  });
+}
+
+/** Starts a Tactics Board; the backend answers 202 with the frozen situation and builds the tactics in the background. */
+export function useCreateBoard(fixture: boolean) {
+  return useMutation({
+    mutationFn: async (request: BoardRequest) =>
+      fixture
+        ? (await import("@/features/tactics/fixtures")).createFixtureBoard(request)
+        : postJson("tactics/boards", request, BoardCreated),
+  });
+}
+
+/** A board, polled every 750 ms until every tactic is scored (or the build failed). */
+export function useTacticsBoard(boardId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.tacticsBoard(boardId ?? ""),
+    queryFn: async ({ signal }) =>
+      boardId && isFixture(boardId)
+        ? (await import("@/features/tactics/fixtures")).fixtureBoard(boardId)
+        : getJson(`tactics/boards/${boardId}`, TacticsBoard, undefined, signal),
+    enabled: Boolean(boardId),
+    refetchInterval: (query) => {
+      const { data, error } = query.state;
+      if (data?.status === "done" || data?.status === "failed") return false;
+      if (error instanceof ApiError && error.status === 404) return false;
+      if (error && query.state.errorUpdateCount >= 5) return false; // the engine is gone; stop asking
+      return 750;
+    },
+    staleTime: 0,
+  });
+}
+
+/** One simulated branch (5 Hz frames, events, intent drawings). A rollout never changes once made. */
+export function useRollout(boardId: string | null, tacticId: string | null, variant: RolloutVariant, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.rollout(boardId ?? "", tacticId ?? "", variant),
+    queryFn: async ({ signal }) =>
+      boardId && isFixture(boardId)
+        ? (await import("@/features/tactics/fixtures")).fixtureRollout(tacticId ?? "", variant)
+        : getJson(`tactics/boards/${boardId}/rollouts/${tacticId}`, RolloutView, { variant }, signal),
+    enabled: Boolean(boardId && tacticId) && enabled,
+    staleTime: Infinity,
+    retry: false,
   });
 }

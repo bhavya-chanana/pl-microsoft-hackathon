@@ -1,150 +1,86 @@
 "use client";
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BroadcastMonitor } from "@/features/broadcast/broadcast-monitor";
-import { FanPolls } from "@/features/fans/fan-polls";
-import { PlayerRatings } from "@/features/fans/player-ratings";
+import Link from "next/link";
+import { MonitorPlay } from "lucide-react";
+
+import { buttonVariants } from "@/components/ui/button";
 import { MomentumBar } from "@/features/broadcast/momentum-bar";
-import { useLive } from "@/features/live/live-store";
-import { ProfilePanel } from "@/features/profile/profile-panel";
+import { FanPolls } from "@/features/fans/fan-polls";
+import { ActionButtons, FloatingActions } from "@/features/live/floating-actions";
+import { ScorersStrip, TopStats } from "@/features/live/live-extras";
+import { LivePitch } from "@/features/live/live-pitch";
+import { StoryLine } from "@/features/live/story-line";
+import { useCoach } from "@/features/coach/coach-store";
 import { useProfile } from "@/features/profile/profile-store";
-import { PunditPanel } from "@/features/pundit/pundit-panel";
-import { PastMatches } from "@/features/replay/past-matches";
-import { ReplayControls } from "@/features/replay/replay-controls";
 import { MetricTile } from "@/features/stats/metric-tile";
 import { ShotMapPanel } from "@/features/stats/shot-map";
-import { PlayerCard, TeamComparison } from "@/features/stats/team-stats";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import { copy } from "@/lib/copy";
+import { routes } from "@/lib/routes";
+import { cn } from "@/lib/utils";
 
-import { CatchupDialog, RecapDialog } from "./catchup-dialog";
 import { InsightFeed } from "./insight-feed";
-import { MatchTimeline } from "./match-timeline";
 import { MatchPulse } from "./match-pulse";
-import { ListenToggle } from "./narration";
 
-function MatchHeading() {
-  const meta = useLive((s) => s.meta);
-  return (
-    <div className="flex flex-col gap-0.5">
-      <h1 className="font-display text-display font-semibold">
-        {meta ? `${meta.home.name} v ${meta.away.name}` : copy.nav.matchCentre}
-      </h1>
-      {meta && (
-        <p className="text-sm text-muted-foreground">
-          {meta.competition}, {meta.venue}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function StatsPanel() {
-  return (
-    <div className="flex flex-col gap-6">
-      <PlayerCard />
-      <TeamComparison />
-    </div>
-  );
-}
-
-const trigger = "h-11 flex-1 px-3 text-sm";
-
+/**
+ * The Live page: story, pitch, flow, then what just happened. A document-scroll grid (8/4) with no
+ * inner scrolling; on mobile the columns dissolve into one stack in a fixed order.
+ */
 export function MatchCentre() {
-  const wide = useMediaQuery("(min-width: 1024px)");
   const analyst = useProfile((s) => s.mode === "analyst");
+  const coachMode = useCoach((s) => s.coachMode);
   return (
-    <main className="mx-auto grid max-w-screen-2xl gap-6 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:py-6">
-      <div className="flex min-w-0 flex-col gap-4">
-        <MatchHeading />
-        <BroadcastMonitor interactive />
-        <MomentumBar />
-        <MatchPulse />
-        <MetricTile />
-        <FanPolls />
-        {analyst && <ShotMapPanel />}
-        {wide && (
-          <Tabs defaultValue="timeline" className="gap-4">
-            <TabsList className="h-11 w-full max-w-md">
-              <TabsTrigger value="timeline" className={trigger}>
-                {copy.tabs.timeline}
-              </TabsTrigger>
-              <TabsTrigger value="stats" className={trigger}>
-                {copy.tabs.stats}
-              </TabsTrigger>
-              <TabsTrigger value="ratings" className={trigger}>
-                {copy.tabs.ratings}
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="timeline">
-              <div tabIndex={0} aria-label={copy.timeline.heading} className="max-h-96 overflow-y-auto rounded-lg border bg-card px-4">
-                <MatchTimeline />
-              </div>
-            </TabsContent>
-            <TabsContent value="stats">
-              <StatsPanel />
-            </TabsContent>
-            <TabsContent value="ratings">
-              <PlayerRatings />
-            </TabsContent>
-          </Tabs>
-        )}
-        {wide && <ReplayControls className="max-w-xl" />}
-        {wide && <PastMatches className="max-w-xl" />}
-      </div>
-      <aside
-        aria-label={copy.feed.heading}
-        className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:h-[calc(100dvh-6rem)]"
-      >
-        <div className="flex flex-col gap-4 rounded-lg border bg-card p-4 shadow-raised">
-          <CatchupDialog />
-          <PunditPanel />
-          <RecapDialog />
-          <ListenToggle />
+    <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 pt-4 pb-8 md:pb-12 md:px-6 md:pt-6 xl:px-8">
+      <h1 className="sr-only">{copy.nav.live}</h1>
+      <div id="live-actions" className="flex items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <StoryLine />
         </div>
-        <ProfilePanel className="rounded-lg border bg-card p-4" />
-        {wide ? (
-          <section aria-labelledby="feed-heading" className="flex min-h-0 flex-1 flex-col gap-3">
-            <h2 id="feed-heading" className="font-display text-lg font-semibold">
+        <ActionButtons className="hidden shrink-0 md:flex" />
+      </div>
+      <ActionButtons size="bar" className="w-full md:hidden" />
+      <ScorersStrip />
+      <div className="grid items-start gap-4 min-[1100px]:grid-cols-12 min-[1100px]:gap-6">
+        <div className="contents min-[1100px]:col-span-8 min-[1100px]:flex min-[1100px]:flex-col min-[1100px]:gap-4">
+          <div className="order-1 min-w-0 min-[1100px]:order-none">
+            <LivePitch />
+            <div className="mt-2 flex justify-end">
+              <Link href={routes.broadcast} className={cn(buttonVariants({ variant: "outline" }), "h-11 gap-2 px-4")}><MonitorPlay aria-hidden />{copy.nav.broadcast}</Link>
+            </div>
+          </div>
+          <div className="order-2 min-w-0 min-[1100px]:order-none">
+            <MomentumBar />
+          </div>
+          <div className="order-2 min-w-0 min-[1100px]:order-none">
+            <TopStats />
+          </div>
+          <div className="order-4 min-w-0 min-[1100px]:order-none">
+            <MatchPulse />
+          </div>
+          <div className="order-5 min-w-0 empty:hidden min-[1100px]:order-none">
+            <MetricTile />
+          </div>
+          <div className="order-6 min-w-0 min-[1100px]:order-none">
+            {!coachMode && <FanPolls />}
+          </div>
+          {analyst && (
+            <div className="order-5 min-w-0 min-[1100px]:order-none">
+              <ShotMapPanel />
+            </div>
+          )}
+        </div>
+        <div className="contents min-[1100px]:col-span-4 min-[1100px]:flex min-[1100px]:flex-col min-[1100px]:gap-4">
+          <section aria-labelledby="feed-heading" className="order-3 flex min-w-0 flex-col gap-3 min-[1100px]:order-none">
+            <h2 id="feed-heading" className="text-xl font-semibold">
               {copy.feed.heading}
             </h2>
-            <div tabIndex={0} aria-labelledby="feed-heading" className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-4">
-              <InsightFeed />
-            </div>
+            <InsightFeed limit={3} highlights />
+            <Link href={routes.moments} className={cn(buttonVariants({ variant: "secondary" }), "h-11 self-start px-4")}>
+              {copy.feed.seeAll}
+            </Link>
           </section>
-        ) : (
-          <Tabs defaultValue="feed" className="gap-4">
-            <TabsList className="h-11 w-full">
-              <TabsTrigger value="feed" className={trigger}>
-                {copy.tabs.feed}
-              </TabsTrigger>
-              <TabsTrigger value="timeline" className={trigger}>
-                {copy.tabs.timeline}
-              </TabsTrigger>
-              <TabsTrigger value="stats" className={trigger}>
-                {copy.tabs.stats}
-              </TabsTrigger>
-              <TabsTrigger value="ratings" className={trigger}>
-                {copy.tabs.ratings}
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="feed">
-              <InsightFeed />
-            </TabsContent>
-            <TabsContent value="timeline">
-              <MatchTimeline />
-            </TabsContent>
-            <TabsContent value="stats">
-              <StatsPanel />
-            </TabsContent>
-            <TabsContent value="ratings">
-              <PlayerRatings />
-            </TabsContent>
-          </Tabs>
-        )}
-        {!wide && <ReplayControls />}
-        {!wide && <PastMatches />}
-      </aside>
-    </main>
+        </div>
+      </div>
+      <FloatingActions />
+    </div>
   );
 }

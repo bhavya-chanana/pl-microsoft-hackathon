@@ -13,8 +13,13 @@ import { useFanProfile } from "@/features/profile/profile-store";
 import { CATCHUP_WINDOWS, type CatchupWindow, type FactCheck, type MatchMeta } from "@/lib/contract";
 import { copy } from "@/lib/copy";
 import { playerName } from "@/lib/match";
+import { cn } from "@/lib/utils";
 
 import { FactCheckBadge } from "./fact-check-badge";
+
+/** On a phone these open as a bottom sheet rather than a centred dialog. */
+const SHEET_ON_MOBILE =
+  "max-sm:top-auto max-sm:bottom-0 max-sm:max-w-none max-sm:translate-y-0 max-sm:rounded-b-none max-sm:rounded-t-[28px] max-sm:pb-[calc(1.25rem+env(safe-area-inset-bottom))]";
 
 function Loading({ label }: { label: string }) {
   return (
@@ -55,6 +60,7 @@ function Provenance({ factCheck, source }: { factCheck: FactCheck; source: strin
   return (
     <p className="flex flex-wrap items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
       <FactCheckBadge status={source === "data" && factCheck.status === "verified" ? "data_only" : factCheck.status} />
+      {factCheck.verification_scope && <span className="basis-full">{factCheck.verification_scope}</span>}
     </p>
   );
 }
@@ -74,8 +80,10 @@ function Header({ title, description }: { title: string; description?: string })
 }
 
 /** The primary action: "What did I miss?" for the last 5, 15 or 30 minutes. */
-export function CatchupDialog() {
-  const [open, setOpen] = useState(false);
+export function CatchupDialog({ className, open: controlled, onOpenChange }: { className?: string; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const [local, setLocal] = useState(false);
+  const open = controlled ?? local;
+  const setOpen = onOpenChange ?? setLocal;
   const [minutes, setMinutes] = useState<CatchupWindow>(15);
   const profile = useFanProfile();
   const meta = useLive((s) => s.meta);
@@ -83,11 +91,13 @@ export function CatchupDialog() {
   const data = query.data;
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="lg" className="h-12 w-full gap-2 text-base" disabled={!meta} />}>
-        <History aria-hidden className="size-5" />
-        {copy.catchup.cta}
-      </DialogTrigger>
-      <DialogContent showCloseButton={false} className="gap-5 p-5 sm:max-w-lg">
+      {controlled === undefined && (
+        <DialogTrigger render={<Button size="lg" className={cn("h-12 w-full gap-2 text-base", className)} disabled={!meta} />}>
+          <History aria-hidden className="size-5" />
+          {copy.catchup.cta}
+        </DialogTrigger>
+      )}
+      <DialogContent showCloseButton={false} className={cn("gap-5 p-5 sm:max-w-lg", SHEET_ON_MOBILE)}>
         <Header title={copy.catchup.heading} description={data ? `${data.from_minute} to ${data.to_minute}` : undefined} />
         <div className="flex flex-col gap-1.5">
           <span id="window-label" className="text-xs font-medium text-muted-foreground">
@@ -147,18 +157,22 @@ export function CatchupDialog() {
   );
 }
 
-export function RecapDialog() {
-  const [open, setOpen] = useState(false);
+export function RecapDialog({ open: controlled, onOpenChange }: { open?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const [local, setLocal] = useState(false);
+  const open = controlled ?? local;
+  const setOpen = onOpenChange ?? setLocal;
   const profile = useFanProfile();
   const meta = useLive((s) => s.meta);
   const query = useRecap(profile, open);
   const data = query.data;
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="outline" size="lg" className="h-12 w-full text-base" disabled={!meta} />}>
-        {copy.recap.cta}
-      </DialogTrigger>
-      <DialogContent showCloseButton={false} className="gap-5 p-5 sm:max-w-lg">
+      {controlled === undefined && (
+        <DialogTrigger render={<Button variant="outline" size="lg" className="h-12 w-full text-base" disabled={!meta} />}>
+          {copy.recap.cta}
+        </DialogTrigger>
+      )}
+      <DialogContent showCloseButton={false} className={cn("gap-5 p-5 sm:max-w-lg", SHEET_ON_MOBILE)}>
         <Header title={data?.title ?? copy.recap.heading} />
         <div lang={profile.language} aria-busy={query.isFetching} className="flex min-h-48 flex-col gap-4">
           {query.isPending ? (

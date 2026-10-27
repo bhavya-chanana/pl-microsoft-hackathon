@@ -1,0 +1,91 @@
+{
+ "head": {
+  "vars": []
+ },
+ "results": {
+  "bindings": [
+   {
+    "club": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q900001"
+    },
+    "clubLabel": {
+     "type": "literal",
+     "value": "Rovermere FC"
+    },
+    "founded": {
+     "type": "literal",
+     "value": "1886-01-01T00:00:00Z"
+    },
+    "countryLabel": {
+     "type": "literal",
+     "value": "Fictionland"
+    },
+    "stadiumLabel": {
+     "type": "literal",
+     "value": "Old Meadow"
+    },
+    "capacity": {
+     "type": "literal",
+     "value": "21000"
+    },
+    "article": {
+     "type": "uri",
+     "value": "https://en.wikipedia.org/wiki/Rovermere_F.C."
+    }
+   },
+   {
+    "club": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q900001"
+    },
+    "clubLabel": {
+     "type": "literal",
+     "value": "Rovermere FC"
+    },
+    "founded": {
+     "type": "literal",
+     "value": "1887-05-01T00:00:00Z"
+    },
+    "countryLabel": {
+     "type": "literal",
+     "value": "Fictionland"
+    },
+    "stadiumLabel": {
+     "type": "literal",
+     "value": "Rovermere Arena"
+    },
+    "capacity": {
+     "type": "literal",
+     "value": "45000"
+    },
+    "article": {
+     "type": "uri",
+     "value": "https://en.wikipedia.org/wiki/Rovermere_F.C."
+    }
+   },
+   {
+    "club": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q900002"
+    },
+    "clubLabel": {
+     "type": "literal",
+     "value": "Eastbridge Athletic"
+    },
+    "founded": {
+     "type": "literal",
+     "value": "1902-03-10T00:00:00Z"
+    },
+    "countryLabel": {
+     "type": "literal",
+     "value": "Fictionland"
+    },
+    "article": {
+     "type": "uri",
+     "value": "https://en.wikipedia.org/wiki/Eastbridge_Athletic_F.C."
+    }
+   }
+  ]
+ }
+}

@@ -26,16 +26,20 @@ from matchlens.agents.contracts import FanProfile, Language, Mode
 from matchlens.agents.llm import build_clients
 from matchlens.agents.pipeline import AgentTeam, InsightPipeline
 from matchlens.agents.pundit import MAX_QUESTION
-from matchlens.agents.scenario import MAX_PROMPT, write_storyline
+from matchlens.agents.scenario import (MAX_PROMPT, NO_MATCH_NOTE, OFFLINE_NOTE, SCENARIO_TIMEOUT_S, closest_preset,
+                                       write_storyline)
 from matchlens.agents.scenario import roster as scenario_roster
 from matchlens.agents.services import CATCHUP_WINDOWS, FanServices, narration_text, personalise_feed
+from matchlens.api.kb_routes import router as kb_router
+from matchlens.api.tactics_routes import router as tactics_router
+from matchlens.api.tactics_routes import service as tactics_service
 from matchlens.domain.models import EventType, SyntheticMatch
 from matchlens.ingest.adapters import ReplayControl, SyntheticReplayAdapter
 from matchlens.interpret.moments import moment
 from matchlens.interpret.pulse import pulse
 from matchlens.mcp_server.server import mcp
 from matchlens.runtime.fans import VOTER_PATTERN
-from matchlens.runtime.manager import manager
+from matchlens.runtime.manager import Recipe, manager
 from matchlens.runtime.session import MatchSession, event_payload
 from matchlens.simulator.roster import default_match_meta
 from matchlens.simulator.scenarios import PRESETS, check_storyline, presets, script_vs_reality
@@ -81,6 +85,7 @@ runtime: AgentRuntime | None = None
 async def lifespan(app: FastAPI):
     global runtime
     runtime = AgentRuntime()
+    tactics_service.set_clients(runtime.clients)
     store = await open_store()
     writer = WriteBehind(store)
     writer.start()
@@ -98,6 +103,7 @@ async def lifespan(app: FastAPI):
             )
         yield
         await manager.stop()
+        await tactics_service.close()
         await writer.close()  # flush what the match wrote last
         await store.close()
 
@@ -110,6 +116,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/mcp", mcp.streamable_http_app())
+app.include_router(tactics_router)  # /api/tactics/*: the Tactics Board
+app.include_router(kb_router)  # /api/kb/*: live only when MATCHLENS_KB_DIR is set
 
 # Local-only extensions (a package that exists only on never-pushed local branches).
 if importlib.util.find_spec("matchlens.local"):
@@ -127,7 +135,7 @@ def _session():
 
 
 class ReplayRequest(BaseModel):
-    seed: int = 7
+    seed: int = Field(default=7, ge=0, le=1_000_000)
     speed: float = Field(default=1.0, gt=0, le=60)
     start_minute: float = Field(default=0.0, ge=0, le=100)
 
@@ -177,6 +185,14 @@ async def health() -> dict[str, Any]:
 
 def _profile(mode: Mode, language: Language, club_id: str | None, player_id: str | None,
              metric: str | None) -> FanProfile:
+    """The fan's view of the loaded match. A club or player from another match (the browser keeps the
+    profile across matches) is ignored, not applied: it would only hide insights."""
+    s = manager.session
+    if s is not None:
+        if club_id not in (s.meta.home.team_id, s.meta.away.team_id):
+            club_id = None
+        if player_id not in s.meta.players:
+            player_id = None
     return FanProfile(mode=mode, language=language, club_id=club_id, player_id=player_id, metric=metric)
 
 
@@ -336,8 +352,29 @@ async def start_recorded(req: FeedRequest) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="no such recorded match")
     match = SyntheticMatch.model_validate_json(await asyncio.to_thread(path.read_text))
     control = ReplayControl(speed=req.speed, start_elapsed=req.start_minute * 60)
-    s = await manager.start_feed(SyntheticReplayAdapter(match, control), control, source="recorded")
+    s = await manager.start_feed(SyntheticReplayAdapter(match, control), control, source="recorded",
+                                 recipe=Recipe("recorded", match=match))
     return {"match_id": s.meta.match_id, "run_id": s.run_id, "speed": req.speed}
+
+
+class RestartRequest(BaseModel):
+    speed: float | None = Field(default=None, gt=0, le=60)
+    start_minute: float = Field(default=0.0, ge=0, le=100)
+
+
+@app.post("/api/replay/restart")
+async def restart_replay(req: RestartRequest | None = None) -> dict[str, Any]:
+    """Play the loaded match again from the start (or ``start_minute``) as a new run: the hero match,
+    a scenario, a recorded match or a past match from the archive. Without ``speed``: the current one
+    (15x for a past match)."""
+    req = req or RestartRequest()
+    try:
+        s = await manager.restart(speed=req.speed, start_minute=req.start_minute)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    recipe, control = manager.recipe, manager.control
+    assert recipe is not None and control is not None
+    return {"match_id": s.meta.match_id, "run_id": s.run_id, "speed": control.speed, "source": recipe.source}
 
 
 @app.get("/api/runs")
@@ -382,7 +419,11 @@ async def timeline(
     type: list[str] | None = Query(default=None),
 ) -> list[dict[str, Any]]:
     s = _session()
-    types = {EventType(t) for t in type} if type else None
+    try:
+        types = {EventType(t) for t in type} if type else None
+    except ValueError as exc:
+        bad = sorted({t for t in type or [] if t not in EventType._value2member_map_})
+        raise HTTPException(422, f"unknown event type {bad}; use one of {[e.value for e in EventType]}") from exc
     rows = s.engine.events(team_id=team_id, player_id=player_id, types=types)
     if types is None:
         return [r for r in s.timeline() if (not team_id or r["team_id"] == team_id)
@@ -472,16 +513,32 @@ async def scenario_presets() -> dict[str, Any]:
     return {"presets": presets(), "roster": scenario_roster(default_match_meta())}
 
 
+DRAFT_FAILURES = {
+    "timeout": (504, f"the Scenario agent took longer than {SCENARIO_TIMEOUT_S:.0f}s"),
+    "no_answer": (502, "the Scenario agent did not answer"),
+    "unplayable": (422, "the storyline could not be made playable"),
+}
+
+
 @app.post("/api/scenarios/draft")
 async def draft_scenario(req: ScenarioDraftRequest) -> dict[str, Any]:
-    """Turn a match described in words into a storyline (strong model), checked before it is offered."""
+    """Turn a match described in words into a storyline (strong model), checked before it is offered.
+    Offline there is no model: the closest preset is offered instead (``source`` "template")."""
     rt = _runtime()
     if not rt.clients.settings.online:
-        raise HTTPException(503, "writing a match from a description needs the live models; pick a preset")
-    story, problems = await write_storyline(rt.team, default_match_meta(), req.prompt, req.language.value)
-    if story is None:
-        raise HTTPException(422, {"message": "the storyline could not be made playable", "problems": problems})
-    return {"storyline": story.model_dump(mode="json")}
+        preset_id, matched = closest_preset(req.prompt)
+        story = PRESETS[preset_id][0]()
+        problems = check_storyline(default_match_meta(), story)
+        if problems:
+            raise HTTPException(422, {"message": DRAFT_FAILURES["unplayable"][1], "reason": "unplayable",
+                                      "problems": problems})
+        return {"storyline": story.model_dump(mode="json"), "source": "template", "preset_id": preset_id,
+                "note": OFFLINE_NOTE if matched else NO_MATCH_NOTE + OFFLINE_NOTE}
+    written = await write_storyline(rt.team, default_match_meta(), req.prompt, req.language.value)
+    if written.story is None:
+        status, message = DRAFT_FAILURES[written.failure or "no_answer"]
+        raise HTTPException(status, {"message": message, "reason": written.failure, "problems": written.problems})
+    return {"storyline": written.story.model_dump(mode="json"), "source": "ai", "preset_id": None, "note": None}
 
 
 @app.post("/api/scenarios/kickoff")

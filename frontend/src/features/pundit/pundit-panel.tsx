@@ -3,6 +3,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { MessageCircleQuestion, SendHorizontal, Square, Video, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -11,6 +12,7 @@ import { FactCheckBadge } from "@/features/companion/fact-check-badge";
 import { useReplay } from "@/features/broadcast/replay-store";
 import { useLive } from "@/features/live/live-store";
 import { profileQuery, useFanProfile } from "@/features/profile/profile-store";
+import { canSpeak, problemOf, speakInBrowser, stopBrowserVoice, unlockVoice, useVoice } from "@/features/companion/voice";
 import { ApiError, postJson } from "@/lib/api";
 import { type Language, PunditAnswer } from "@/lib/contract";
 import { copy, signalLabels } from "@/lib/copy";
@@ -18,26 +20,24 @@ import { sideOf, sideTone } from "@/lib/match";
 import { cn } from "@/lib/utils";
 
 const MAX_QUESTION = 200;
-const LOCALES = { en: "en-GB", hi: "hi-IN", es: "es-ES" } satisfies Record<Language, string>;
-
 const noSubscribe = () => () => {};
 
 /** Read one answer aloud with the browser's voice; the Listen switch owns the Azure voice. */
 function useReadAloud() {
-  const supported = useSyncExternalStore(noSubscribe, () => "speechSynthesis" in window, () => false);
+  const supported = useSyncExternalStore(noSubscribe, canSpeak, () => false);
   const [speaking, setSpeaking] = useState<string | null>(null);
-  useEffect(() => () => {
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-  }, []);
+  useEffect(() => () => stopBrowserVoice(), []);
   const toggle = (id: string, text: string, language: Language) => {
-    window.speechSynthesis.cancel();
+    stopBrowserVoice();
     if (speaking === id) return setSpeaking(null);
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = LOCALES[language];
-    utterance.onend = () => setSpeaking((s) => (s === id ? null : s));
-    utterance.onerror = utterance.onend;
+    unlockVoice();
     setSpeaking(id);
-    window.speechSynthesis.speak(utterance);
+    const clear = () => setSpeaking((s) => (s === id ? null : s));
+    void speakInBrowser(text, language, () => {
+      clear();
+      const problem = problemOf(useVoice.getState().status);
+      if (problem) toast.error(copy.narration.problem[problem]);
+    });
   };
   return { supported, speaking, toggle };
 }
@@ -63,6 +63,7 @@ function AnswerCard({
         <span>{answer.source === "agent" ? copy.pundit.agentAnswer : copy.pundit.dataAnswer}</span>
         <FactCheckBadge status={answer.fact_check.status} className="ml-auto" />
       </header>
+      {answer.fact_check.verification_scope && <p className="text-xs text-muted-foreground">{answer.fact_check.verification_scope}</p>}
       <p className="max-w-prose text-base leading-relaxed">{answer.answer}</p>
       {answer.points.length > 0 && (
         <ul className="flex max-w-prose list-disc flex-col gap-1 pl-5 text-sm text-muted-foreground">
@@ -121,12 +122,14 @@ function AnswerCard({
 }
 
 /** Ask the Pundit: a fan asks in their own words, the answer comes from the stats engine and is fact-checked. */
-export function PunditPanel({ className }: { className?: string }) {
+export function PunditPanel({ className, open: controlled, onOpenChange }: { className?: string; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const profile = useFanProfile();
   const hasMatch = useLive((s) => s.meta !== null);
   const play = useReplay((s) => s.play);
   const reader = useReadAloud();
-  const [open, setOpen] = useState(false);
+  const [local, setLocal] = useState(false);
+  const open = controlled ?? local;
+  const setOpen = onOpenChange ?? setLocal;
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const end = useRef<HTMLDivElement>(null);
@@ -165,10 +168,12 @@ export function PunditPanel({ className }: { className?: string }) {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger render={<Button variant="outline" size="lg" className={cn("h-12 w-full gap-2 text-base", className)} disabled={!hasMatch} />}>
-        <MessageCircleQuestion aria-hidden />
-        {copy.pundit.open}
-      </SheetTrigger>
+      {controlled === undefined && (
+        <SheetTrigger render={<Button variant="outline" size="lg" className={cn("h-12 w-full gap-2 text-base", className)} disabled={!hasMatch} />}>
+          <MessageCircleQuestion aria-hidden />
+          {copy.pundit.open}
+        </SheetTrigger>
+      )}
       <SheetContent side="right" className="w-full gap-0 p-0 data-[side=right]:sm:max-w-lg">
         <SheetHeader className="border-b p-5 pr-14">
           <SheetTitle className="font-display text-2xl font-semibold">{copy.pundit.heading}</SheetTitle>

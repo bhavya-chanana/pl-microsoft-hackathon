@@ -5,6 +5,7 @@ import pytest
 from matchlens.agents.coach import TEXT, find_issues
 from matchlens.agents.contracts import FactCheckStatus
 from matchlens.agents.services import FanServices
+from matchlens.domain.models import EventType, Outcome
 from matchlens.ingest.adapters import SyntheticReplayAdapter
 from matchlens.runtime.session import MatchSession
 
@@ -37,9 +38,8 @@ def test_brief_is_ranked_grounded_and_fact_checked(played):
     assert [i.rank for i in brief.items] == list(range(1, len(brief.items) + 1)) and 1 <= len(brief.items) <= 3
     assert brief.fact_check.status == FactCheckStatus.VERIFIED
     assert brief.agents == ["coach_coordinator", "coach", "fact_checker"]
-    # Harbour City finished with ten men: the coordinator must say so, with high confidence.
-    man_down = next(i for i in brief.items if i.issue_id == "man_down")
-    assert man_down.confidence == "high" and "10 players against 11" in man_down.evidence
+    # After the final whistle there is no live advice (see test_man_down_is_flagged_mid_match).
+    assert not {i.issue_id for i in brief.items} & {"man_down", "extra_man", "chase_game", "see_it_out"}
     assert all(i.trade_off and i.recommendation and i.key_numbers for i in brief.items)
     # Same position, same question: answered from the store, no second model call.
     calls = len(client.calls)
@@ -47,6 +47,19 @@ def test_brief_is_ranked_grounded_and_fact_checked(played):
     hindi = run(fans.coach_brief(session, "HBC", "hi"))
     assert [i.issue_id for i in hindi.items] == [i.issue_id for i in brief.items]
     assert hindi.items[0].title != brief.items[0].title
+
+
+def test_man_down_is_flagged_mid_match(demo_match):
+    # Harbour City play on with ten men: the coordinator must say so, with high confidence.
+    session = MatchSession(SyntheticReplayAdapter(demo_match))
+    for kind, item in replay_order(demo_match):
+        session.engine.ingest_event(item) if kind else session.engine.ingest_frame(item)
+        if kind and item.type == EventType.CARD and item.team_id == "HBC" and item.outcome in (
+                Outcome.RED, Outcome.SECOND_YELLOW):
+            break
+    brief = run(FanServices(team_for(ScriptedClient())).coach_brief(session, "HBC", "en"))
+    man_down = next(i for i in brief.items if i.issue_id == "man_down")
+    assert man_down.confidence == "high" and "10 players against 11" in man_down.evidence
 
 
 def test_agent_cannot_rerank_or_invent(played):

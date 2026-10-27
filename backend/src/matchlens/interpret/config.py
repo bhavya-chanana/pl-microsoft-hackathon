@@ -19,6 +19,7 @@ class MomentumWeights(BaseModel):
 class Thresholds(BaseModel):
     momentum_window_s: float = 300.0  # rolling five-minute window
     momentum_swing_delta: float = 55.0  # change in momentum index (-100..100)
+    momentum_even_band: float = 10.0  # |index| below this reads as "Even" (matches the bar)
     sprint_mps: float = 7.0  # 25.2 km/h
     speed_badge_kmh: float = 32.0
     distance_badge_km: list[float] = Field(default_factory=lambda: [5.0, 10.0])

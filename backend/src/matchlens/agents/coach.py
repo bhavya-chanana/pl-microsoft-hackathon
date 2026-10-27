@@ -389,7 +389,7 @@ def _danger_man(v: _View) -> Issue | None:
 DETECTORS = (_numbers, _game_state, _protect_box, _momentum_against, _bypass_press, _blunt_attack, _card_risk,
              _danger_man, _fresh_legs)
 # After the final whistle only the review items still make sense.
-LIVE_ONLY = (_game_state, _card_risk, _fresh_legs)
+LIVE_ONLY = (_numbers, _game_state, _card_risk, _fresh_legs)
 
 
 def find_issues(engine: MatchEngine, team_id: str) -> list[Issue]:

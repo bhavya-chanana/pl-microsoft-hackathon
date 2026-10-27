@@ -7,8 +7,8 @@ what matters and why, checks every claim against the data, and publishes each in
 overlays for a studio, and as a personalised companion feed for every fan, in their mode, club, player and
 language.
 
-Built for the Microsoft Premier League Hackathon (October 2026). Every club, player, venue and competition is
-fictional.
+Built for the Microsoft Premier League Hackathon (October 2026). Clubs, players, venues and competitions in the
+synthetic match experience are fictional. The optional historical league warehouse stays local and separate.
 
 > **Demo link:** to be added after deployment (see [docs/DEPLOY.md](docs/DEPLOY.md)).
 
@@ -68,15 +68,17 @@ flowchart TB
 - **The live feed never waits for a model.** Score, clock, timeline and a data-only insight card publish as soon as
   the stats engine sees an event. The agent workflow then upgrades the same insight and overlay in place. A failed
   or slow agent falls back to the data-only text, and an agent failure never stops the feed (BRD §8.3).
-- **Only facts from the engine reach the screen.** Agents return structured claims alongside their text. The
+- **Claims are checked against the engine.** Agents return structured claims alongside their text. The
   Fact-Checker verifies each claim against the stats engine and flags any number no fact accounts for. It allows one
   rewrite; if problems remain, the agent text is blocked and the verified data-only text is shown. Every insight
-  carries its evidence event ids, the agents involved and the fact-check report.
+  carries its evidence event ids, the agents involved and the fact-check report. The report states its
+  verification scope: structured claims and numeric guards do not establish every assertion in free-form prose.
 - **Corrections flow everywhere.** When the feed corrects an event, the engine replays the match, updates every
   affected statistic and signal, re-explains changed moments and retracts insights that no longer hold.
 - **Nothing lives only in memory.** Every event, frame, signal, insight, overlay, coordinator decision, agent run and
   fan catch-up is written to Cosmos DB (serverless) behind a write-behind queue, and read through an in-process cache.
-  A restarted backend resumes the live match from the database where it stopped. See
+  A restarted backend can resume a supported synthetic run from its stored feed. Recovery is best effort during
+  persistent write failures, and custom storylines have resume limitations. See
   [docs/DATABASE.md](docs/DATABASE.md).
 - **Cost-aware.** The coordinator rate-caps agent runs; frequent tasks use the fast model and recaps the strong one.
   A recorded demo match replays every agent answer, so judges get instant, repeatable output with no model calls.
@@ -105,10 +107,13 @@ controls to speed it up (up to 60x), pause it, or restart it from any minute.
 
 | Page | Path | For |
 |---|---|---|
-| Match Centre | `/` | Fans: broadcast feed, personalised insights, timeline, stats, catch-up and recap |
-| Broadcast | `/broadcast` | Studio: full-width pitch with timed overlays |
-| Coach | `/coach` | Coaches: ranked tactical briefs with evidence |
-| Agent Room | `/agents` | The agent pipeline live: routing decisions, fact-check results, latency |
+| Live | `/` | Fans: match pitch, personalised moments, catch-up and pundit |
+| Moments | `/moments` | Highlights, timeline, evidence and recap |
+| Stats | `/stats` | Team and player statistics, shot map and fan ratings |
+| Coach | `/coach` | Team-specific briefs, lineup, stats, report and Tactics Board |
+| Explore | `/explore` | Broadcast, Multiverse, Scenario Lab and replay/archive settings |
+| Broadcast | `/explore/broadcast` | Studio: clean full-width pitch with timed overlays; `/broadcast` redirects here |
+| Agent Room | `/agents` | Developer view of routing decisions, fact-check results and latency |
 
 ### Run modes
 
@@ -182,6 +187,35 @@ cd backend && uv run --group vision python -m matchlens.vision 128057 --detect 2
 
 The first run with `--detect` downloads the RT-DETR weights (`PekingU/rtdetr_r50vd`, Apache-2.0, about 172 MB).
 
+### Broadcast footage: main camera and per-frame calibration
+
+TV footage cuts between cameras and its main camera pans and zooms, so one fixed calibration no longer works. The
+first step towards it:
+
+- **Main camera only** (`views.py`): cuts are found from jumps in the colour histogram, and each shot is kept only
+  if most of its frames are mostly grass with nothing large standing on it. Close-ups, other angles and the crowd
+  are set aside. Replays from the main camera's angle are not caught yet.
+- **A homography per frame** (`camera.py`): one hand-labelled frame starts it. Corners tracked on the pitch carry it
+  from frame to frame, and each frame is then fitted to its painted lines both ways (markings onto paint, paint onto
+  markings), which stops drift. After a cut it finds its way back through keyframes it saved earlier.
+
+On synthetic footage (a textured pitch filmed by a known panning and zooming camera, with a cut away and back), every
+main-camera frame is calibrated with a median error of 1.4 px (0.26 m). That is measured against labels that
+themselves carry about 1 px of click noise. It has not been measured on real broadcast footage yet.
+
+Put a clip in `backend/data/local/broadcast/clips/` (gitignored), label 15 to 20 frames, then run and measure:
+
+```bash
+cd backend && uv run --group vision python -m matchlens.vision.label
+```
+
+```bash
+cd backend && uv run --group vision python -m matchlens.vision.broadcast --overlay
+```
+
+Use only footage you have the right to use. Like the SoccerTrack data, it and everything made from it stay in
+`backend/data/local/`.
+
 ## Data and schemas
 
 - **[docs/DATABASE.md](docs/DATABASE.md):** the Cosmos DB containers, write and read paths, cache, resuming after a
@@ -191,6 +225,9 @@ The first run with `--detect` downloads the RT-DETR weights (`PekingU/rtdetr_r50
 - **[dataset/](dataset/):** the open synthetic dataset: five full matches (the hero demo match and four unscripted
   ones) with events, 1 Hz tracking, metadata and the simulator's calibration against real match statistics.
   Regenerate it with `npm run export:dataset`.
+- **[Synthetic seasons](docs/SYNTHETIC_SEASONS.md):** read local 2024–25/2023–24 population aggregates, independently
+  generate a fictional multi-match season under ignored data paths, preview it, then explicitly seed completed
+  archives into a local Cosmos emulator. Real match records are not imported.
 - **Calibration:** the simulator is tuned against aggregate statistics of 100 real top-flight matches (passing
   lengths and completion, pressure, shot locations, xG, set pieces, fouls and cards). Only the averages are kept;
   no real names or match data are used. Real-data calibration:

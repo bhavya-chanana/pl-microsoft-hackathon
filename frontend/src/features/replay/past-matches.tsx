@@ -1,7 +1,8 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { History, Play } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { History, Play, Tv } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -9,10 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLive } from "@/features/live/live-store";
 import { useFeeds, useRuns } from "@/features/live/queries";
+import { useShell } from "@/components/shell/shell-store";
 import { postJson } from "@/lib/api";
 import type { RunSummary } from "@/lib/contract";
 import { copy } from "@/lib/copy";
+import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+
+import { useFollowMatch } from "./follow-match";
 
 const T = copy.archive;
 const Opened = z.object({ match_id: z.string(), run_id: z.string() });
@@ -35,40 +40,41 @@ function detail(run: RunSummary, showing: boolean): string {
 }
 
 /** The match archive: reopen a stored replay, or play a recorded match (demo only). */
-export function PastMatches({ className }: { className?: string }) {
-  const client = useQueryClient();
+export function PastMatches({ className, bare }: { className?: string; bare?: boolean }) {
   const current = useLive((s) => s.runId);
   const runs = useRuns();
   const feeds = useFeeds();
-  const reload = () => void client.invalidateQueries();
+  const follow = useFollowMatch();
+  const router = useRouter();
 
+  // Each of these loads a match, waits until the stream carries it, then goes to the Live page.
+  // A match that does not arrive leaves the sheet open with the error.
   const open = useMutation({
-    mutationFn: (runId: string) => postJson(`runs/${runId}/open`, {}, Opened),
-    onSuccess: () => {
-      reload();
-      toast.success(T.opened);
-    },
+    mutationFn: async (runId: string) => follow(await postJson(`runs/${runId}/open`, {}, Opened)),
+    onSuccess: () => toast.success(T.opened),
     onError: () => toast.error(T.failed),
   });
   const play = useMutation({
-    mutationFn: (name: string) => postJson("replay/feed", { name, speed: 5 }, Opened),
-    onSuccess: () => {
-      reload();
-      toast.success(T.playing);
-    },
+    mutationFn: async (name: string) => follow(await postJson("replay/feed", { name, speed: 5 }, Opened)),
+    onSuccess: () => toast.success(T.playing),
     onError: () => toast.error(T.failed),
   });
   const busy = open.isPending || play.isPending;
 
   return (
-    <section aria-labelledby="archive-heading" className={cn("flex flex-col gap-4 rounded-lg border bg-card p-4", className)}>
-      <div className="flex flex-col gap-0.5">
+    <section aria-labelledby="archive-heading" className={cn("flex flex-col gap-4", !bare && "rounded-lg border bg-card p-4", className)}>
+      <div className={cn("flex flex-col gap-0.5", bare && "sr-only")}>
         <h2 id="archive-heading" className="inline-flex items-center gap-2 font-display text-lg font-semibold">
           <History aria-hidden className="size-4 text-muted-foreground" />
           {T.heading}
         </h2>
         <p className="text-xs text-muted-foreground">{T.help}</p>
       </div>
+      {(open.isError || play.isError) && (
+        <p role="alert" className="rounded-lg border border-blocked/40 p-3 text-sm">
+          {T.failed}
+        </p>
+      )}
       {runs.isPending ? (
         <div className="flex flex-col gap-2" aria-hidden>
           {[0, 1, 2].map((i) => (
@@ -86,7 +92,17 @@ export function PastMatches({ className }: { className?: string }) {
                   <span className="truncate text-xs text-muted-foreground">{detail(run, showing)}</span>
                 </div>
                 {showing ? (
-                  <span className="px-3 text-xs font-medium text-muted-foreground">{T.current}</span>
+                  <Button
+                    variant="secondary"
+                    className="h-11 gap-2"
+                    onClick={() => {
+                      useShell.getState().setStream(false);
+                      router.push(routes.live);
+                    }}
+                  >
+                    <Tv aria-hidden />
+                    {T.watch}
+                  </Button>
                 ) : (
                   <Button
                     variant="outline"
@@ -95,7 +111,7 @@ export function PastMatches({ className }: { className?: string }) {
                     aria-label={`${T.open} ${title(run)}`}
                     onClick={() => open.mutate(run.run_id)}
                   >
-                    {T.open}
+                    {open.isPending && open.variables === run.run_id ? T.loading : T.open}
                   </Button>
                 )}
               </li>
@@ -114,10 +130,10 @@ export function PastMatches({ className }: { className?: string }) {
           <ul className="flex flex-col divide-y">
             {feeds.data.map((name) => (
               <li key={name} className="flex items-center gap-3 py-2">
-                <span className="min-w-0 flex-1 truncate font-mono text-sm">{name}</span>
+                <span className="min-w-0 flex-1 truncate text-sm">{name.replace(/^video-/, "").replaceAll(/[-_]+/g, " ")}</span>
                 <Button variant="outline" className="h-11" disabled={busy} onClick={() => play.mutate(name)}>
                   <Play aria-hidden />
-                  {T.play}
+                  {play.isPending && play.variables === name ? T.loading : T.play}
                 </Button>
               </li>
             ))}

@@ -1,14 +1,14 @@
-import { BadgeCheck, Database, PencilLine, ShieldAlert } from "lucide-react";
+import { BadgeCheck, Database, PencilLine } from "lucide-react";
 
 import type { FactCheckStatus } from "@/lib/contract";
 import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
 const STYLE: Record<FactCheckStatus, { icon: typeof BadgeCheck; tone: string }> = {
-  verified: { icon: BadgeCheck, tone: "text-verified" },
-  rewritten: { icon: PencilLine, tone: "text-rewritten" },
-  blocked: { icon: ShieldAlert, tone: "text-blocked" },
-  data_only: { icon: Database, tone: "text-data" },
+  verified: { icon: BadgeCheck, tone: "text-muted-foreground" },
+  rewritten: { icon: PencilLine, tone: "text-muted-foreground" },
+  blocked: { icon: Database, tone: "text-muted-foreground" },
+  data_only: { icon: Database, tone: "text-muted-foreground" },
 };
 
 /** Provenance label: icon + words, never colour alone. */

@@ -1,0 +1,10 @@
+{
+ "type": "standard",
+ "title": "Rovermere F.C.",
+ "extract": "Rovermere Football Club is a fictional club founded in 1886.",
+ "content_urls": {
+  "desktop": {
+   "page": "https://en.wikipedia.org/wiki/Rovermere_F.C."
+  }
+ }
+}

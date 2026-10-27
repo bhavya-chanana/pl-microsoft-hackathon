@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Barlow_Condensed, IBM_Plex_Sans, Noto_Sans_Devanagari } from "next/font/google";
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
+import { Barlow_Condensed, Instrument_Serif, Noto_Sans_Devanagari } from "next/font/google";
 
-import { AppHeader } from "@/components/shell/app-header";
+import { AppShell } from "@/components/shell/app-shell";
 import { copy } from "@/lib/copy";
 
 import { Providers } from "./providers";
@@ -9,14 +11,15 @@ import "./globals.css";
 
 const display = Barlow_Condensed({
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
+  weight: ["600", "700"],
   variable: "--font-display",
   display: "swap",
 });
-const text = IBM_Plex_Sans({
+const story = Instrument_Serif({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-text",
+  weight: "400",
+  style: "italic",
+  variable: "--font-story",
   display: "swap",
 });
 const devanagari = Noto_Sans_Devanagari({
@@ -33,7 +36,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#151a23" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0d12" },
     { media: "(prefers-color-scheme: light)", color: "#f6f7f9" },
   ],
 };
@@ -43,12 +46,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${display.variable} ${text.variable} ${devanagari.variable}`}
+      className={`${display.variable} ${story.variable} ${devanagari.variable} ${GeistSans.variable} ${GeistMono.variable}`}
     >
       <body className="min-h-dvh">
         <Providers>
-          <AppHeader />
-          {children}
+          <AppShell>{children}</AppShell>
         </Providers>
       </body>
     </html>

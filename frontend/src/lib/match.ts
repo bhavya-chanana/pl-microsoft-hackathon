@@ -24,8 +24,8 @@ export function playerName(meta: MatchMeta | null, playerId: string | null | und
 
 /** Tailwind classes per side, all backed by tokens. */
 export const sideTone = {
-  home: { bg: "bg-home", text: "text-home", border: "border-home", fill: "fill-home", stroke: "stroke-home" },
-  away: { bg: "bg-away", text: "text-away", border: "border-away", fill: "fill-away", stroke: "stroke-away" },
+  home: { bg: "bg-home", text: "text-home-text", border: "border-home", fill: "fill-home", stroke: "stroke-home" },
+  away: { bg: "bg-away", text: "text-away-text", border: "border-away", fill: "fill-away", stroke: "stroke-away" },
 } as const;
 
 export function overlayText(overlay: Overlay, language: Language): LocalisedText {

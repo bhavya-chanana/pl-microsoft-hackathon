@@ -8,7 +8,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FactCheckBadge } from "@/features/companion/fact-check-badge";
 import { useLive } from "@/features/live/live-store";
 import { useDecisions, useHealth } from "@/features/live/queries";
-import { ReplayControls } from "@/features/replay/replay-controls";
 import type { Decision, Signal } from "@/lib/contract";
 import { copy, signalLabels } from "@/lib/copy";
 import { cn } from "@/lib/utils";
@@ -137,7 +136,7 @@ export function AgentRoom() {
   });
   const model = health.data?.llm ?? null;
   return (
-    <main className="mx-auto flex max-w-screen-2xl flex-col gap-6 px-4 py-4 sm:px-6 lg:py-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-4 sm:px-6 lg:py-6">
       <div className="flex max-w-3xl flex-col gap-2">
         <h1 className="font-display text-display font-semibold">{copy.agents.heading}</h1>
         <p className="text-sm text-muted-foreground">{copy.agents.intro}</p>
@@ -161,8 +160,7 @@ export function AgentRoom() {
           </h2>
           <Decisions />
         </section>
-        <ReplayControls className="self-start" />
       </div>
-    </main>
+    </div>
   );
 }

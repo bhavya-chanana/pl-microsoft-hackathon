@@ -3,11 +3,14 @@
 import { RotateCw } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 
+import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFeed } from "@/features/live/queries";
 import { useFanProfile } from "@/features/profile/profile-store";
 import { copy } from "@/lib/copy";
+
+import type { FeedItem } from "@/lib/contract";
 
 import { InsightCard } from "./insight-card";
 
@@ -26,7 +29,16 @@ export function FeedSkeleton() {
 }
 
 /** Personalised, fact-checked insight feed. Newest first. */
-export function InsightFeed() {
+export function InsightFeed({
+  limit,
+  highlights = false,
+  filter,
+}: {
+  limit?: number;
+  /** Only the big moments plus the very latest item. */
+  highlights?: boolean;
+  filter?: (item: FeedItem) => boolean;
+}) {
   const profile = useFanProfile();
   const { language } = profile;
   const feed = useFeed(profile);
@@ -43,13 +55,23 @@ export function InsightFeed() {
       </div>
     );
   }
-  if (!feed.data.length) {
-    return <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{copy.feed.empty}</p>;
+  let items = feed.data;
+  if (filter) items = items.filter(filter);
+  if (highlights) {
+    const latest = items[0];
+    const sure = items.filter((i) => i.signal_type === "goal" || i.signal_type === "card" || i.signal_type === "correction");
+    const chance = items.find((i) => i.signal_type === "big_chance");
+    const picked = new Set([...sure, ...(chance ? [chance] : []), ...(latest ? [latest] : [])]);
+    items = items.filter((i) => picked.has(i));
+  }
+  if (limit) items = items.slice(0, limit);
+  if (!items.length) {
+    return <EmptyState>{copy.feed.empty}</EmptyState>;
   }
   return (
-    <ol className="flex flex-col gap-3" aria-label={copy.feed.heading}>
+    <ol className="flex flex-col gap-2" aria-label={copy.feed.heading}>
       <AnimatePresence initial={false}>
-        {feed.data.map((item) => (
+        {items.map((item) => (
           <li key={item.insight_id}>
             <InsightCard item={item} language={language} />
           </li>

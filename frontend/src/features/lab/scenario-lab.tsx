@@ -1,19 +1,20 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { CheckCircle2, CircleDashed, Download, PenLine, Play, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDashed, Download, EllipsisVertical, Info, PenLine, Play, RotateCw, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useScenarios, useScriptCheck } from "@/features/live/queries";
 import { ApiError, postJson } from "@/lib/api";
 import { Kickoff, type RosterTeam, type Scenarios, type ScriptCheck, Storyline } from "@/lib/contract";
-import { copy } from "@/lib/copy";
+import { copy, type DraftFailure } from "@/lib/copy";
 import { sideTone } from "@/lib/match";
 import { routes, serverRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -21,7 +22,25 @@ import { cn } from "@/lib/utils";
 const SPEEDS = [5, 15, 30, 60] as const;
 const MAX_PROMPT = 400;
 const FULL_TIME = 95;
-const Drafted = z.object({ storyline: Storyline });
+const Drafted = z.object({
+  storyline: Storyline,
+  /** "template": offline, the backend picked the closest ready-made script instead of writing one. */
+  source: z.enum(["ai", "template"]).default("ai"),
+  preset_id: z.string().nullish(),
+  note: z.string().nullish(),
+});
+const Refusal = z.object({
+  reason: z.enum(["timeout", "no_answer", "unplayable"]).nullish(),
+  problems: z.array(z.string()).default([]),
+});
+
+type Refused = { reason: DraftFailure; problems: string[] };
+
+/** Why the draft endpoint gave no script: its `reason` and the last draft's problems, if it sent them. */
+function refusal(error: unknown): Refused {
+  const found = Refusal.safeParse(error instanceof ApiError ? error.detail : null);
+  return found.success ? { reason: found.data.reason ?? "other", problems: found.data.problems } : { reason: "other", problems: [] };
+}
 
 type Roster = Scenarios["roster"];
 
@@ -31,6 +50,45 @@ function nameOf(roster: Roster, playerId: string): string {
     if (p) return p.name;
   }
   return playerId;
+}
+
+function DraftRefused({ refused, retry }: { refused: Refused; retry: () => void }) {
+  const text = copy.lab.draftRefused[refused.reason];
+  const unplayable = refused.reason === "unplayable";
+  const offline = refused.reason === "offline";
+  return (
+    <div role="alert" className="flex max-w-2xl flex-col items-start gap-2 rounded-lg border border-blocked/40 p-3 text-sm">
+      <p className="font-medium">{text.title}</p>
+      <p className="text-muted-foreground">{text.help}</p>
+      {refused.problems.length > 0 && (
+        <>
+          {!unplayable && <p className="font-medium">{copy.lab.firstDraftProblems}</p>}
+          <ul className="list-disc pl-5 text-muted-foreground">
+            {refused.problems.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        </>
+      )}
+      {offline ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 px-4"
+          onClick={() => document.getElementById("presets-heading")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        >
+          {copy.lab.readyMade}
+        </Button>
+      ) : (
+        !unplayable && (
+          <Button type="button" variant="outline" className="min-h-11 gap-2 px-4" onClick={retry}>
+            <RotateCw aria-hidden />
+            {copy.connection.retry}
+          </Button>
+        )
+      )}
+    </div>
+  );
 }
 
 function teamOf(roster: Roster, teamId: string): RosterTeam | null {
@@ -184,8 +242,8 @@ export function ScenarioLab() {
   const check = useScriptCheck();
   const [speed, setSpeed] = useState<number>(15);
   const [prompt, setPrompt] = useState("");
-  const [draft, setDraft] = useState<Storyline | null>(null);
-  const [problems, setProblems] = useState<string[]>([]);
+  const [draft, setDraft] = useState<z.infer<typeof Drafted> | null>(null);
+  const [refused, setRefused] = useState<Refused | null>(null);
   const roster = scenarios.data?.roster ?? null;
 
   const kickoff = useMutation({
@@ -193,7 +251,7 @@ export function ScenarioLab() {
       postJson("scenarios/kickoff", { preset_id: body.preset_id, storyline: body.storyline, speed }, Kickoff),
     onSuccess: (k) =>
       toast.success(copy.lab.kickedOff(k.title), {
-        action: { label: copy.lab.watchLive, onClick: () => window.location.assign(routes.matchCentre) },
+        action: { label: copy.lab.watchLive, onClick: () => window.location.assign(routes.live) },
       }),
     onError: () => toast.error(copy.lab.kickoffFailed),
   });
@@ -201,15 +259,13 @@ export function ScenarioLab() {
   const write = useMutation({
     mutationFn: (text: string) => postJson("scenarios/draft", { prompt: text }, Drafted),
     onMutate: () => {
-      setProblems([]);
+      setRefused(null);
       setDraft(null);
     },
-    onSuccess: (d) => setDraft(d.storyline),
+    onSuccess: (d) => setDraft(d),
     onError: (error) => {
-      if (error instanceof ApiError && error.status === 503) return toast.error(copy.lab.draftOffline);
-      const found = error instanceof ApiError ? (error.detail as { problems?: unknown } | null)?.problems : null;
-      if (Array.isArray(found)) setProblems(found.map(String));
-      toast.error(copy.lab.draftFailed);
+      if (error instanceof ApiError && error.status === 503) return setRefused({ reason: "offline", problems: [] });
+      setRefused(refusal(error));
     },
   });
 
@@ -217,10 +273,23 @@ export function ScenarioLab() {
   const pendingKey = kickoff.isPending ? kickoff.variables?.key : null;
 
   return (
-    <main className="mx-auto flex max-w-screen-2xl flex-col gap-8 px-4 py-4 sm:px-6 lg:py-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="font-display text-display font-semibold">{copy.lab.heading}</h1>
-        <p className="max-w-prose text-sm text-muted-foreground">{copy.lab.intro}</p>
+    <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 xl:px-8">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-[28px] leading-[34px] font-semibold tracking-tight">{copy.lab.heading}</h1>
+          <p className="max-w-prose text-[15px] text-muted-foreground">{copy.lab.intro}</p>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="outline" size="icon" className="size-11 shrink-0" aria-label={copy.lab.more} />}>
+            <EllipsisVertical aria-hidden />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem render={<a href={serverRoutes.backend("dataset")} download />} className="min-h-11 gap-2">
+              <Download aria-hidden />
+              {copy.lab.dataset}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem]">
@@ -306,31 +375,28 @@ export function ScenarioLab() {
               </div>
             </form>
             {write.isPending && <Skeleton className="h-64 max-w-2xl" />}
-            {problems.length > 0 && (
-              <div role="alert" className="max-w-2xl rounded-lg border border-blocked/40 p-3 text-sm">
-                <p className="font-medium">{copy.lab.problems}</p>
-                <ul className="list-disc pl-5 text-muted-foreground">
-                  {problems.map((p) => (
-                    <li key={p}>{p}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {refused && <DraftRefused refused={refused} retry={() => write.mutate(prompt.trim())} />}
             {draft && roster && (
-              <div className="max-w-2xl">
+              <div className="flex max-w-2xl flex-col gap-2">
+                {draft.source === "template" && (
+                  <p role="status" className="flex items-start gap-2 text-[13px] leading-5 text-muted-foreground">
+                    <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
+                    <span>{draft.note ?? copy.lab.templateNote}</span>
+                  </p>
+                )}
                 <StoryCard
-                  story={draft}
+                  story={draft.storyline}
                   roster={roster}
-                  badge={copy.lab.preview}
+                  badge={draft.source === "template" ? copy.lab.fromPreset : copy.lab.preview}
                   pending={pendingKey === "draft"}
-                  onKickoff={() => kickoff.mutate({ key: "draft", storyline: draft })}
+                  onKickoff={() => kickoff.mutate({ key: "draft", storyline: draft.storyline })}
                 />
               </div>
             )}
           </section>
         </div>
 
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-20 lg:self-start">
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-[calc(var(--stack-h)+1rem)] lg:self-start">
           <section aria-labelledby="check-heading" className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-raised">
             <div className="flex flex-col gap-0.5">
               <h2 id="check-heading" className="font-display text-xl font-semibold">
@@ -345,26 +411,13 @@ export function ScenarioLab() {
             ) : (
               <p className="text-sm text-muted-foreground">{copy.lab.noCheck}</p>
             )}
-            <Button variant="outline" className="h-11 gap-2 self-start px-4" nativeButton={false} render={<Link href={routes.matchCentre} />}>
+            <Button variant="outline" className="h-11 gap-2 self-start px-4" nativeButton={false} render={<Link href={routes.live} />}>
               <Play aria-hidden />
               {copy.lab.watchLive}
             </Button>
           </section>
-          <section className="flex flex-col gap-2 rounded-lg border bg-card p-4 shadow-raised">
-            <h2 className="font-display text-lg font-semibold">{copy.lab.dataset}</h2>
-            <p className="text-xs text-muted-foreground">{copy.lab.datasetHelp}</p>
-            <Button
-              variant="outline"
-              className="h-11 gap-2 self-start px-4"
-              nativeButton={false}
-              render={<a href={serverRoutes.backend("dataset")} download />}
-            >
-              <Download aria-hidden />
-              {copy.lab.dataset}
-            </Button>
-          </section>
         </aside>
       </div>
-    </main>
+    </div>
   );
 }

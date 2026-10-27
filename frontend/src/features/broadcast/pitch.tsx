@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
 import { type Point, useLive } from "@/features/live/live-store";
 import { useProfile } from "@/features/profile/profile-store";
@@ -15,7 +15,7 @@ const H = 68;
 const TAP_RADIUS_PX = 22;
 
 /** Chalk markings for a 105 x 68 m pitch, drawn once. */
-const Markings = memo(function Markings() {
+export const Markings = memo(function Markings() {
   return (
     <g className="fill-none stroke-chalk" strokeWidth={0.3}>
       <rect x={0} y={0} width={W} height={H} />
@@ -48,16 +48,20 @@ type DotProps = {
   tweenMs: number;
   favourite: boolean;
   selected: boolean;
+  /** Marker size multiplier, so dots stay at least 19px across on a phone-sized pitch. */
+  scale: number;
+  /** Draw each player's name under the dot (the Names layer). */
+  names?: boolean;
   onSelect?: (id: string, el: SVGGElement) => void;
   onHover?: (id: string | null) => void;
 };
 
-function Dot({ entity, meta, tweenMs, favourite, selected, onSelect, onHover }: DotProps) {
+function Dot({ entity, meta, tweenMs, favourite, selected, scale, names, onSelect, onHover }: DotProps) {
   const transition = `transform ${tweenMs}ms linear`;
   if (entity.entity_id === "ball") {
     return (
       <circle
-        r={0.75}
+        r={0.75 * Math.max(1, scale * 0.8)}
         aria-hidden
         className="pointer-events-none fill-graphic-foreground stroke-graphic"
         strokeWidth={0.2}
@@ -77,44 +81,70 @@ function Dot({ entity, meta, tweenMs, favourite, selected, onSelect, onHover }: 
       className={cn("group outline-none", interactive && "cursor-pointer")}
       {...(interactive && {
         role: "button",
-        tabIndex: 0,
+        tabIndex: -1,
         "aria-label": `#${player.shirt} ${player.name}, ${teamName(meta, teamId)}. ${copy.playerCard.open}`,
         "aria-haspopup": "dialog" as const,
         "aria-pressed": selected,
         onClick: (e: React.MouseEvent<SVGGElement>) => onSelect?.(id, e.currentTarget),
         onKeyDown: (e: React.KeyboardEvent<SVGGElement>) => {
+          const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+          if (step || e.key === "Escape") {
+            e.preventDefault();
+            const svg = e.currentTarget.ownerSVGElement;
+            if (!svg) return;
+            if (e.key === "Escape") return svg.focus();
+            const all = Array.from(svg.querySelectorAll<SVGGElement>("[data-entity][role=button]"));
+            const i = all.indexOf(e.currentTarget);
+            all[(i + step + all.length) % all.length]?.focus();
+            return;
+          }
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             onSelect?.(id, e.currentTarget);
           }
         },
-        onPointerEnter: () => onHover?.(id),
+        // Name tags are for a mouse hover or keyboard focus only; touch taps and programmatic focus
+        // (returning from a sheet) must not leave one stuck on the pitch.
+        onPointerEnter: (e: React.PointerEvent<SVGGElement>) => onHover?.(e.pointerType === "mouse" ? id : null),
         onPointerLeave: () => onHover?.(null),
-        onFocus: () => onHover?.(id),
+        onFocus: (e: React.FocusEvent<SVGGElement>) => onHover?.(e.currentTarget.matches(":focus-visible") ? id : null),
         onBlur: () => onHover?.(null),
       })}
     >
-      {interactive && <circle r={3.2} fill="transparent" />}
+      {interactive && <circle r={3.2 * scale} fill="transparent" />}
       <circle
-        r={3.2}
+        r={3.2 * scale}
         className="fill-none stroke-ring opacity-0 transition-opacity group-focus-visible:opacity-100"
         strokeWidth={0.5}
       />
-      {selected && <circle r={2.7} className="fill-none stroke-graphic-foreground" strokeWidth={0.5} strokeDasharray="1 0.6" />}
-      {favourite && !selected && <circle r={2.6} className="fill-none stroke-graphic-foreground" strokeWidth={0.35} />}
+      {selected && <circle r={2.7 * scale} className="fill-none stroke-graphic-foreground" strokeWidth={0.5} strokeDasharray="1 0.6" />}
+      {favourite && !selected && <circle r={2.6 * scale} className="fill-none stroke-graphic-foreground" strokeWidth={0.35} />}
       <circle
-        r={1.55}
+        r={1.55 * scale}
         className={cn(sideTone[side].fill, "stroke-graphic transition-transform group-hover:scale-125")}
         strokeWidth={0.25}
       />
       {player && (
         <text
-          y={0.55}
+          y={0.55 * scale}
           textAnchor="middle"
           className="pointer-events-none fill-graphic font-display font-bold"
-          style={{ fontSize: 1.5 }}
+          style={{ fontSize: 1.5 * scale }}
         >
           {player.shirt}
+        </text>
+      )}
+      {names && player && (
+        <text
+          y={3.9 * scale}
+          textAnchor="middle"
+          aria-hidden
+          className="pointer-events-none fill-graphic-foreground stroke-graphic font-display font-semibold"
+          strokeWidth={0.5}
+          paintOrder="stroke"
+          style={{ fontSize: 1.45 * scale }}
+        >
+          {player.short_name}
         </text>
       )}
     </g>
@@ -185,6 +215,8 @@ type PitchProps = {
   /** Makes players selectable (click, Enter or Space). */
   onSelectPlayer?: (playerId: string, el: SVGGElement) => void;
   selectedPlayerId?: string | null;
+  /** The Names layer: every player's name under their dot. */
+  names?: boolean;
   /** Extra layers in pitch coordinates (metres), drawn under the players. */
   children?: React.ReactNode;
 };
@@ -209,6 +241,7 @@ export function Pitch({
   overlay,
   onSelectPlayer,
   selectedPlayerId = null,
+  names = false,
   children,
 }: PitchProps) {
   const meta = useLive((s) => s.meta);
@@ -230,6 +263,18 @@ export function Pitch({
   const entities = order && frame ? frame.entities.slice().sort((a, b) => order(a) - order(b)) : [];
   const tagged = entities.find((e) => e.entity_id === hovered);
   const svgRef = useRef<SVGSVGElement>(null);
+  // Keep markers at least 16px across: 1.55 pitch units is only ~11px on a 390px-wide pitch.
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const ro = new ResizeObserver(() => {
+      const px = svg.getBoundingClientRect().width;
+      if (px > 0) setScale(Math.min(2, Math.max(1, 9.5 / (1.55 * (px / (W + 6))))));
+    });
+    ro.observe(svg);
+    return () => ro.disconnect();
+  }, []);
 
   /** Taps that miss every marker go to the nearest player, if one is close enough. */
   const pickNearest = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -256,9 +301,21 @@ export function Pitch({
       onClick={interactive ? pickNearest : undefined}
       viewBox={`-3 -3 ${W + 6} ${H + 6}`}
       role={interactive ? "group" : "img"}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.target !== e.currentTarget) return;
+              if (e.key === "Enter" || e.key === " " || e.key.startsWith("Arrow")) {
+                e.preventDefault();
+                svgRef.current?.querySelector<SVGGElement>("[data-entity][role=button]")?.focus();
+              }
+            }
+          : undefined
+      }
       aria-label={label}
       className={cn(
-        "block h-full w-full transition-transform duration-700 ease-broadcast",
+        "block h-full w-full outline-none focus-visible:ring-2 focus-visible:ring-ring transition-transform duration-700 ease-broadcast",
         tilt && "[transform:perspective(900px)_rotateX(32deg)_scale(1.02)] origin-[50%_70%]",
         className,
       )}
@@ -285,6 +342,8 @@ export function Pitch({
             tweenMs={tweenMs}
             favourite={e.entity_id === favourite}
             selected={e.entity_id === selectedPlayerId}
+            scale={scale}
+            names={names}
             onSelect={onSelectPlayer}
             onHover={interactive ? setHovered : undefined}
           />

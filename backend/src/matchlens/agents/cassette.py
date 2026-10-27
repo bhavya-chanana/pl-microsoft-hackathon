@@ -12,6 +12,11 @@ context pack differs slightly (a viewer joining mid-match, a faster replay):
 * live insights: task + signal id + revision
 * catch-ups and recaps: task + window or phase + mode + language + fan focus
   + a digest of the score and key moments in the window
+* Tactics Board persona calls: ``tactics|snapshot|team|persona|n|horizon|prompt hash|language``, and the
+  Gaffer's verdict ``tactics_verdict|snapshot|team|horizon|risk|prompt hash|language``. The snapshot digest
+  is in the payload and is the same for both sides of one moment, so the coached team is part of the key;
+  horizon and risk are included when the payload has them.
+  A repair turn shares its persona's key, so the final (repaired) answer is the one stored.
 
 A miss goes to the wrapped client when it is online (and is stored while
 recording). Offline, a miss raises, so the caller publishes its data-only
@@ -59,9 +64,28 @@ def _focus(profile: dict[str, Any]) -> str:
     ]))
 
 
+def prompt_hash(prompt: str | None) -> str:
+    return hashlib.sha1((prompt or "").strip().encode()).hexdigest()[:10]
+
+
 def request_key(payload: dict[str, Any], *, focus: bool = True) -> str | None:
     """Cassette key for one agent request, or None if it cannot be recorded."""
     task = payload.get("task")
+    if task in ("tactics", "tactics_verdict"):
+        digest = payload.get("snapshot_digest")
+        team = (payload.get("coaching") or {}).get("team_id")
+        if not digest or not team:
+            return None
+        tail = [prompt_hash(payload.get("prompt")), payload.get("language")]
+        horizon = payload.get("horizon_s")
+        horizon = f"h{horizon:g}" if isinstance(horizon, (int, float)) else ""
+        if task == "tactics":
+            persona = payload.get("persona")
+            persona = persona.get("name") if isinstance(persona, dict) else persona
+            head = [task, digest, team, persona, f"n{payload.get('n', '')}", horizon]
+        else:
+            head = [task, digest, team, horizon, payload.get("risk") or ""]
+        return "|".join(str(p) for p in (*head, *tail))
     context = payload.get("context") or {}
     signal = context.get("signal")
     if signal:

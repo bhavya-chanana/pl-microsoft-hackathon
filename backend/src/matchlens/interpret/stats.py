@@ -10,8 +10,9 @@ class PlayerStats:
     player_id: str
     team_id: str
     on_pitch: bool = False
-    minutes_from: float | None = None  # elapsed when the player came on
-    minutes_to: float | None = None  # elapsed when the player went off
+    seconds_played: float = 0.0  # live match clock seconds spent on the pitch
+    duels_won: int = 0  # see MatchEngine: a duel is one PRESSURE contest, presser against carrier
+    duels_total: int = 0
     touches: int = 0
     passes: int = 0
     passes_completed: int = 0
@@ -45,6 +46,9 @@ class PlayerStats:
             "player_id": self.player_id,
             "team_id": self.team_id,
             "on_pitch": self.on_pitch,
+            "minutes": int(self.seconds_played // 60),
+            "duels_won": self.duels_won,
+            "duels_total": self.duels_total,
             "touches": self.touches,
             "passes": passes,
             "passes_completed": self.passes_completed,
@@ -78,6 +82,8 @@ class TeamStats:
     team_id: str
     goals: int = 0
     possession_s: float = 0.0
+    possession_s_by_period: dict[int, float] = field(default_factory=dict)
+    final_third_passes_by_period: dict[int, int] = field(default_factory=dict)
     passes: int = 0
     passes_completed: int = 0
     final_third_passes: int = 0

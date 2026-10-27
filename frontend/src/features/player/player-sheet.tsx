@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { describeEvent, EVENT_ICON } from "@/features/companion/match-timeline";
+import { RateSelect } from "@/features/fans/player-ratings";
 import { MatchCard } from "@/features/fans/match-card";
+import { useCoach } from "@/features/coach/coach-store";
 import { useLive } from "@/features/live/live-store";
-import { usePlayerEvents, usePlayerStats } from "@/features/live/queries";
+import { usePlayerEvents, usePlayerStats, useRatings } from "@/features/live/queries";
 import { useProfile } from "@/features/profile/profile-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import type { MatchMeta, PlayerStats } from "@/lib/contract";
@@ -38,9 +40,17 @@ function Stat({ label, value, unit, note }: { label: string; value: string; unit
   );
 }
 
-function StatsGrid({ stats }: { stats: PlayerStats }) {
+function StatsGrid({ stats, full = false }: { stats: PlayerStats; full?: boolean }) {
   return (
     <dl className="grid grid-cols-2 gap-2">
+      {full && (
+        <>
+          <Stat label={copy.playersTable.goalsFull} value={String(stats.goals)} note={`${stats.assists} assists`} />
+          <Stat label={copy.playersTable.xg} value={stats.xg.toFixed(2)} />
+          <Stat label={copy.playersTable.defence} value={String(stats.tackles + stats.interceptions)} note={`${stats.tackles} tackles, ${stats.interceptions} interceptions`} />
+          <Stat label="Key passes" value={String(stats.key_passes)} />
+        </>
+      )}
       <Stat
         label={C.passes}
         value={String(stats.passes)}
@@ -150,11 +160,34 @@ function FollowButton({ playerId, name }: { playerId: string; name: string }) {
   );
 }
 
+/** Fan mode only: one "Rate this player" control instead of vote columns. */
+function VoteSection({ playerId }: { playerId: string }) {
+  const coachMode = useCoach((s) => s.coachMode);
+  const runId = useLive((s) => s.runId);
+  const row = useRatings().data?.find((r) => r.player_id === playerId);
+  if (coachMode || !row || !runId) return null;
+  return (
+    <section aria-labelledby="player-vote" className="flex flex-col gap-2">
+      <h3 id="player-vote" className="text-sm font-medium">
+        {copy.playersTable.vote}
+      </h3>
+      <p className="text-[13px] text-muted-foreground">
+        {copy.playersTable.voteHelp}
+        {row.fan_rating !== null && ` · ${copy.fans.fansColumn} ${formatNumber(row.fan_rating, 1)} (${copy.fans.votes(row.fan_votes)})`}
+      </p>
+      <RateSelect row={row} runId={runId} />
+    </section>
+  );
+}
+
 function PlayerBody({ playerId, meta }: { playerId: string; meta: MatchMeta }) {
   const info = meta.players[playerId];
   const stats = usePlayerStats(playerId);
   const teamId = stats.data?.team_id ?? playerId.split("-")[0];
   const side = sideOf(meta, teamId) ?? "home";
+  const coachMode = useCoach((s) => s.coachMode);
+  const analyst = useProfile((s) => s.mode === "analyst");
+  const plain = coachMode || analyst;
   const onPitch = stats.data?.on_pitch;
   return (
     <>
@@ -181,16 +214,19 @@ function PlayerBody({ playerId, meta }: { playerId: string; meta: MatchMeta }) {
         <StatsSkeleton />
       ) : stats.data ? (
         <>
-          {stats.data.card && <MatchCard card={stats.data.card} position={info?.position ?? ""} />}
-          <StatsGrid stats={stats.data} />
+          {stats.data.card && !plain && <MatchCard card={stats.data.card} position={info?.position ?? ""} />}
+          <StatsGrid stats={stats.data} full={plain} />
         </>
       ) : (
         <Retry label={C.error} retry={() => void stats.refetch()} />
       )}
+      <VoteSection playerId={playerId} />
       <RecentMoments playerId={playerId} meta={meta} />
-      <div className="mt-auto pt-2">
-        <FollowButton playerId={playerId} name={info?.name ?? ""} />
-      </div>
+      {!coachMode && (
+        <div className="mt-auto pt-2">
+          <FollowButton playerId={playerId} name={info?.name ?? ""} />
+        </div>
+      )}
     </>
   );
 }
@@ -222,8 +258,11 @@ export function PlayerSheet({
           return false;
         }}
         className={cn(
-          "gap-5 overflow-y-auto p-4 pt-6 shadow-floating",
-          wide ? "w-full sm:max-w-sm" : "max-h-[70dvh] rounded-t-xl",
+          "z-[60] gap-5 overflow-y-auto p-4 pt-6 shadow-floating",
+          // Desktop: start below the top bar and score strip so neither collides with the sheet or its close button.
+          wide
+            ? "w-full data-[side=right]:top-[calc(var(--topbar-h)+var(--hdr-min))]! data-[side=right]:bottom-0 data-[side=right]:h-auto! sm:max-w-sm"
+            : "max-h-[70dvh] rounded-t-xl",
         )}
       >
         {playerId && meta && <PlayerBody key={playerId} playerId={playerId} meta={meta} />}

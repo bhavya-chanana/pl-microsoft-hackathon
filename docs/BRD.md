@@ -276,6 +276,14 @@ Periodic samples per player and for the ball: `timestamp`, `entity_id`, `xy`, `s
 
 All clubs, players, venues and competition names must be fictional. No real trademarks, crests or names may appear in the product, repository or video.
 
+**Amendment (Tactics Brain).** The Tactics Brain feature (`leaguedata/`, `tactics/`, `tacticsml/`, `/tactics`) may use real club, player, manager and competition names, because its value is reasoning over real league history. The amendment covers names only:
+
+- No crests, kits or other trademarks.
+- Real-league data stays under `backend/data/local/` (gitignored) and is never committed.
+- Test fixtures keep fictional names.
+- The rest of the product, and the demo video unless it shows the Tactics Board, stays fictional.
+- Deploying a real-data knowledge base publicly needs the owner's sign-off on source licences (see `docs/LEAGUEDATA.md`).
+
 ## 10. Non-functional requirements
 
 ### 10.1 Performance

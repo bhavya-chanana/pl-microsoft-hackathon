@@ -1,0 +1,9 @@
+game_event_id,date,game_id,minute,type,club_id,club_name,player_id,description,player_in_id,player_assist_id
+e1,2023-08-12,1,10,Goals,100,Northvale Rovers FC,11,", Right-footed shot, 1. Goal of the Season Assist: , Pass, 1. Assist of the Season",,12
+e2,2023-08-12,1,40,Goals,100,Northvale Rovers FC,12,", Penalty, 2. Goal of the Season Assist: , Fouled player",,
+e3,2023-08-12,1,70,Goals,200,Eastport United,12,", Own-goal Assist: , Cross, 1. Assist of the Season",,21
+e4,2023-08-12,1,30,Cards,200,Eastport United,22,"1. Yellow card  , Foul",,
+e5,2023-08-12,1,80,Cards,200,Eastport United,22,"Second yellow ,  Persistent fouls",,
+e6,2023-08-12,1,60,Substitutions,100,Northvale Rovers FC,12,", Tactical",13,
+e7,2023-08-12,1,-1,Shootout,100,Northvale Rovers FC,11,", Scored",,
+e8,2023-08-12,1,85,Cards,100,Northvale Rovers FC,11,"Red card  , Violent conduct",,

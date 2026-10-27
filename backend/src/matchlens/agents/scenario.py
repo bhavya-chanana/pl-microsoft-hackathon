@@ -2,22 +2,27 @@
 
 The strong model writes a draft against the roster; ``check_storyline`` lists
 anything the simulator could not play, and the model gets one turn to fix it.
-A draft that still has problems is refused rather than played wrong.
+A draft that still has problems is refused rather than played wrong, and the
+refusal says why: the agent was too slow, did not answer, or could not fix it.
 """
 
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from pydantic import Field, ValidationError
 
 from matchlens.agents.contracts import _Strict
 from matchlens.domain.models import MatchMeta
-from matchlens.simulator.scenarios import check_storyline
+from matchlens.simulator.scenarios import PRESETS, check_storyline
 from matchlens.simulator.storyline import Beat, Phase, Storyline
 
 SCENARIO_TIMEOUT_S = 45.0
 MAX_PROMPT = 400
+
+Failure = Literal["timeout", "no_answer", "unplayable"]
 
 
 class PhaseDraft(_Strict):
@@ -68,9 +73,18 @@ def to_storyline(draft: ScenarioDraft) -> tuple[Storyline | None, list[str]]:
     return story, []
 
 
-async def write_storyline(team: Any, meta: MatchMeta, prompt: str, language: str) -> tuple[Storyline | None, list[str]]:
-    """(storyline, problems). The storyline is None when the model failed or could not fix its draft."""
-    from matchlens.agents.pipeline import call_agent
+@dataclass(frozen=True)
+class Written:
+    """A checked storyline, or why there is none. ``problems`` are the last draft's, if there was one."""
+
+    story: Storyline | None
+    problems: list[str]
+    failure: Failure | None = None
+
+
+async def write_storyline(team: Any, meta: MatchMeta, prompt: str, language: str) -> Written:
+    """Draft a storyline and check it, with one turn to fix what the simulator could not play."""
+    from matchlens.agents.pipeline import call_agent, timed_out
 
     payload: dict[str, Any] = {"task": "scenario", "prompt": prompt.strip()[:MAX_PROMPT], "language": language,
                                "roster": roster(meta)}
@@ -80,10 +94,38 @@ async def write_storyline(team: Any, meta: MatchMeta, prompt: str, language: str
             payload["problems"] = problems
         draft, err = await call_agent(team.scenario, payload, ScenarioDraft, timeout=SCENARIO_TIMEOUT_S)
         if draft is None:
-            return None, [err or "the scenario agent did not answer"]
+            return Written(None, problems, "timeout" if timed_out(err) else "no_answer")
         story, problems = to_storyline(draft)
         if story is not None:
             problems = check_storyline(meta, story)
             if not problems:
-                return story, []
-    return None, problems
+                return Written(story, [])
+    return Written(None, problems, "unplayable")
+
+
+# Words that point at a preset beyond what its own title and summary say.
+PRESET_HINTS = {
+    "comeback": "comeback behind recover turnaround fightback",
+    "ten-man-heist": "ten men heist counter red card sent defend",
+    "late-late-show": "late stoppage injury winner dramatic",
+    "goal-fest": "goals thriller seven wild chaos open",
+}
+NO_MATCH_NOTE = "Nothing in the description matched a preset, so this is the default one. "
+OFFLINE_NOTE = "Picked the closest preset; writing a new match needs the live model."
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z]{3,}", text.lower()))
+
+
+def closest_preset(prompt: str) -> tuple[str, bool]:
+    """Offline stand-in for the Scenario agent: the preset whose title, summary and hints share the most
+    words with the prompt. No shared word falls back to the first preset (second value False)."""
+    best, best_score = next(iter(PRESETS)), 0
+    wanted = _words(prompt)
+    for pid, (factory, _) in PRESETS.items():
+        story = factory()
+        score = len(wanted & _words(f"{story.title} {story.summary} {PRESET_HINTS.get(pid, '')} {pid}"))
+        if score > best_score:
+            best, best_score = pid, score
+    return best, best_score > 0

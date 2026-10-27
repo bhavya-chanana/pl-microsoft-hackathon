@@ -1,0 +1,101 @@
+{
+ "head": {
+  "vars": []
+ },
+ "results": {
+  "bindings": [
+   {
+    "club": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q900001"
+    },
+    "mgr": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q910001"
+    },
+    "mgrLabel": {
+     "type": "literal",
+     "value": "Alda Verrin"
+    },
+    "start": {
+     "type": "literal",
+     "value": "2016-07-01T00:00:00Z"
+    },
+    "birth": {
+     "type": "literal",
+     "value": "1968-02-03T00:00:00Z"
+    },
+    "natLabel": {
+     "type": "literal",
+     "value": "Fictionland"
+    },
+    "article": {
+     "type": "uri",
+     "value": "https://en.wikipedia.org/wiki/Alda_Verrin"
+    }
+   },
+   {
+    "club": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q900001"
+    },
+    "mgr": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q910002"
+    },
+    "mgrLabel": {
+     "type": "literal",
+     "value": "Bram Kestel"
+    },
+    "start": {
+     "type": "literal",
+     "value": "2010-07-01T00:00:00Z"
+    },
+    "end": {
+     "type": "literal",
+     "value": "2016-06-15T00:00:00Z"
+    },
+    "natLabel": {
+     "type": "literal",
+     "value": "Fictionland"
+    }
+   },
+   {
+    "club": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q900001"
+    },
+    "mgr": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q910003"
+    },
+    "mgrLabel": {
+     "type": "literal",
+     "value": "Cora Tessin"
+    }
+   },
+   {
+    "club": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q900002"
+    },
+    "mgr": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q910001"
+    },
+    "mgrLabel": {
+     "type": "literal",
+     "value": "Alda Verrin"
+    },
+    "start": {
+     "type": "literal",
+     "value": "2012-07-01T00:00:00Z"
+    },
+    "end": {
+     "type": "literal",
+     "value": "2016-06-30T00:00:00Z"
+    }
+   }
+  ]
+ }
+}

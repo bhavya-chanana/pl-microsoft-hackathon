@@ -1,7 +1,7 @@
 "use client";
 
 import { Radio, RotateCw, Video } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, m } from "motion/react";
 import { useCallback, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ import { TelestratorLayer } from "./telestrator";
 import { type InstantReplay, REPLAY_FRAME_MS, useInstantReplay } from "./use-instant-replay";
 import { useOverlayDirector } from "./use-overlay-director";
 
-function FeedNotice() {
+export function FeedNotice() {
   const status = useLive((s) => s.status);
   const hasMatch = useLive((s) => s.meta !== null);
   const reconnect = useReconnect();
@@ -38,6 +38,8 @@ function FeedNotice() {
   }
   if (status !== "offline" && status !== "no_match") return null;
   const offline = status === "offline";
+  // Keep the last picture on screen; the header pill says we are reconnecting.
+  if (offline && hasMatch) return null;
   return (
     <div className="absolute inset-0 grid place-items-center bg-graphic/80 p-6 text-center text-graphic-foreground">
       <div className="flex max-w-sm flex-col items-center gap-3">
@@ -146,11 +148,11 @@ export function BroadcastMonitor({
       data-monitor={autoReplay ? "main" : undefined}
       className={cn(
         "@container relative isolate overflow-hidden bg-graphic text-graphic-foreground",
-        fill ? "h-dvh w-full" : "aspect-video w-full rounded-lg shadow-floating ring-1 ring-border",
+        fill ? "h-dvh w-full" : cn("w-full rounded-lg shadow-floating ring-1 ring-border", compact ? "aspect-[3/2]" : "aspect-video"),
         className,
       )}
     >
-      <div className="absolute inset-0 grid place-items-center p-[3%] pt-[12%] @2xl:pt-[9%]">
+      <div className={cn("absolute inset-0 grid place-items-center p-[3%]", !compact && "pt-[12%] @2xl:pt-[9%]")}>
         <Pitch
           tilt={tilt}
           onSelectPlayer={interactive && !replay ? pick.select : undefined}
@@ -161,19 +163,21 @@ export function BroadcastMonitor({
           {!replay && lane && <PassLane pass={lane} />}
         </Pitch>
       </div>
-      <div className="absolute top-[3%] left-[3%] flex flex-col gap-1.5">
-        <ScoreBug />
-        {!compact && <MomentumBar compact className="hidden w-full max-w-56 @2xl:flex" />}
-      </div>
+      {!compact && (
+        <div className="absolute top-[3%] left-[3%] flex flex-col gap-1.5">
+          <ScoreBug />
+          <MomentumBar compact className="hidden w-full max-w-56 @2xl:flex" />
+        </div>
+      )}
       <AnimatePresence initial={false}>
         {replay ? (
-          <motion.div key="replay" className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <m.div key="replay" className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <ReplayChrome replay={replay} interactive={interactive} />
-          </motion.div>
+          </m.div>
         ) : (
-          <motion.div key="live" className="pointer-events-none absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <OverlayLayer onAir={onAir} />
-          </motion.div>
+          <m.div key="live" className="pointer-events-none absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            {!compact && <OverlayLayer onAir={onAir} />}
+          </m.div>
         )}
       </AnimatePresence>
       {interactive && !compact && !replay && (

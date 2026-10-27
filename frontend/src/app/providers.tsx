@@ -1,7 +1,9 @@
 "use client";
 
+import { usePrefs } from "@/features/profile/prefs-store";
+import { useCoach } from "@/features/coach/coach-store";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MotionConfig } from "motion/react";
+import { LazyMotion, MotionConfig } from "motion/react";
 import { ThemeProvider } from "next-themes";
 import { type ReactNode, useEffect, useState } from "react";
 
@@ -17,9 +19,14 @@ function LiveStream({ children }: { children: ReactNode }) {
   useEffect(() => {
     void profileStore.persist.rehydrate();
     void useFans.persist.rehydrate();
+    void useCoach.persist.rehydrate();
+    void usePrefs.persist.rehydrate();
   }, []);
   return <LiveStreamContext value={stream}>{children}</LiveStreamContext>;
 }
+
+/** Motion's layout and gesture features load after first paint, off the critical path. */
+const loadMotionFeatures = () => import("@/lib/motion-features").then((mod) => mod.default);
 
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(
@@ -31,12 +38,14 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
       <QueryClientProvider client={client}>
+        <LazyMotion features={loadMotionFeatures} strict>
         <MotionConfig reducedMotion="user">
           <TooltipProvider delay={300}>
             <LiveStream>{children}</LiveStream>
             <Toaster position="bottom-center" />
           </TooltipProvider>
         </MotionConfig>
+        </LazyMotion>
       </QueryClientProvider>
     </ThemeProvider>
   );

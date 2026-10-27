@@ -1,16 +1,20 @@
 "use client";
 
-import { Volume2, VolumeX } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { SlidersHorizontal } from "lucide-react";
+import { AnimatePresence, m } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { StoreApi } from "zustand";
 
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Toggle } from "@/components/ui/toggle";
 import { BroadcastMonitor } from "@/features/broadcast/broadcast-monitor";
+import { useOverlayDirector } from "@/features/broadcast/use-overlay-director";
+import { Caption } from "@/features/live/live-pitch";
 import { FactCheckBadge } from "@/features/companion/fact-check-badge";
-import { Narrator } from "@/features/companion/narration";
+import { Narrator, VoiceNote } from "@/features/companion/narration";
+import { SoundButton } from "@/features/companion/sound-button";
 import { useLive } from "@/features/live/live-store";
 import { useCoachBrief, useFeed } from "@/features/live/queries";
 import {
@@ -77,7 +81,7 @@ function FeedTop() {
         {items.map((item) => {
           const side = sideOf(meta, item.team_id);
           return (
-            <motion.li
+            <m.li
               key={item.insight_id}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -92,7 +96,7 @@ function FeedTop() {
                 </div>
                 <p className="line-clamp-2 font-display text-base leading-snug font-semibold">{item.headline}</p>
               </div>
-            </motion.li>
+            </m.li>
           );
         })}
     </ol>
@@ -127,32 +131,44 @@ function PaneControls({ index, kind, onKind }: { index: number; kind: Kind; onKi
   const language = useProfile((s) => s.language);
   const setLanguage = useProfile((s) => s.setLanguage);
   return (
-    <div className="flex gap-2">
-      <Select items={copy.multiverse.personas} value={kind} onValueChange={(v) => v && onKind(v as Kind)}>
-        <SelectTrigger aria-label={`${copy.multiverse.persona} ${index + 1}`} className="h-11 min-w-0 flex-1">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {KINDS.map((k) => (
-            <SelectItem key={k} value={k}>
-              {copy.multiverse.personas[k]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select items={copy.languages} value={language} onValueChange={(v) => v && setLanguage(v as Language)}>
-        <SelectTrigger aria-label={`${copy.profile.language} ${index + 1}`} className="h-11 w-28">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {LANGUAGES.map((l) => (
-            <SelectItem key={l} value={l} lang={l}>
-              {copy.languages[l]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <Popover>
+      <PopoverTrigger render={<Button variant="secondary" className="h-11 gap-2 self-start px-4" />}>
+        <SlidersHorizontal aria-hidden />
+        {copy.multiverse.customise}
+      </PopoverTrigger>
+      <PopoverContent className="flex w-72 flex-col gap-3">
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          {copy.multiverse.persona}
+          <Select items={copy.multiverse.personas} value={kind} onValueChange={(v) => v && onKind(v as Kind)}>
+            <SelectTrigger aria-label={`${copy.multiverse.persona} ${index + 1}`} className="h-11 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {KINDS.map((k) => (
+                <SelectItem key={k} value={k}>
+                  {copy.multiverse.personas[k]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          {copy.profile.language}
+          <Select items={copy.languages} value={language} onValueChange={(v) => v && setLanguage(v as Language)}>
+            <SelectTrigger aria-label={`${copy.profile.language} ${index + 1}`} className="h-11 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LANGUAGES.map((l) => (
+                <SelectItem key={l} value={l} lang={l}>
+                  {copy.languages[l]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -167,18 +183,20 @@ function PaneTitle({ kind, audio, onAudio }: { kind: Kind; audio: boolean; onAud
           {copy.languages[profile.language]}
         </span>
       </h2>
-      <Toggle
-        variant="outline"
-        className="size-11 shrink-0"
-        pressed={audio}
-        onPressedChange={onAudio}
-        aria-label={audio ? copy.multiverse.audioOn : copy.multiverse.audio}
-        title={audio ? copy.multiverse.audioOn : copy.multiverse.audio}
-      >
-        {audio ? <Volume2 aria-hidden /> : <VolumeX aria-hidden />}
-      </Toggle>
+      <SoundButton
+        enabled={audio}
+        onChange={onAudio}
+        name={copy.multiverse.audio}
+        labels={{ off: copy.narration.button.listen, on: copy.narration.button.playing, speaking: copy.narration.button.playing }}
+      />
     </div>
   );
+}
+
+/** What is on air, as a caption under the pitch (same as the Live page), not over the play. */
+function PaneCaption() {
+  const onAir = useOverlayDirector();
+  return <Caption onAir={onAir} />;
 }
 
 function Pane({
@@ -203,12 +221,14 @@ function Pane({
       <section
         aria-label={`${copy.multiverse.panes} ${index + 1}`}
         className={cn(
-          "flex w-[88vw] max-w-xl shrink-0 snap-center flex-col gap-3 rounded-xl border bg-card p-3 shadow-raised transition-shadow duration-300 sm:w-[70vw] lg:w-auto lg:max-w-none",
+          "flex w-[88vw] max-w-xl shrink-0 snap-center flex-col gap-3 rounded-2xl border bg-card p-3 shadow-raised transition-shadow duration-300 sm:w-[70vw] lg:w-auto lg:max-w-none",
           flash && "ring-2 ring-tally",
         )}
       >
         <PaneTitle kind={kind} audio={audio} onAudio={onAudio} />
+        <VoiceNote enabled={audio} retry />
         <BroadcastMonitor compact autoReplay={index === 0} />
+        <PaneCaption />
         <div className="min-h-32">{kind === "coach" ? <CoachTop /> : <FeedTop />}</div>
         <PaneControls index={index} kind={kind} onKind={onKind} />
         <Narrator enabled={audio} />
@@ -267,15 +287,15 @@ export function Multiverse() {
   };
 
   return (
-    <main className="mx-auto flex max-w-screen-2xl flex-col gap-4 py-4 lg:px-6 lg:py-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-4 py-4 lg:px-6 lg:py-6">
       <div className="flex flex-wrap items-end justify-between gap-3 px-4 lg:px-0">
         <div className="flex flex-col gap-1">
-          <h1 className="font-display text-display font-semibold">{copy.multiverse.heading}</h1>
+          <h1 className="text-[28px] leading-[34px] font-semibold tracking-tight">{copy.multiverse.heading}</h1>
           <p className="max-w-prose text-sm text-muted-foreground">{copy.multiverse.intro}</p>
         </div>
         <AnimatePresence>
           {flash && (
-            <motion.p
+            <m.p
               role="status"
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -283,7 +303,7 @@ export function Multiverse() {
               className="rounded-full bg-tally px-3 py-1 font-display text-sm font-semibold text-tally-foreground"
             >
               {copy.multiverse.sync}
-            </motion.p>
+            </m.p>
           )}
         </AnimatePresence>
       </div>
@@ -301,6 +321,6 @@ export function Multiverse() {
           />
         ))}
       </div>
-    </main>
+    </div>
   );
 }

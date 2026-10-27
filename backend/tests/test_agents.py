@@ -289,3 +289,98 @@ def test_personalised_feed(played):
     focus = personalise_feed(session, FanProfile(mode=Mode.PLAYER_FOCUS, player_id="NBR-10"))
     assert all(x["favourite_player"] or x["signal_type"] == "goal" for x in focus)
     assert any(x["signal_type"] == "milestone" for x in focus)
+
+
+def test_grounded_render_counts_survive_producer_and_personaliser(played):
+    """Renderers have no claims fields, so their named snapshot facts must remain usable."""
+    goal = signal_of(played, SignalType.GOAL, "23'")
+    player_id = goal.player_ids[0]
+    name = played.engine.meta.players[player_id].name
+    actual = played.engine.player_stats(player_id)["goals"]
+
+    def client_for(offset):
+        phrase = f"{name} has {actual + offset} goals."
+        def overlay(draft, payload):
+            return draft.model_copy(update={"title": phrase})
+        def personal(draft, payload):
+            variants = [v.model_copy(update={"body": phrase}) if v.mode == Mode.CASUAL and v.language == Language.EN
+                        else v for v in draft.variants]
+            return draft.model_copy(update={"variants": variants})
+        return ScriptedClient(tamper={"overlay": overlay, "personalise": personal})
+
+    for offset in (0, 17):
+        session = fresh_session(played)
+        run(InsightPipeline(team_for(client_for(offset))).handle(goal, session))
+        ins = session.insights[goal.signal_id]
+        phrase = f"{name} has {actual + offset} goals."
+        overlay_title = session.overlays[goal.signal_id]["title"]
+        variant_body = ins["variants"]["casual"]["en"]["body"]
+        assert (overlay_title == phrase) == (offset == 0)
+        assert (variant_body == phrase) == (offset == 0)
+
+
+def test_feed_orders_second_half_kickoff_after_half_time_at_same_elapsed(played):
+    session = fresh_session(played)
+    periods = [s for s in played.engine.signals() if s.type == SignalType.PERIOD]
+    halftime = next(s for s in periods if s.signal_id == "period:half_time")
+    kickoff = next(s for s in periods if s.signal_id == "period:kickoff:2")
+    assert halftime.elapsed == kickoff.elapsed and halftime.period < kickoff.period
+    pipe = InsightPipeline(team_for(ScriptedClient()))
+    # Opposite insertion order also proves the period tie-break does not depend on insertion.
+    run(pipe.handle(kickoff, session))
+    run(pipe.handle(halftime, session))
+    feed = personalise_feed(session, FanProfile())
+    assert [entry["insight_id"] for entry in feed[:2]] == [kickoff.signal_id, halftime.signal_id]
+    assert [entry["minute_label"] for entry in feed[:2]] == ["46'", "45+2'"]
+
+
+def test_delayed_agent_upgrade_keeps_history_without_reairing_old_overlay(played):
+    """A warm-up can advance the clock while an early signal's agents are still working."""
+    class DeferredClient(ScriptedClient):
+        def __init__(self):
+            super().__init__()
+            self.entered = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def _respond(self, messages):
+            self.entered.set()
+            await self.release.wait()
+            return await super()._respond(messages)
+
+    async def scenario(start, finish, expect_overlay_upgrade):
+        session = fresh_session(played)
+        engine = session.engine
+        original_elapsed = engine.c.elapsed
+        client = DeferredClient()
+        pipe = InsightPipeline(team_for(client))
+        signal = signal_of(played, SignalType.GOAL, "23'").model_copy(update={"elapsed": start})
+        try:
+            engine.c.elapsed = start
+            task = asyncio.create_task(pipe.handle(signal, session))
+            await asyncio.wait_for(client.entered.wait(), 1)
+            initial_overlay = session.overlays[signal.signal_id]
+            assert initial_overlay["start_elapsed"] == start
+            engine.c.elapsed = finish
+            client.release.set()
+            await asyncio.wait_for(task, 5)
+            assert session.insights[signal.signal_id]["stage"] == "agent"
+            overlay = session.overlays[signal.signal_id]
+            if expect_overlay_upgrade:
+                assert overlay["stage"] == "agent" and overlay["start_elapsed"] >= finish - 2
+            else:
+                assert overlay["stage"] == "agent"
+                assert overlay["start_elapsed"] == start
+                from matchlens.agents.contracts import Overlay
+                stale_without_booking = Overlay.model_validate({**overlay, "overlay_id": "unbooked-old",
+                                                                "duration_s": 999999})
+                pipe._publish_overlay(stale_without_booking, session)
+                historical = session.overlays["unbooked-old"]
+                assert historical["start_elapsed"] == start
+                assert historical["start_elapsed"] + historical["duration_s"] < finish
+        finally:
+            engine.c.elapsed = original_elapsed
+
+    # start_minute=100 advances past the end of the match during warm-up.
+    run(scenario(542, 6000, False))
+    # A late-match signal still gets a timely agent graphic.
+    run(scenario(5730, 5742, True))

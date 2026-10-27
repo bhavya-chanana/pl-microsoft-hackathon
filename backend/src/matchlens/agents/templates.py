@@ -52,10 +52,15 @@ PHRASES: dict[str, dict[str, tuple[str, str]]] = {
         "hi": ("{player} का शानदार बचाव", "{minute} पर {player} ने {xg_faced} xG का मौका रोका।"),
         "es": ("Gran parada de {player}", "{player} detuvo una ocasión de {xg_faced} xG en el {minute}."),
     },
-    "card": {
-        "en": ("{card_name} for {player}", "{team} now have {on_pitch} players on the pitch ({minute})."),
+    "card_yellow": {
+        "en": ("{card_name} for {player}", "{player} is booked ({minute})."),
+        "hi": ("{player} को {card_name}", "{minute} पर {player} को कार्ड दिखाया गया।"),
+        "es": ("{card_name} para {player}", "{player} es amonestado ({minute})."),
+    },
+    "card_red": {
+        "en": ("{card_name} for {player}", "{team} are down to {on_pitch} players ({minute})."),
         "hi": ("{player} को {card_name}", "{minute} पर {team} के मैदान में अब {on_pitch} खिलाड़ी हैं।"),
-        "es": ("{card_name} para {player}", "{team} juega ahora con {on_pitch} jugadores ({minute})."),
+        "es": ("{card_name} para {player}", "{team} se queda con {on_pitch} jugadores ({minute})."),
     },
     "substitution": {
         "en": ("{on_name} on for {off_name}", "{team} make a change at {minute}."),
@@ -63,9 +68,9 @@ PHRASES: dict[str, dict[str, tuple[str, str]]] = {
         "es": ("Entra {on_name} por {off_name}", "Cambio de {team} en el {minute}."),
     },
     "momentum_swing": {
-        "en": ("Momentum swings to {team}", "The momentum index moved from {from_index} to {to_index} since {since}."),
-        "hi": ("लय {team} की ओर", "{since} से मोमेंटम इंडेक्स {from_index} से {to_index} पर पहुँचा।"),
-        "es": ("El impulso cambia hacia {team}", "El índice de impulso pasó de {from_index} a {to_index} desde el {since}."),
+        "en": ("Momentum swings to {team}", "Since {since}, {team} have taken over: {strength} on a 0-100 scale in their favour."),
+        "hi": ("लय {team} की ओर", "{since} से {team} ने बढ़त ले ली है: 0-100 के पैमाने पर उनके पक्ष में {strength}।"),
+        "es": ("El impulso cambia hacia {team}", "Desde el {since}, {team} ha tomado el control: {strength} en una escala de 0-100 a su favor."),
     },
     "pressure_spell": {
         "en": ("{team} turning up the pressure", "{pressing_actions} pressing actions and {turnovers_won} turnovers won in a short spell."),
@@ -112,6 +117,11 @@ PHRASES: dict[str, dict[str, tuple[str, str]]] = {
         "hi": ("{minute} पर सुधार", "अपडेट: {previous_name} की जगह अब {value_name}।"),
         "es": ("Corrección en el {minute}", "Actualizado: {previous_name} pasa a ser {value_name}."),
     },
+    "correction_goal": {
+        "en": ("Goal at {corrected_minute} re-credited to {value_name}", "The data feed first credited {previous_name}."),
+        "hi": ("{corrected_minute} का गोल अब {value_name} के नाम", "डेटा फ़ीड ने पहले {previous_name} को श्रेय दिया था।"),
+        "es": ("Gol del {corrected_minute} acreditado a {value_name}", "El feed de datos lo atribuyó primero a {previous_name}."),
+    },
     "kickoff": {
         "en": ("Kick-off", "{home} v {away} is under way."),
         "hi": ("किक-ऑफ़", "{home} बनाम {away} शुरू।"),
@@ -147,8 +157,16 @@ class _Safe(dict):  # leaves unknown placeholders readable instead of raising
         return "-"
 
 
+PHRASES["card"] = PHRASES["card_yellow"]  # old recorded signals without the card kind
+
+
 def phrase_key(pack: Pack) -> str:
     sig = pack["signal"]
+    if sig["type"] == "correction" and sig["facts"].get("corrected_event_type") == "goal" \
+            and sig["facts"].get("corrected_minute_label"):
+        return "correction_goal"
+    if sig["type"] == "card":
+        return "card_red" if sig["facts"].get("card") in ("red", "second_yellow") else "card_yellow"
     if sig["type"] == "period":
         return str(sig["facts"].get("phase", "kickoff"))
     return sig["type"]
@@ -194,6 +212,7 @@ def _vars(pack: Pack, lang: str) -> _Safe:
         on_name=names.get(str(facts.get("on")), "-"), off_name=names.get(str(facts.get("off")), "-"),
         previous_name=names.get(str(facts.get("previous")), str(facts.get("previous", "-"))),
         value_name=names.get(str(facts.get("value")), str(facts.get("value", "-"))),
+        corrected_minute=facts.get("corrected_minute_label", "-"),
         card_name=CARD_NAMES.get(str(facts.get("card")), CARD_NAMES["yellow"])[lang],
         outcome=OUTCOMES.get(str(facts.get("outcome")), {}).get(lang, str(facts.get("outcome", "-"))),
         on_pitch=facts.get("players_on_pitch", "-"),
@@ -221,7 +240,7 @@ def key_numbers(pack: Pack) -> list[KeyNumber]:
     labels = {
         "xg": ("xG", None), "xg_faced": ("xG faced", None), "shot_speed_kmh": ("Shot speed", "km/h"),
         "speed_kmh": ("Top speed", "km/h"), "distance_km": ("Distance", "km"), "difficulty": ("Pass difficulty", "/100"),
-        "distance_m": ("Pass length", "m"), "to_index": ("Momentum", None), "pressing_actions": ("Pressing actions", None),
+        "distance_m": ("Pass length", "m"), "strength": ("Momentum", "/100"), "pressing_actions": ("Pressing actions", None),
         "turnovers_won": ("Turnovers won", None), "turnovers_per_min": ("Turnovers/min", None),
         "pass_share_pct": ("Pass share", "%"), "value": ("Career goals", None), "players_on_pitch": ("On pitch", None),
     }
@@ -346,7 +365,36 @@ def rewrite(payload: Pack) -> RewriteDraft:
     return RewriteDraft(headline=head, body=body, claims=[_score_claim(payload["context"])])
 
 
+def tactics_template(payload: Pack) -> Any:
+    """Offline persona answer: playbook recipes chosen for the persona (see agents/tactician.py)."""
+    from matchlens.agents.tactician import offline_tactics
+
+    return offline_tactics(payload)
+
+
+def tactics_verdict_template(payload: Pack) -> Any:
+    """Offline Gaffer's verdict: the top-ranked tactic and its simulated statistics."""
+    from matchlens.agents.tactician import offline_verdict
+
+    return offline_verdict(payload)
+
+
+def league_match_reasoning_template(payload: Pack) -> Any:
+    """Offline league match reasoning: rules over the digest (see leaguedata/reasoner.py)."""
+    from matchlens.leaguedata.reasoner import offline_draft
+
+    return offline_draft(payload["digest"])
+
+
+def league_playbook_template(payload: Pack) -> Any:
+    """Offline playbook text: the deterministic template of leaguedata/playbook.py."""
+    from matchlens.leaguedata.playbook import template_draft
+
+    return template_draft(payload)
+
+
 TASKS = {
+    "league_playbook": league_playbook_template,
     "tactical": lambda p: tactical(p["context"]),
     "narrative": lambda p: narrative(p["context"]),
     "overlay": lambda p: overlay_plan(p["context"], p.get("headline"), p.get("body")),
@@ -356,4 +404,7 @@ TASKS = {
     "rewrite": rewrite,
     "coach": lambda p: coach_template(p["context"]),
     "pundit": lambda p: pundit_template(p["context"], p.get("language", "en")),
+    "tactics": tactics_template,
+    "tactics_verdict": tactics_verdict_template,
+    "league_match_reasoning": league_match_reasoning_template,
 }

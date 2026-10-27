@@ -1,7 +1,11 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
+
+import { Segmented } from "@/components/ui/segmented";
 import { useLive } from "@/features/live/live-store";
 import type { MatchEvent, MatchMeta } from "@/lib/contract";
 import { copy } from "@/lib/copy";
@@ -38,18 +42,18 @@ function Mark({ outcome, r, className }: { outcome: string; r: number; className
     case "goal":
       return (
         <g className={className}>
-          <circle r={r} className="fill-current" />
+          <circle r={r} className="fill-current" fillOpacity={0.7} />
           <circle r={r + 0.7} className="fill-none stroke-current" strokeWidth={0.35} />
         </g>
       );
     case "saved":
-      return <rect x={-r} y={-r} width={r * 2} height={r * 2} className={cn("fill-none stroke-current", className)} strokeWidth={0.5} />;
+      return <rect x={-r} y={-r} width={r * 2} height={r * 2} className={cn("fill-none stroke-current", className)} strokeWidth={0.2} />;
     case "blocked":
       return (
         <path
           d={`M 0 ${-r * 1.15} L ${r} ${r * 0.75} L ${-r} ${r * 0.75} Z`}
           className={cn("fill-none stroke-current", className)}
-          strokeWidth={0.5}
+          strokeWidth={0.2}
           strokeLinejoin="round"
         />
       );
@@ -65,7 +69,19 @@ function Mark({ outcome, r, className }: { outcome: string; r: number; className
   }
 }
 
-const markSize = (xg: number | null) => 0.8 + Math.sqrt(xg ?? 0.05) * 2;
+/** Marker radius in pitch units, capped near 10px on a full-width map. */
+const markSize = (xg: number | null) => Math.min(1.35, 0.6 + Math.sqrt(xg ?? 0.05) * 1.1);
+
+/** A small stable offset per shot, so shots from the same spot do not hide each other. */
+function jitter(id: string): [number, number] {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return [((h & 0xff) / 255 - 0.5) * 1.6, (((h >> 8) & 0xff) / 255 - 0.5) * 1.6];
+}
+
+const VIEW_H = 31;
+/** The penalty-area box, magnified about 2x beside the third-pitch map. */
+const ZOOM = { x: 13, y: -2, w: 42.2, h: 20 };
 
 function HalfPitch() {
   return (
@@ -78,6 +94,116 @@ function HalfPitch() {
       <path d={`M ${W / 2 - 7.31} 16.5 A 9.15 9.15 0 0 0 ${W / 2 + 7.31} 16.5`} />
       <path d={`M ${W / 2 - 9.15} ${HALF} A 9.15 9.15 0 0 1 ${W / 2 + 9.15} ${HALF}`} />
     </g>
+  );
+}
+
+type TipState = { id: string; pinned: boolean } | null;
+
+/** The shots as shaped marks. Hover shows who, when and xG; a tap pins it. */
+function ShotMarks({
+  shots,
+  meta,
+  active,
+  goalNumber,
+  tip,
+  setTip,
+  radius = 1,
+  spread = 1,
+}: {
+  shots: PlottedShot[];
+  meta: MatchMeta;
+  active: string | null;
+  goalNumber: Map<string, number>;
+  tip: TipState;
+  setTip: (t: TipState) => void;
+  radius?: number;
+  spread?: number;
+}) {
+  return (
+    <>
+      {[...shots].sort((x, y) => Number(x.event.outcome === "goal") - Number(y.event.outcome === "goal")).map((shot) => {
+        const id = shot.event.event_id;
+        const dim = (active !== null && active !== id) || (tip !== null && tip.id !== id);
+        const [dx, dy] = jitter(id);
+        const goal = shot.event.outcome === "goal";
+        return (
+          <g
+            key={id}
+            transform={`translate(${shot.x + dx * spread} ${Math.max(0.5, shot.y + dy * spread)})`}
+            className={cn(sideTone[shot.side].text, "cursor-pointer transition-opacity", dim && "opacity-25")}
+            onPointerEnter={(e) => e.pointerType === "mouse" && !tip?.pinned && setTip({ id, pinned: false })}
+            onPointerLeave={(e) => e.pointerType === "mouse" && !tip?.pinned && setTip(null)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setTip(tip?.id === id && tip.pinned ? null : { id, pinned: true });
+            }}
+          >
+            <circle r={markSize(shot.xg) * radius + 1} fill="transparent" />
+            {tip?.pinned && tip.id === id && <circle r={markSize(shot.xg) * radius + 1.1} className="fill-none stroke-foreground" strokeWidth={0.45} />}
+            <Mark outcome={shot.event.outcome} r={markSize(shot.xg) * radius} className="stroke-current" />
+            {goal && (
+              <text y={0.9 * radius} textAnchor="middle" fontSize={2.4 * radius} fontWeight={700} className="pointer-events-none fill-background">
+                {goalNumber.get(id)}
+              </text>
+            )}
+            <title>{describeShot(shot, meta)}</title>
+          </g>
+        );
+      })}
+    </>
+  );
+}
+
+function Tooltip({ shot, meta, box }: { shot: PlottedShot; meta: MatchMeta; box: { x: number; y: number; w: number; h: number } }) {
+  const left = ((shot.x - box.x) / box.w) * 100;
+  const top = ((shot.y - box.y) / box.h) * 100;
+  return (
+    <div
+      role="status"
+      className="pointer-events-none absolute z-10 w-max max-w-48 -translate-x-1/2 rounded-lg bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-floating ring-1 ring-border"
+      style={{ left: `${Math.min(80, Math.max(20, left))}%`, top: `calc(${top}% + 14px)` }}
+    >
+      <p className="font-semibold">{playerName(meta, shot.event.player_id)}</p>
+      <p className="text-muted-foreground tabular-nums">
+        {shot.event.minute_label} · {S.outcomes[shot.event.outcome] ?? shot.event.outcome.replaceAll("_", " ")}
+        {shot.xg !== null && ` · ${S.xg(shot.xg)}`}
+      </p>
+    </div>
+  );
+}
+
+/** The pinned shot in words, with ‹ › to step through every shot in the order they happened. */
+function ShotDetail({ shots, id, meta, onStep, onClose }: { shots: PlottedShot[]; id: string; meta: MatchMeta; onStep: (id: string) => void; onClose: () => void }) {
+  const i = shots.findIndex((x) => x.event.event_id === id);
+  if (i < 0) return null;
+  const shot = shots[i];
+  const e = shot.event;
+  const bits = ["body_part", "situation", "shot_type"].flatMap((k) => (typeof e.attrs[k] === "string" ? [String(e.attrs[k]).replaceAll("_", " ")] : []));
+  const go = (d: number) => onStep(shots[(i + d + shots.length) % shots.length].event.event_id);
+  return (
+    <section aria-label={S.detail} className="flex items-center gap-2 rounded-xl bg-raised p-2 ring-1 ring-border">
+      <Button variant="ghost" size="icon" className="size-11 shrink-0" aria-label={S.prev} onClick={() => go(-1)}>
+        <ChevronLeft aria-hidden />
+      </Button>
+      <div role="status" className="flex min-w-0 flex-1 flex-col text-center">
+        <p className="truncate text-base font-medium">
+          <span aria-hidden className={cn("mr-2 inline-block size-2.5 rounded-full", shot.side === "home" ? "bg-home" : "bg-away")} />
+          {playerName(meta, e.player_id)} <span className="text-muted-foreground tabular-nums">{e.minute_label}</span>
+        </p>
+        <p className="truncate text-[13px] text-muted-foreground">
+          {S.outcomes[e.outcome] ?? e.outcome.replaceAll("_", " ")}
+          {shot.xg !== null && ` · ${S.xg(shot.xg)}`}
+          {bits.length > 0 && ` · ${bits.join(", ")}`}
+          {` · ${i + 1} / ${shots.length}`}
+        </p>
+      </div>
+      <Button variant="ghost" size="icon" className="size-11 shrink-0" aria-label={S.next} onClick={() => go(1)}>
+        <ChevronRight aria-hidden />
+      </Button>
+      <Button variant="ghost" className="h-11 px-3 text-[13px]" onClick={onClose}>
+        {S.close}
+      </Button>
+    </section>
   );
 }
 
@@ -107,43 +233,52 @@ export function ShotMapPanel({ className }: { className?: string }) {
   const meta = useLive((s) => s.meta);
   const timeline = useLive((s) => s.timeline);
   const [active, setActive] = useState<string | null>(null);
+  const [tip, setTip] = useState<TipState>(null);
+  const [team, setTeam] = useState<"both" | Side>("both");
   if (!meta) return null;
-  const shots = timeline.filter((e) => e.type === "shot").flatMap((e) => plot(e, meta) ?? []);
+  const all = timeline.filter((e) => e.type === "shot").flatMap((e) => plot(e, meta) ?? []);
+  const shots = all.filter((s) => team === "both" || s.side === team);
   const latest = shots.slice(-LATEST).reverse();
   const goals = shots.filter((s) => s.event.outcome === "goal").length;
-  const count = (side: Side) => shots.filter((s) => s.side === side).length;
+  const goalNumber = new Map(shots.filter((s) => s.event.outcome === "goal").map((s, i) => [s.event.event_id, i + 1]));
+  const count = (side: Side) => all.filter((s) => s.side === side).length;
 
   return (
-    <section aria-labelledby="shot-map-heading" className={cn("flex flex-col gap-3 rounded-lg border bg-card p-4", className)}>
+    <section aria-labelledby="shot-map-heading" className={cn("@container flex min-w-0 flex-col gap-3 rounded-2xl border bg-card p-4 shadow-raised", className)}>
       <div className="flex flex-col gap-0.5">
         <h2 id="shot-map-heading" className="font-display text-lg font-semibold">
           {S.heading}
         </h2>
         <p className="max-w-prose text-xs text-muted-foreground">{S.help}</p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-        <figure className="flex flex-col gap-2">
+      <Segmented<"both" | Side>
+        label={S.heading}
+        value={team}
+        onChange={setTeam}
+        className="min-w-0 max-w-sm"
+        options={[
+          { value: "both", label: copy.momentsPage.kinds.all },
+          { value: "home", label: <><span aria-hidden className="size-2.5 rounded-full bg-home" />{meta.home.short_name}</> },
+          { value: "away", label: <><span aria-hidden className="size-2.5 rounded-full bg-away" />{meta.away.short_name}</> },
+        ]}
+      />
+      <div className="grid gap-4 @3xl:grid-cols-[minmax(0,34rem)_minmax(0,1fr)]">
+        <figure className="flex min-w-0 flex-col gap-2">
+          <div className="relative" onClick={() => setTip(null)}>
           <svg
-            viewBox={`-3 -3 ${W + 6} ${HALF + 5}`}
+            viewBox={`-3 -3 ${W + 6} ${VIEW_H + 3}`}
             role="img"
             aria-label={`${S.heading}: ${meta.home.name} ${count("home")} shots, ${meta.away.name} ${count("away")} shots, ${goals} goals.`}
             className="w-full rounded-md bg-turf"
           >
             <HalfPitch />
-            {shots.map((shot) => {
-              const dim = active !== null && active !== shot.event.event_id;
-              return (
-                <g
-                  key={shot.event.event_id}
-                  transform={`translate(${shot.x} ${shot.y})`}
-                  className={cn(sideTone[shot.side].text, "transition-opacity", dim && "opacity-25")}
-                >
-                  <Mark outcome={shot.event.outcome} r={markSize(shot.xg)} className="stroke-current" />
-                  <title>{describeShot(shot, meta)}</title>
-                </g>
-              );
-            })}
+            <ShotMarks shots={shots} meta={meta} active={active} goalNumber={goalNumber} tip={tip} setTip={setTip} />
           </svg>
+          {tip && !tip.pinned && shots.find((x) => x.event.event_id === tip.id) && (
+            <Tooltip shot={shots.find((x) => x.event.event_id === tip.id)!} meta={meta} box={{ x: -3, y: -3, w: W + 6, h: VIEW_H + 3 }} />
+          )}
+          </div>
+          {tip?.pinned && <ShotDetail shots={shots} id={tip.id} meta={meta} onStep={(id) => setTip({ id, pinned: true })} onClose={() => setTip(null)} />}
           <figcaption className="flex flex-col gap-1.5">
             <Legend />
             <p className="flex gap-4 text-xs">
@@ -158,7 +293,33 @@ export function ShotMapPanel({ className }: { className?: string }) {
             </p>
           </figcaption>
         </figure>
-        <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex min-w-0 flex-col gap-3">
+          <figure className="flex flex-col gap-1.5">
+            <figcaption className="text-sm font-medium">{S.zoom}</figcaption>
+            <div className="relative max-w-sm" onClick={() => setTip(null)}>
+              <svg
+                viewBox={`${ZOOM.x} ${ZOOM.y} ${ZOOM.w} ${ZOOM.h}`}
+                role="img"
+                aria-label={S.zoom}
+                className="w-full rounded-md bg-turf ring-1 ring-border"
+              >
+                <HalfPitch />
+                <ShotMarks
+                  shots={shots.filter((x) => x.x >= ZOOM.x && x.x <= ZOOM.x + ZOOM.w && x.y <= ZOOM.y + ZOOM.h)}
+                  meta={meta}
+                  active={active}
+                  goalNumber={goalNumber}
+                  tip={tip}
+                  setTip={setTip}
+                  radius={0.7}
+                  spread={1.7}
+                />
+              </svg>
+              {tip && !tip.pinned && shots.find((x) => x.event.event_id === tip.id) && (
+                <Tooltip shot={shots.find((x) => x.event.event_id === tip.id)!} meta={meta} box={ZOOM} />
+              )}
+            </div>
+          </figure>
           <h3 className="text-sm font-medium">{S.latest}</h3>
           {latest.length === 0 ? (
             <p className="text-sm text-muted-foreground">{S.empty}</p>

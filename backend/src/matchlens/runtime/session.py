@@ -41,6 +41,8 @@ def event_payload(engine: MatchEngine, e: Event) -> dict[str, Any]:
     q = engine.pass_quality(e.event_id)
     if q:
         data["pass_quality"] = q.model_dump()
+    if e.type == EventType.KICKOFF:
+        data["restart"] = engine.is_restart(e.event_id)
     return data
 
 
@@ -65,6 +67,7 @@ class MatchSession:
         # Fan polls and ratings; votes are stored with the run.
         self.fans = FanZone(self.meta, salt=self.run_id, sink=self.recorder.fan_vote)
         self._tally_pending = False
+        self._handler_tasks: set[asyncio.Task[None]] = set()
 
     @property
     def run_id(self) -> str:
@@ -80,6 +83,18 @@ class MatchSession:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
+            self._task = None
+        tasks = list(self._handler_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    def track_handler_task(self, task: asyncio.Task[None]) -> None:
+        """Own background work so stopping the session cancels and joins it."""
+        if not task.done():
+            self._handler_tasks.add(task)
+            task.add_done_callback(self._handler_tasks.discard)
 
     def on_signal(self, handler: SignalHandler) -> None:
         self._signal_handlers.append(handler)
@@ -123,7 +138,7 @@ class MatchSession:
                     self.publish({"type": "signal", "signal": payload})
                     rec.signal(payload)
                     for handler in self._signal_handlers:
-                        asyncio.create_task(self._safe(handler, sig))
+                        self._spawn_handler(handler, sig)
         except asyncio.CancelledError:
             raise
         except Exception:  # pragma: no cover - logged and surfaced to clients
@@ -153,6 +168,13 @@ class MatchSession:
         if frames:
             self.last_frame = frames[-1].model_dump(mode="json")
             self._resume_frame_elapsed = frames[-1].elapsed
+
+    def _spawn_handler(self, handler: SignalHandler, sig: Signal) -> None:
+        """Start a handler now, not at the next scheduling point: its synchronous prefix (the coordinator's
+        decision and the grounded pack) then sees the match as of the signal, before the feed ingests the
+        next event. The task is kept in a set so it cannot be garbage-collected while it runs."""
+        task = asyncio.eager_task_factory(asyncio.get_running_loop(), self._safe(handler, sig))
+        self.track_handler_task(task)
 
     async def _safe(self, handler: SignalHandler, sig: Signal) -> None:
         try:
@@ -206,7 +228,9 @@ class MatchSession:
     # ---------------------------------------------------------- snapshots
 
     def timeline(self) -> list[dict[str, Any]]:
-        return [event_payload(self.engine, e) for e in self.engine.events(types=TIMELINE_TYPES)]
+        """Fan timeline: restart kick-offs after a goal are left out; each half's own kick-off stays."""
+        return [event_payload(self.engine, e) for e in self.engine.events(types=TIMELINE_TYPES)
+                if not self.engine.is_restart(e.event_id)]
 
     def snapshot(self) -> dict[str, Any]:
         """Everything a client joining mid-match needs (FR-007)."""

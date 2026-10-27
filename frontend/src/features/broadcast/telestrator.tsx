@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { m, useReducedMotion } from "motion/react";
 
 import type { Drawing } from "@/lib/contract";
 import { cn } from "@/lib/utils";
@@ -9,21 +9,21 @@ type XY = { x: number; y: number };
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
-function arrowHead(from: XY, to: XY, size: number) {
+export function arrowHead(from: XY, to: XY, size: number) {
   const angle = Math.atan2(to.y - from.y, to.x - from.x);
   const left = { x: to.x - size * Math.cos(angle - 0.45), y: to.y - size * Math.sin(angle - 0.45) };
   const right = { x: to.x - size * Math.cos(angle + 0.45), y: to.y - size * Math.sin(angle + 0.45) };
   return `M ${left.x} ${left.y} L ${to.x} ${to.y} L ${right.x} ${right.y}`;
 }
 
-function linePath(points: XY[]) {
+export function linePath(points: XY[]) {
   return points.map((p, i) => `${i ? "L" : "M"} ${p.x} ${p.y}`).join(" ");
 }
 
 /** Chalk label with a dark halo, readable on any turf. */
 function Label({ at, text, primary }: { at: XY; text: string; primary: boolean }) {
   return (
-    <motion.text
+    <m.text
       x={at.x}
       y={at.y}
       textAnchor="middle"
@@ -34,7 +34,7 @@ function Label({ at, text, primary }: { at: XY; text: string; primary: boolean }
       transition={{ duration: 0.3, delay: 0.25 }}
     >
       {text}
-    </motion.text>
+    </m.text>
   );
 }
 
@@ -45,7 +45,7 @@ function Stroke({ d, width, dashed, primary, duration }: { d: string; width: num
   return (
     <>
       <path d={d} className="fill-none stroke-graphic" strokeOpacity={0.45} strokeWidth={width + 0.5} strokeLinecap="round" strokeLinejoin="round" />
-      <motion.path
+      <m.path
         d={d}
         className={cn("fill-none", primary ? "stroke-telestrator" : "stroke-graphic-foreground")}
         strokeWidth={width}
@@ -86,7 +86,7 @@ function Mark({ drawing }: { drawing: Drawing }) {
       const r = drawing.radius ?? 2.6;
       return (
         <g>
-          <motion.circle
+          <m.circle
             cx={a.x}
             cy={a.y}
             r={r}
@@ -105,7 +105,7 @@ function Mark({ drawing }: { drawing: Drawing }) {
       const r = drawing.radius ?? 10;
       return (
         <g>
-          <motion.circle
+          <m.circle
             cx={a.x}
             cy={a.y}
             r={r}
@@ -124,7 +124,7 @@ function Mark({ drawing }: { drawing: Drawing }) {
     case "marker":
       return (
         <g>
-          <motion.circle
+          <m.circle
             cx={a.x}
             cy={a.y}
             r={0.8}

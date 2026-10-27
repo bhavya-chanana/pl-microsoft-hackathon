@@ -1,0 +1,7 @@
+{"events": [{"id": 1, "deadline_time": "2026-08-14T17:30:00Z"}],
+ "teams": [{"id": 1, "code": 100, "name": "Northvale Rovers", "short_name": "NOR"},
+           {"id": 5, "code": 300, "name": "Santo Brava", "short_name": "SAN"}],
+ "elements": [{"id": 10, "code": 900001, "first_name": "Orla", "second_name": "Vennick", "web_name": "Vennick",
+               "element_type": 1, "team": 1, "team_code": 100, "birth_date": "1998-02-03"},
+              {"id": 11, "code": 900004, "first_name": "Rafe", "second_name": "Tolliver", "web_name": "Tolliver",
+               "element_type": 2, "team": 5, "team_code": 300, "birth_date": null, "price_note": "ignored"}]}

@@ -17,6 +17,7 @@ from __future__ import annotations
 import bisect
 from collections import deque
 from dataclasses import dataclass, field
+from typing import Any
 
 from matchlens.domain.models import (
     PITCH_LENGTH,
@@ -34,6 +35,24 @@ from matchlens.interpret.signals import Signal, SignalType
 from matchlens.interpret.stats import PlayerStats, TeamStats
 
 ON_TARGET = (Outcome.SAVED, Outcome.GOAL)
+
+
+def _swing_towards(then_index: float, index: float, h: float, a: float, band: float,
+                   delta_threshold: float) -> str | None:
+    """Which side a momentum swing favours ("home"/"away"), or None when it is not a real swing.
+
+    A swing needs a large move that ends on the side now on top, outside the "Even" band,
+    and recent events by that side; a move towards zero because the window emptied is decay.
+    """
+    delta = index - then_index
+    if abs(delta) < delta_threshold or abs(index) < band:
+        return None
+    if (index > 0) != (delta > 0):
+        return None
+    side_weight = h if index > 0 else a
+    if h + a <= 0 or side_weight <= 0:
+        return None
+    return "home" if index > 0 else "away"
 
 
 @dataclass
@@ -74,6 +93,10 @@ class _Computed:
     clock: float = 0.0
     elapsed: float = 0.0
     status: str = "pre_match"  # pre_match | live | half_time | full_time
+    last_event_period: int = 0  # for minutes played: the previous event's period and clock
+    last_event_clock: float = 0.0
+    duel: tuple[str, str] | None = None  # open contest: (presser id, carrier id)
+    period_kickoffs: set[str] = field(default_factory=set)  # event ids of kick-offs that start a half
     possession_team: str | None = None
     possession_since: float = 0.0
     teams: dict[str, TeamStats] = field(default_factory=dict)
@@ -217,6 +240,11 @@ class MatchEngine:
         e = self._events.get(event_id)
         return self._effective(e) if e else None
 
+    def is_restart(self, event_id: str) -> bool:
+        """True for a kick-off that restarts play after a goal, as opposed to one that starts a half."""
+        e = self._events.get(event_id)
+        return e is not None and e.type == EventType.KICKOFF and event_id not in self.c.period_kickoffs
+
     def pass_quality(self, event_id: str) -> PassQuality | None:
         return self.c.pass_quality.get(event_id)
 
@@ -242,7 +270,36 @@ class MatchEngine:
         total = sum(t.possession_s for t in self.c.teams.values())
         out = self.c.teams[team_id].as_dict(total)
         out["shot_map"] = list(self.c.teams[team_id].shot_map)
+        out.update(self._half_split(team_id))
         return out
+
+    def _half_split(self, team_id: str) -> dict[str, object]:
+        """Possession and field tilt (share of the two sides' final-third passes) per half and overall.
+
+        Both sides' figures need each other, and are rounded so that home + away is exactly 100: the home
+        figure is rounded and the away figure is its complement. A half appears only once it has data.
+        """
+        home, away = self.meta.home.team_id, self.meta.away.team_id
+        th, ta = self.c.teams[home], self.c.teams[away]
+
+        def share(h: float, a: float) -> float | None:
+            if h + a <= 0:
+                return None
+            pct = round(h / (h + a) * 100, 1)
+            return pct if team_id == home else round(100 - pct, 1)
+
+        periods = sorted(set(th.possession_s_by_period) | set(ta.possession_s_by_period)
+                         | set(th.final_third_passes_by_period) | set(ta.final_third_passes_by_period))
+        poss, tilt = {}, {}
+        for p in periods:
+            v = share(th.possession_s_by_period.get(p, 0.0), ta.possession_s_by_period.get(p, 0.0))
+            if v is not None:
+                poss[str(p)] = v
+            v = share(th.final_third_passes_by_period.get(p, 0), ta.final_third_passes_by_period.get(p, 0))
+            if v is not None:
+                tilt[str(p)] = v
+        return {"possession_pct_by_half": poss, "field_tilt_pct": share(th.final_third_passes, ta.final_third_passes),
+                "field_tilt_pct_by_half": tilt}
 
     def score(self) -> dict[str, int]:
         return {tid: t.goals for tid, t in self.c.teams.items()}
@@ -346,6 +403,7 @@ class MatchEngine:
                     "previous": str(reason.attrs.get("previous", "")),
                     "value": str(reason.attrs.get("value", "")),
                     "corrected_event_type": target.type.value if target else None,
+                    "corrected_minute_label": target.minute_label if target else None,
                     "updated_signals": ",".join(s.signal_id for s in changed),
                     "removed_signals": ",".join(removed),
                 },
@@ -403,6 +461,8 @@ class MatchEngine:
         w = self.config.momentum
         th = self.config.thresholds
         self._tick(e)
+        self._credit_minutes(e)
+        self._resolve_duel(e)
         c.period, c.clock, c.elapsed = e.period, e.clock, e.elapsed
         team = c.teams.get(e.team_id) if e.team_id else None
         player = c.players.get(e.player_id) if e.player_id else None
@@ -413,6 +473,7 @@ class MatchEngine:
             case EventType.KICKOFF:
                 if c.status in ("pre_match", "half_time"):
                     c.status = "live"
+                    c.period_kickoffs.add(e.event_id)
                     self._signal(SignalType.PERIOD, f"kickoff:{e.period}", e.elapsed, e.period, e.clock,
                                  evidence_event_ids=[e.event_id], facts={"phase": "kickoff", "period": e.period},
                                  priority=3)
@@ -450,6 +511,8 @@ class MatchEngine:
                     ex, ey = self._rel(e.team_id, e.end.x, e.end.y)
                     if ex >= 70:
                         team.final_third_passes += 1
+                        by = team.final_third_passes_by_period
+                        by[e.period] = by.get(e.period, 0) + 1
                         self._weigh(e, e.team_id, w.final_third_pass, "final_third_pass")
                     if ex >= 88.5 and 13.84 <= ey <= 54.16:
                         team.box_entries += 1
@@ -475,6 +538,8 @@ class MatchEngine:
                 assert team and player and e.start
                 team.pressures += 1
                 player.pressures += 1
+                if e.related_player_id in c.players:
+                    c.duel = (player.player_id, str(e.related_player_id))
                 rx, _ = self._rel(e.team_id, e.start.x, e.start.y)
                 if rx >= 52.5:
                     self._pressure(e)
@@ -590,9 +655,15 @@ class MatchEngine:
                     team.players_on_pitch -= 1
                     player.red_card = True
                     player.on_pitch = False
+                # Only a dismissal changes how many players are on the pitch; a booking changes the card count.
+                card_facts: dict[str, Any] = {"card": e.outcome.value}
+                if red:
+                    card_facts["players_on_pitch"] = team.players_on_pitch
+                else:
+                    card_facts["player_yellow_cards"] = player.yellow_cards
                 self._signal(SignalType.CARD, e.event_id, e.elapsed, e.period, e.clock, team_id=e.team_id,
                              player_ids=[e.player_id], evidence_event_ids=[e.event_id],
-                             facts={"card": e.outcome.value, "players_on_pitch": team.players_on_pitch},
+                             facts=card_facts,
                              priority=1 if red else 3)
             case EventType.CORNER:
                 assert team
@@ -621,10 +692,38 @@ class MatchEngine:
                 if e.team_id and e.type in (EventType.FREE_KICK, EventType.THROW_IN, EventType.GOAL_KICK):
                     self._set_possession(e.team_id, e.elapsed)
 
+    def _credit_minutes(self, e: Event) -> None:
+        """Playing time: the clock time since the previous event, for everyone on the pitch, while the match is
+        live and within one period (the clock restarts for the second half, so nothing is added across it)."""
+        c = self.c
+        if c.status == "live" and c.last_event_period == e.period and e.clock > c.last_event_clock:
+            dt = e.clock - c.last_event_clock
+            for p in c.players.values():
+                if p.on_pitch:
+                    p.seconds_played += dt
+        c.last_event_period, c.last_event_clock = e.period, e.clock
+
+    def _resolve_duel(self, e: Event) -> None:
+        """A duel opens on a PRESSURE event (the presser against the ball carrier) and is settled by the next
+        event: the presser wins it with a TACKLE of their own; a foul by the presser, or anything else (the
+        carrier kept or moved the ball), is won by the carrier."""
+        c = self.c
+        if c.duel is None:
+            return
+        presser, carrier = c.duel
+        c.duel = None
+        winner = presser if e.type == EventType.TACKLE and e.player_id == presser else carrier
+        for pid in (presser, carrier):
+            c.players[pid].duels_total += 1
+        c.players[winner].duels_won += 1
+
     def _set_possession(self, team_id: str | None, elapsed: float) -> None:
         c = self.c
         if c.possession_team and c.possession_team in c.teams:
-            c.teams[c.possession_team].possession_s += max(0.0, elapsed - c.possession_since)
+            held = max(0.0, elapsed - c.possession_since)
+            team = c.teams[c.possession_team]
+            team.possession_s += held
+            team.possession_s_by_period[c.period] = team.possession_s_by_period.get(c.period, 0.0) + held
         c.possession_team = team_id
         c.possession_since = elapsed
 
@@ -675,9 +774,13 @@ class MatchEngine:
             then = c.momentum[-6]
             delta = index - then.index
             key = "momentum_swing"
-            if abs(delta) >= th.momentum_swing_delta and now - c.last_spell.get(key, -1e9) > 360:
+            towards_side = _swing_towards(then.index, index, h, a, th.momentum_even_band, th.momentum_swing_delta)
+            if towards_side is not None and now - c.last_spell.get(key, -1e9) > 360:
                 c.last_spell[key] = now
-                towards = home if delta > 0 else away
+                towards = home if towards_side == "home" else away
+                previous = None
+                if abs(then.index) >= th.momentum_even_band:
+                    previous = home if then.index > 0 else away
                 top = sorted((w for w in window if w.team_id == towards), key=lambda w: -w.weight)[:6]
                 reasons: dict[str, int] = {}
                 for w in window:
@@ -686,6 +789,8 @@ class MatchEngine:
                 self._signal(SignalType.MOMENTUM_SWING, f"{int(now)}", now, e.period, e.clock,
                              team_id=towards, evidence_event_ids=[w.event_id for w in top],
                              facts={"from_index": then.index, "to_index": index, "delta": round(delta, 1),
+                                    "strength": round(abs(index)),
+                                    **({"previous_leader": previous} if previous else {}),
                                     "window_s": th.momentum_window_s,
                                     "since_minute_label": minute_label(then.period, then.clock),
                                     **{f"count_{k}": v for k, v in sorted(reasons.items())}},
