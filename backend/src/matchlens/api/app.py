@@ -26,7 +26,8 @@ from matchlens.agents.contracts import FanProfile, Language, Mode
 from matchlens.agents.llm import build_clients
 from matchlens.agents.pipeline import AgentTeam, InsightPipeline
 from matchlens.agents.pundit import MAX_QUESTION
-from matchlens.agents.scenario import MAX_PROMPT, SCENARIO_TIMEOUT_S, write_storyline
+from matchlens.agents.scenario import (MAX_PROMPT, NO_MATCH_NOTE, OFFLINE_NOTE, SCENARIO_TIMEOUT_S, closest_preset,
+                                       write_storyline)
 from matchlens.agents.scenario import roster as scenario_roster
 from matchlens.agents.services import CATCHUP_WINDOWS, FanServices, narration_text, personalise_feed
 from matchlens.api.kb_routes import router as kb_router
@@ -488,15 +489,23 @@ DRAFT_FAILURES = {
 
 @app.post("/api/scenarios/draft")
 async def draft_scenario(req: ScenarioDraftRequest) -> dict[str, Any]:
-    """Turn a match described in words into a storyline (strong model), checked before it is offered."""
+    """Turn a match described in words into a storyline (strong model), checked before it is offered.
+    Offline there is no model: the closest preset is offered instead (``source`` "template")."""
     rt = _runtime()
     if not rt.clients.settings.online:
-        raise HTTPException(503, "writing a match from a description needs the live models; pick a preset")
+        preset_id, matched = closest_preset(req.prompt)
+        story = PRESETS[preset_id][0]()
+        problems = check_storyline(default_match_meta(), story)
+        if problems:
+            raise HTTPException(422, {"message": DRAFT_FAILURES["unplayable"][1], "reason": "unplayable",
+                                      "problems": problems})
+        return {"storyline": story.model_dump(mode="json"), "source": "template", "preset_id": preset_id,
+                "note": OFFLINE_NOTE if matched else NO_MATCH_NOTE + OFFLINE_NOTE}
     written = await write_storyline(rt.team, default_match_meta(), req.prompt, req.language.value)
     if written.story is None:
         status, message = DRAFT_FAILURES[written.failure or "no_answer"]
         raise HTTPException(status, {"message": message, "reason": written.failure, "problems": written.problems})
-    return {"storyline": written.story.model_dump(mode="json")}
+    return {"storyline": written.story.model_dump(mode="json"), "source": "ai", "preset_id": None, "note": None}
 
 
 @app.post("/api/scenarios/kickoff")

@@ -8,6 +8,7 @@ refusal says why: the agent was too slow, did not answer, or could not fix it.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -15,7 +16,7 @@ from pydantic import Field, ValidationError
 
 from matchlens.agents.contracts import _Strict
 from matchlens.domain.models import MatchMeta
-from matchlens.simulator.scenarios import check_storyline
+from matchlens.simulator.scenarios import PRESETS, check_storyline
 from matchlens.simulator.storyline import Beat, Phase, Storyline
 
 SCENARIO_TIMEOUT_S = 45.0
@@ -100,3 +101,31 @@ async def write_storyline(team: Any, meta: MatchMeta, prompt: str, language: str
             if not problems:
                 return Written(story, [])
     return Written(None, problems, "unplayable")
+
+
+# Words that point at a preset beyond what its own title and summary say.
+PRESET_HINTS = {
+    "comeback": "comeback behind recover turnaround fightback",
+    "ten-man-heist": "ten men heist counter red card sent defend",
+    "late-late-show": "late stoppage injury winner dramatic",
+    "goal-fest": "goals thriller seven wild chaos open",
+}
+NO_MATCH_NOTE = "Nothing in the description matched a preset, so this is the default one. "
+OFFLINE_NOTE = "Picked the closest preset; writing a new match needs the live model."
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z]{3,}", text.lower()))
+
+
+def closest_preset(prompt: str) -> tuple[str, bool]:
+    """Offline stand-in for the Scenario agent: the preset whose title, summary and hints share the most
+    words with the prompt. No shared word falls back to the first preset (second value False)."""
+    best, best_score = next(iter(PRESETS)), 0
+    wanted = _words(prompt)
+    for pid, (factory, _) in PRESETS.items():
+        story = factory()
+        score = len(wanted & _words(f"{story.title} {story.summary} {PRESET_HINTS.get(pid, '')} {pid}"))
+        if score > best_score:
+            best, best_score = pid, score
+    return best, best_score > 0

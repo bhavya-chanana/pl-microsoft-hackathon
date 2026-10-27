@@ -2,7 +2,7 @@
 import type { CatchupWindow, FactCheckStatus, Language, Metric, Mode } from "@/lib/contract";
 
 /** Why the Scenario agent gave no script (the draft endpoint's `reason`; "other" for anything else). */
-export type DraftFailure = "timeout" | "no_answer" | "unplayable" | "other";
+export type DraftFailure = "timeout" | "no_answer" | "unplayable" | "offline" | "other";
 
 export const copy = {
   product: "Matchlens",
@@ -810,7 +810,6 @@ export const copy = {
     customPlaceholder: "A tense derby where the away side go down to ten men but win it late",
     draft: "Write the script",
     drafting: "The Scenario agent is writing",
-    draftOffline: "Writing a custom script needs the live models. The ready-made scripts work offline.",
     kickoff: "Kick off",
     kickingOff: "Kicking off",
     kickedOff: (title: string) => `${title} kicked off`,
@@ -830,6 +829,8 @@ export const copy = {
     dataset: "Download the dataset",
     datasetHelp: "The running match as files: match details, every event, and the tracking frames.",
     preview: "Preview",
+    fromPreset: "From a preset, not AI-written",
+    templateNote: "Picked the closest ready-made script. Writing a new match needs the live model.",
     draftRefused: {
       timeout: {
         title: "The Scenario agent ran out of time",
@@ -840,8 +841,13 @@ export const copy = {
         title: "The simulator could not play this script",
         help: "It still had these problems after one fix. Try describing the match differently.",
       },
+      offline: {
+        title: "Writing a match from a description needs the live model",
+        help: "It is not connected right now. Pick one of the ready-made scripts above, which play out the same way.",
+      },
       other: { title: "The script could not be written", help: "Try again in a moment." },
     } as Record<DraftFailure, { title: string; help: string }>,
+    readyMade: "See the ready-made scripts",
     firstDraftProblems: "What the first draft got wrong",
     beatTypes: {
       goal: "Goal",

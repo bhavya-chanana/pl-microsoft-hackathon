@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { CheckCircle2, CircleDashed, Download, EllipsisVertical, PenLine, Play, RotateCw, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDashed, Download, EllipsisVertical, Info, PenLine, Play, RotateCw, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -22,7 +22,13 @@ import { cn } from "@/lib/utils";
 const SPEEDS = [5, 15, 30, 60] as const;
 const MAX_PROMPT = 400;
 const FULL_TIME = 95;
-const Drafted = z.object({ storyline: Storyline });
+const Drafted = z.object({
+  storyline: Storyline,
+  /** "template": offline, the backend picked the closest ready-made script instead of writing one. */
+  source: z.enum(["ai", "template"]).default("ai"),
+  preset_id: z.string().nullish(),
+  note: z.string().nullish(),
+});
 const Refusal = z.object({
   reason: z.enum(["timeout", "no_answer", "unplayable"]).nullish(),
   problems: z.array(z.string()).default([]),
@@ -49,6 +55,7 @@ function nameOf(roster: Roster, playerId: string): string {
 function DraftRefused({ refused, retry }: { refused: Refused; retry: () => void }) {
   const text = copy.lab.draftRefused[refused.reason];
   const unplayable = refused.reason === "unplayable";
+  const offline = refused.reason === "offline";
   return (
     <div role="alert" className="flex max-w-2xl flex-col items-start gap-2 rounded-lg border border-blocked/40 p-3 text-sm">
       <p className="font-medium">{text.title}</p>
@@ -63,11 +70,22 @@ function DraftRefused({ refused, retry }: { refused: Refused; retry: () => void 
           </ul>
         </>
       )}
-      {!unplayable && (
-        <Button type="button" variant="outline" className="min-h-11 gap-2 px-4" onClick={retry}>
-          <RotateCw aria-hidden />
-          {copy.connection.retry}
+      {offline ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 px-4"
+          onClick={() => document.getElementById("presets-heading")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        >
+          {copy.lab.readyMade}
         </Button>
+      ) : (
+        !unplayable && (
+          <Button type="button" variant="outline" className="min-h-11 gap-2 px-4" onClick={retry}>
+            <RotateCw aria-hidden />
+            {copy.connection.retry}
+          </Button>
+        )
       )}
     </div>
   );
@@ -224,7 +242,7 @@ export function ScenarioLab() {
   const check = useScriptCheck();
   const [speed, setSpeed] = useState<number>(15);
   const [prompt, setPrompt] = useState("");
-  const [draft, setDraft] = useState<Storyline | null>(null);
+  const [draft, setDraft] = useState<z.infer<typeof Drafted> | null>(null);
   const [refused, setRefused] = useState<Refused | null>(null);
   const roster = scenarios.data?.roster ?? null;
 
@@ -244,9 +262,9 @@ export function ScenarioLab() {
       setRefused(null);
       setDraft(null);
     },
-    onSuccess: (d) => setDraft(d.storyline),
+    onSuccess: (d) => setDraft(d),
     onError: (error) => {
-      if (error instanceof ApiError && error.status === 503) return toast.error(copy.lab.draftOffline);
+      if (error instanceof ApiError && error.status === 503) return setRefused({ reason: "offline", problems: [] });
       setRefused(refusal(error));
     },
   });
@@ -359,13 +377,19 @@ export function ScenarioLab() {
             {write.isPending && <Skeleton className="h-64 max-w-2xl" />}
             {refused && <DraftRefused refused={refused} retry={() => write.mutate(prompt.trim())} />}
             {draft && roster && (
-              <div className="max-w-2xl">
+              <div className="flex max-w-2xl flex-col gap-2">
+                {draft.source === "template" && (
+                  <p role="status" className="flex items-start gap-2 text-[13px] leading-5 text-muted-foreground">
+                    <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
+                    <span>{draft.note ?? copy.lab.templateNote}</span>
+                  </p>
+                )}
                 <StoryCard
-                  story={draft}
+                  story={draft.storyline}
                   roster={roster}
-                  badge={copy.lab.preview}
+                  badge={draft.source === "template" ? copy.lab.fromPreset : copy.lab.preview}
                   pending={pendingKey === "draft"}
-                  onKickoff={() => kickoff.mutate({ key: "draft", storyline: draft })}
+                  onKickoff={() => kickoff.mutate({ key: "draft", storyline: draft.storyline })}
                 />
               </div>
             )}
