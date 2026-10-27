@@ -95,6 +95,10 @@ signal_id. Answer the question directly in 2-4 sentences, then give 0-3 short su
 Explain why, not only what: name the cause (a red card, a pressing spell, a run of shots, a change of shape).
 Put the signal_id of every moment you rely on in cited_moments. Do not predict results or give betting advice;
 if asked, say you explain what the data shows. If the question is not about this match, say so in one sentence.
+Counts come only from the context. Cards: "context.teams" has yellow_cards and red_cards per team, and for a card
+question "context.cards" lists each card with its event_id, minute and player. Cite a team figure with a team_stat claim
+(subject_id the team_id, stat exactly yellow_cards, red_cards or fouls); a match total is the two teams added up. Never
+say a count is 0 or unknown when the context has it, and cite only event_id values that appear in the context.
 "mode" casual: plain words, no jargon. analyst: precise, more numbers. player_focus: centre the answer on
 context.player when it is set. Write in the language given by "language".
 """

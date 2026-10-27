@@ -78,6 +78,20 @@ def _as_of_context(context: dict[str, Any], claims: list[Claim]) -> tuple[list[C
     return done, rest
 
 
+def _match_totals(teams: object) -> dict[str, float]:
+    """Match-wide card and foul counts: both teams' figures added up. Empty unless both teams are in the snapshot."""
+    if not isinstance(teams, dict) or len(teams) != 2 or not all(isinstance(t, dict) for t in teams.values()):
+        return {}
+    totals: dict[str, float] = {}
+    for stat in ("yellow_cards", "red_cards", "fouls"):
+        values = [t.get(stat) for t in teams.values()]
+        if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in values):
+            totals[stat] = float(sum(values))  # type: ignore[arg-type]
+    if "yellow_cards" in totals and "red_cards" in totals:
+        totals["cards"] = totals["yellow_cards"] + totals["red_cards"]
+    return totals
+
+
 def check_text(engine: MatchEngine, context: dict[str, Any], texts: list[str],
                claims: list[AgentClaim]) -> CheckOutcome:
     parsed = []
@@ -100,7 +114,7 @@ def check_text(engine: MatchEngine, context: dict[str, Any], texts: list[str],
     # A number elsewhere in the context does not establish a statistic.
     count_pattern = re.compile(
         r"\b(?:\d+(?:[.,]\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven)"
-        r"\s+(?:goals?|assists?|shots?|passes?|saves?|tackles?|fouls?|cards?|offsides?|corners?|troph(?:y|ies)|titles?)\b",
+        r"\s+(?:(?:yellow|red)\s+)?(?:goals?|assists?|shots?|passes?|saves?|tackles?|fouls?|cards?|offsides?|corners?|troph(?:y|ies)|titles?)\b",
         re.IGNORECASE,
     )
     supported_stat_texts = [(cl.text.lower(), cl.value, cl.stat or "", cl.subject_id, cl.kind) for cl in claims if isinstance(cl.to_claim(), StatClaim)
@@ -111,6 +125,7 @@ def check_text(engine: MatchEngine, context: dict[str, Any], texts: list[str],
     if isinstance(context.get("player"), dict):
         players.append(context["player"])
     subjects = list(players)
+    totals = _match_totals(context.get("teams"))
     teams = context.get("teams") or {}
     for team in (engine.meta.home, engine.meta.away):
         if isinstance(teams.get(team.team_id), dict):
@@ -118,11 +133,13 @@ def check_text(engine: MatchEngine, context: dict[str, Any], texts: list[str],
     for text in texts:
         for match in count_pattern.finditer(text):
             phrase = match.group().lower()
-            word, metric = phrase.split()
+            word, *adjective, metric = phrase.split()
             number_words = {name: n for n, name in enumerate(
                 ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven"))}
             value = number_words.get(word) if word in number_words else float(word.replace(",", "."))
             key = metric if metric.endswith("s") else metric + "s"
+            if adjective:  # "yellow cards" is the yellow_cards stat, not all cards
+                key = f"{adjective[0]}_{key}"
             # Associate the count with the nearest named subject preceding it in
             # this sentence, using only stats in the snapshot the agent saw.
             prefix = re.split(r"[.!?;]", text[:match.start()])[-1]
@@ -136,6 +153,9 @@ def check_text(engine: MatchEngine, context: dict[str, Any], texts: list[str],
             actual = nearest.get("stats", {}).get(key) if nearest else None
             # A claim covering this phrase must name the right subject; without one,
             # the snapshot stat for the named subject grounds it.
+            # A match-wide count ("9 yellow cards in the match") names no team: it is grounded when it equals the
+            # two teams' figures added up, in the snapshot the agent saw.
+            grounded_total = nearest is None and totals.get(key) == value
             claimed = any(phrase in claim_text and claim_value == value and key in stat
                           for claim_text, claim_value, stat, _, _ in supported_stat_texts)
             grounded_subject_stat = bool(isinstance(actual, (int, float)) and not isinstance(actual, bool)
@@ -152,7 +172,7 @@ def check_text(engine: MatchEngine, context: dict[str, Any], texts: list[str],
             if not (any(phrase in claim_text and claim_value == value and key in stat
                         and claim_matches_subject(subject_id, kind)
                         for claim_text, claim_value, stat, subject_id, kind in supported_stat_texts)
-                    or text in grounded_drafts or grounded_subject_stat):
+                    or text in grounded_drafts or grounded_subject_stat or grounded_total):
                 problems.append(f"Unclaimed statistic: {match.group()}")
     # A score must agree as a pair, not just as individual numbers. Exclude formations.
     score = (context.get("match") or {}).get("score")
