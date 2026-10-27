@@ -134,6 +134,26 @@ def test_claim_cannot_credit_a_different_player(demo_match):
     assert check_text(engine, {}, [text], [right]).report.status == FactCheckStatus.VERIFIED
 
 
+def test_everyday_phrases_are_not_statistics_or_scores(demo_match):
+    engine = MatchEngine(demo_match.meta)
+    home = demo_match.meta.home.short_name
+    for text in ("A win here is worth three points.", f"{home} are down to 10 men.",
+                 "All 11 players are behind the ball."):
+        assert check_text(engine, {}, [text], []).report.status == FactCheckStatus.VERIFIED, text
+    for text, numbers in (("Possession is split 65-35.", (65, 35)), ("Their best run since 2023-24.", (2023, 24))):
+        out = check_text(engine, {"numbers": list(numbers)}, [text], [])
+        assert out.report.status == FactCheckStatus.VERIFIED, out.problems
+
+
+def test_grounded_count_survives_an_unrelated_claim(demo_match):
+    engine = MatchEngine(demo_match.meta)
+    home = demo_match.meta.home
+    context = {"teams": {home.team_id: {"shots": 4, "xg": 1.2}}}
+    other = claim(kind="team_stat", text="1.2 xG", subject_id=home.team_id, stat="xg", value=1.2)
+    out = check_text(engine, context, [f"{home.name} have 4 shots and 1.2 xG."], [other])
+    assert out.report.status == FactCheckStatus.VERIFIED, out.problems
+
+
 def test_grounded_ranges_are_not_scores(demo_match):
     engine = MatchEngine(demo_match.meta)
     out = check_text(engine, {"duration": [5, 10]}, ["The phase lasted 5–10 minutes."], [])

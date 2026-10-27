@@ -32,8 +32,10 @@ _PLAYER_ID = re.compile(r"\b[A-Z]{3}-\d{2}\b")
 
 
 def allowed_numbers(context: dict[str, Any]) -> set[float]:
-    """Numbers in the grounded context, plus conventional half and scale markers."""
-    allowed = numbers_in(context) | {45.0, 90.0, 100.0}
+    """Numbers in the grounded context, plus harmless small counts ("down to 10 men",
+    "11 players") and the half and scale markers. Counts of a statistic ("3 goals")
+    and scorelines are checked separately below."""
+    allowed = numbers_in(context) | {float(n) for n in range(0, 12)} | {45.0, 90.0, 100.0}
     return allowed
 
 
@@ -98,7 +100,7 @@ def check_text(engine: MatchEngine, context: dict[str, Any], texts: list[str],
     # A number elsewhere in the context does not establish a statistic.
     count_pattern = re.compile(
         r"\b(?:\d+(?:[.,]\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven)"
-        r"\s+(?:goals?|assists?|shots?|passes?|saves?|tackles?|fouls?|cards?|offsides?|corners?|points?|troph(?:y|ies)|titles?)\b",
+        r"\s+(?:goals?|assists?|shots?|passes?|saves?|tackles?|fouls?|cards?|offsides?|corners?|troph(?:y|ies)|titles?)\b",
         re.IGNORECASE,
     )
     supported_stat_texts = [(cl.text.lower(), cl.value, cl.stat or "", cl.subject_id, cl.kind) for cl in claims if isinstance(cl.to_claim(), StatClaim)
@@ -132,8 +134,12 @@ def check_text(engine: MatchEngine, context: dict[str, Any], texts: list[str],
                             r"(?<!\w)" + re.escape(name) + r"(?!\w)", prefix, re.IGNORECASE))
             nearest = max(mentions, key=lambda m: (m[0], m[1]))[2] if mentions else None
             actual = nearest.get("stats", {}).get(key) if nearest else None
+            # A claim covering this phrase must name the right subject; without one,
+            # the snapshot stat for the named subject grounds it.
+            claimed = any(phrase in claim_text and claim_value == value and key in stat
+                          for claim_text, claim_value, stat, _, _ in supported_stat_texts)
             grounded_subject_stat = bool(isinstance(actual, (int, float)) and not isinstance(actual, bool)
-                                         and actual == value and not supported_stat_texts)
+                                         and actual == value and not claimed)
             def claim_matches_subject(subject_id: str | None, kind: str) -> bool:
                 if kind == "player_stat":
                     subject = engine.meta.players.get(subject_id or "")
@@ -172,8 +178,9 @@ def check_text(engine: MatchEngine, context: dict[str, Any], texts: list[str],
                 collect_scores(item)
     collect_scores(context)
     for m in re.finditer(r"(?<![\d-])([0-9]+)\s*[-–]\s*([0-9]+)(?!\s*[-–]\s*\d|\d)", joined):
-        if (m.group() == "0-100" and ((context.get("signal") or {}).get("type") == "momentum_swing"
-                                        or re.match(r"\s+scale\b", joined[m.end():], re.IGNORECASE))):
+        # No scoreline reaches 20 a side: "2023-24" is a season, "65-35" a possession
+        # split and "0-100" the momentum scale.
+        if max(int(m.group(1)), int(m.group(2))) > 20:
             continue
         # Ranges with units are not scorelines.
         if re.match(r"\s*(?:minutes?|mins?|seconds?|secs?|km(?:/h)?|m/s|metres?|meters?)\b",
