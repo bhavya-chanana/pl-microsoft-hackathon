@@ -108,9 +108,15 @@ if), and a verification board scoring every prediction against what happened.
 ## Running it
 
 ```bash
-npm run db:emulator          # starts the kept emulator container, or creates it once with a data volume
-npm run shadow:watch -- --date 2026-10-28    # shadow predictions for today's matches of the 12 clubs
-npm run shadow:score         # score finished matches
+npm run db:next10            # starts the kept next10 emulator container (port 8091), or creates it once with a volume
+npm run next10:init          # creates matchlens_next10 and its containers in the emulator
+npm run shadow:fit           # fits the hazard model (add --warehouse DIR for a separately built warehouse)
+npm run shadow:fixtures -- --date 2026-10-28  # today's matches of the 12 clubs
+npm run shadow:watch -- --date 2026-10-28     # predicts every minute, scores each match at full time
+npm run shadow:score -- --match fotmob:6275371  # re-scores a finished match from its stored predictions
 ```
+
+The shadow model trains on a warehouse built for it alone (`backend/data/local/next10/warehouse`, raw files linked
+from `leaguedata/raw`), so rebuilding it never replaces the tables the app's playbooks and knowledge base read.
 
 `MATCHLENS_FOTMOB=1` is required for anything that calls FotMob.
