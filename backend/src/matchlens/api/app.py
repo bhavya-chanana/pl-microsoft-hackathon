@@ -126,6 +126,11 @@ if importlib.util.find_spec("matchlens.local"):
     for _router in _local_routers:
         app.include_router(_router)
 
+if os.getenv("MATCHLENS_NEXT10") == "1":  # next-10-seconds companion API (database matchlens_next10); off by default
+    from matchlens.api.next10_routes import mount as _mount_next10
+
+    _mount_next10(app)
+
 
 def _session():
     try:

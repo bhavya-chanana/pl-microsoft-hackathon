@@ -1,0 +1,23 @@
+# The kept Cosmos emulator for the next-10-seconds companion (database matchlens_next10).
+#
+# Describes the container that `npm run db:next10` creates, same name, ports, restart policy and bind mount, so
+# either one starts or reuses it. It is deliberately separate from the deployed app's emulator
+# (`npm run db:emulator`, port 8081) and never stopped or recreated by the tooling:
+#
+#   docker compose -f docker-compose.next10.yml up -d      # only when the container does not exist yet
+#
+# Data survives restarts in backend/data/local/cosmos-next10 (gitignored).
+name: matchlens-next10
+
+services:
+  matchlens-next10-cosmos:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-latest
+    container_name: matchlens-next10-cosmos
+    restart: unless-stopped
+    command: ["--port", "8091", "--explorer-port", "1244"]
+    ports:
+      - "127.0.0.1:8091:8091"   # data plane: MATCHLENS_NEXT10_ENDPOINT=http://localhost:8091
+      - "127.0.0.1:8092:8080"
+      - "127.0.0.1:1244:1244"   # data explorer
+    volumes:
+      - ./backend/data/local/cosmos-next10:/data
