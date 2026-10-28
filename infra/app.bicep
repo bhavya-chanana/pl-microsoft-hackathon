@@ -8,6 +8,7 @@ param modelStrong string
 param reasoningFast string
 param reasoningStrong string
 param backendMinReplicas int
+param frontendMinReplicas int
 param matchSpeed string
 param backendImageName string
 param frontendImageName string
@@ -198,7 +199,7 @@ resource frontend 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 0
+        minReplicas: frontendMinReplicas
         maxReplicas: 3
         rules: [{ name: 'http', http: { metadata: { concurrentRequests: '100' } } }]
       }

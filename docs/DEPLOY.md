@@ -20,8 +20,10 @@ browser ──▶ frontend (Next.js, public HTTPS) ──▶ backend (FastAPI + 
 | Container registry (Basic) | Images, built remotely by ACR (no local Docker needed) |
 | User-assigned managed identity | Pulls images; calls Azure OpenAI with the *Cognitive Services OpenAI User* role; reads and writes Cosmos DB with the *Cosmos DB Built-in Data Contributor* role. No keys anywhere |
 
-Both apps and the database scale to zero when nobody is watching (BRD §10.5). A cold start resumes the stored live
-match where it stopped; once a match has finished, the next cold start begins a new one from kick-off.
+The database scales to zero when nobody is watching (BRD §10.5). Each app keeps one replica warm by default
+(`backendMinReplicas` and `frontendMinReplicas` in `infra/main.bicep`), so the first visit has no cold start; set either to
+`0` to scale that app to zero. A backend cold start resumes the stored live match where it stopped; once a match has
+finished, the next cold start begins a new one from kick-off.
 
 ## The recorded demo match
 
@@ -95,8 +97,9 @@ Past matches card lists stored runs only. Video auto-eventing runs on a develope
 Leave `MATCHLENS_OPENAI_ACCOUNT` unset to deploy with no model access at all: the recorded demo and data-only
 templates only, which costs nothing per request.
 
-To keep the backend warm during judging (no cold-start pause while the run is restored), set `backendMinReplicas` to `1` in
-`infra/main.bicep` and run `azd provision`. Set it back to `0` afterwards to save credit.
+Both apps keep one replica warm by default (`backendMinReplicas` and `frontendMinReplicas` are `1` in `infra/main.bicep`), so
+there is no cold-start pause on the first visit or while the run is restored. To save credit once judging is over, set either
+to `0` and run `azd provision`.
 
 Redeploy code changes with `azd deploy`. Tear everything down with `azd down`.
 
@@ -127,7 +130,8 @@ open http://localhost:3100
 
 ## Cost notes
 
-- Container Apps consumption plan with scale to zero: idle costs nothing; ACR Basic is about USD 5 a month.
+- Container Apps consumption plan: one warm replica of each app (the default) costs a small idle charge; set `backendMinReplicas` and
+  `frontendMinReplicas` to `0` to scale to zero and pay nothing idle. ACR Basic is about USD 5 a month.
 - Cosmos DB serverless: nothing while idle, about USD 0.02 of request units per full match replay plus about 11 MB
   of storage (USD 0.285 per GB-month in Central India).
 - The recorded demo means a judge's visit costs no model calls unless they ask for something that was not recorded.

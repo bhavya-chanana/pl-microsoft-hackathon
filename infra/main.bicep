@@ -4,10 +4,12 @@
 //                                                  ├──▶ Cosmos DB serverless (managed identity)
 //                                                  └──▶ Azure OpenAI in Foundry (managed identity)
 //
-// Both apps and the database scale to zero when idle. The backend plays one
-// match per process, so it runs at most one replica; every run is stored in
-// Cosmos DB and a cold start resumes a live run where it stopped. It replays
-// the recorded demo match and only calls the model on a cache miss.
+// The database scales to zero when idle; the apps keep one replica warm by
+// default (backendMinReplicas, frontendMinReplicas) and can be set to 0. The
+// backend plays one match per process, so it runs at most one replica; every
+// run is stored in Cosmos DB and a cold start resumes a live run where it
+// stopped. It replays the recorded demo match and only calls the model on a
+// cache miss.
 targetScope = 'subscription'
 
 @minLength(1)
@@ -37,6 +39,11 @@ param reasoningStrong string = 'high'
 @minValue(0)
 @maxValue(1)
 param backendMinReplicas int = 1
+
+@description('Minimum frontend replicas. 1 keeps the site warm so the first visit has no cold start; 0 scales to zero.')
+@minValue(0)
+@maxValue(3)
+param frontendMinReplicas int = 1
 
 @description('Replay speed the demo match starts at.')
 param matchSpeed string = '1'
@@ -79,6 +86,7 @@ module app 'app.bicep' = {
     reasoningFast: reasoningFast
     reasoningStrong: reasoningStrong
     backendMinReplicas: backendMinReplicas
+    frontendMinReplicas: frontendMinReplicas
     matchSpeed: matchSpeed
     backendImageName: backendImageName
     frontendImageName: frontendImageName
