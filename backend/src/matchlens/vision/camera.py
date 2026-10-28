@@ -57,6 +57,7 @@ TOL_PX = 3.0  # a marking within this of a line pixel is on it
 # then narrower ones so stray paint and players stop pulling.
 LOSS_PX = (8.0, 4.0, 2.0)
 MIN_VISIBLE = 60  # model points in view needed to fit
+PAINT_PER_MARKING = 4  # painted pixels in the fit for each marking point in view
 # The distance from any spot on (and around) the pitch to the nearest marking.
 PITCH_EXTENT = (-20.0, -20.0, 125.0, 88.0)  # metres
 PITCH_PX_PER_M = 10
@@ -133,12 +134,25 @@ class FrameLines:
         self.lines = line_mask(bgr, self.field, grass)
         self.dist = distance_map(self.lines, DIST_CAP * self.scale)
         rows, cols = np.nonzero(self.lines)
-        self.paint = np.c_[cols, rows].astype(np.float64)
-        np.random.default_rng(0).shuffle(self.paint)
+        self.paint = np.c_[cols, rows].astype(np.float64)  # row by row, top to bottom
 
     @property
     def scale(self) -> float:
         return self.bgr.shape[1] / REF_WIDTH
+
+    def sample_paint(self, n: int) -> np.ndarray:
+        """About ``n`` paint pixels spread evenly over all of it (every one when there are few enough).
+
+        Evenly spaced in reading order, not a random draw. A random draw of a few hundred pixels out of
+        thousands left whole lines unsampled by chance, and the fit then landed anywhere from 0.3 to 2.7 px
+        off the truth on the same image depending on the draw; and since the draw depends on how many pixels
+        there are, a build of OpenCV that rounds one pixel of the image differently (Linux against macOS)
+        got a different draw altogether. An evenly spaced sample moves by about a pixel instead.
+        """
+        count = PAINT_PER_MARKING * n
+        if len(self.paint) <= count:
+            return self.paint
+        return self.paint[np.linspace(0, len(self.paint) - 1, count).astype(int)]
 
     def visible(self, h: np.ndarray) -> np.ndarray:
         """The model points that land on the field in this frame."""
@@ -209,8 +223,8 @@ def fit(guess: np.ndarray, frame: FrameLines, how: str) -> Calibration | None:
         points = frame.visible(h)
         if len(points) < MIN_VISIBLE:
             return None
-        # As much paint as markings, so neither side of the fit outweighs the other.
-        paint = frame.paint[: len(points)]
+        # A few times as much paint as markings: enough that the sample of paint does not sway the fit.
+        paint = frame.sample_paint(len(points))
         if len(paint) < MIN_VISIBLE:
             return None
         px_per_m = _pixels_per_metre(h, to_pitch(h, paint))
