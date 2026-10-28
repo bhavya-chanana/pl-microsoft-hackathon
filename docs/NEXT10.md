@@ -120,3 +120,63 @@ The shadow model trains on a warehouse built for it alone (`backend/data/local/n
 from `leaguedata/raw`), so rebuilding it never replaces the tables the app's playbooks and knowledge base read.
 
 `MATCHLENS_FOTMOB=1` is required for anything that calls FotMob.
+
+## Whole-match calibration (results)
+
+`vision/bundle.py` solves one camera for a whole match: a shared gantry position C (metres, pitch coordinates with
+the origin at a corner and height up), roll and lens k1 (optionally k2), the principal point at the image centre,
+and per frame only pan, tilt and focal length. It is a robust (soft-L1) sparse least-squares problem over painted-line
+pixels matched to the markings, with a smoothness term on the per-frame channels. A Kalman filter and an RTS smoother
+fill frames with too few lines, flagged `interpolated`; `LiveCameraFilter(prior)` is the causal version for live use.
+`solve_video(video, ...)` runs the whole chain (view filter, tracker, two rounds of `solve_match`).
+`vision/align.py` maps video time to match time from a few anchors (kick-offs, goals, cards) with a piecewise-linear
+clock and RANSAC, robust to one wrong anchor and handling half boundaries. `vision/venues.json` holds priors for 12
+grounds; `update_venue_prior` merges a new fit into one. The harness is `python -m matchlens.vision.bundle_eval
+<clip>`; it writes `bundle_report.json` beside the clip.
+
+Synthetic check (known camera, 0.4 px noise, 150 frames): C within 0.5 m, every frame's pitch reprojection under
+0.3 m, and `align` recovers a known clock map with one wrong anchor (tests in `tests/test_vision_bundle.py` and
+`tests/test_vision_align.py`).
+
+**Liverpool-Brighton clip** (10,561 main-camera frames, paint pixels from every frame, 10% held out per frame, the
+bundle never sees the hand labels; the per-frame baseline uses the left-out calibrations for the five anchor frames):
+
+| | per-frame (existing) | whole-match bundle |
+|---|---|---|
+| (a) calibrated share of main frames | 76.9% (8,122) | 80.0% fitted (8,444); 85.2% with interpolated |
+| (b) held-out line error, median / p90 | 1.07 / 3.24 px, 0.083 / 0.46 m | 1.29 / 3.73 px, 0.099 / 0.55 m |
+| (b) same, a fresh 8-parameter refit per frame | 0.91 / 2.75 px, 0.068 / 0.43 m | |
+| (b) surveyed landmarks (labels.json), median | 0.27 m, 2.7 px | 0.45 m, 5.4 px |
+| (c) jitter of projected pitch corners (second difference), median / p90 | 13.7 / 104 px | 1.2 / 6.3 px |
+| (c) jitter of the image-centre footprint, median / p90 | 0.106 / 0.35 m | 0.041 / 0.16 m |
+
+What this says:
+
+- The bundle calibrates more frames (+3 points fitted; the extra 5% interpolated frames are not verified) and is far
+  smoother, which is what the downstream tracking and the Next10 model need.
+- It does not fit the lines better. On held-out line pixels it is about 20% worse than the existing per-frame
+  homographies and worse than a fresh 8-parameter refit; on the 90 surveyed landmark points it is worse in the
+  median (0.45 against 0.27 m), better on 6 of the 12 labelled frames that both calibrate and clearly worse on frames 5,460 (2.2 m), 7,800
+  and 12,479. A rigid camera cannot absorb pitch or lens deviations the way eight free parameters can. Treat bundle
+  positions as good to about half a metre, per-frame ones as noisier frame to frame but locally tighter.
+- The lens term is weakly identified: k1 came out between 0.14 and 0.50 depending on the pitch-length assumption and
+  on how much video was used, while C stayed within about 1 m. Do not read k1 as a physical lens property.
+- Pitch length: markings models of 105, 103 and 101 m (the published Anfield figure) were fitted. 105 gave the lowest
+  held-out error and landmark error (0.45 / 0.50 / 1.03 m) so Anfield's prior uses 105 m, marked `verified: false`.
+- An early run of this evaluation was invalid because seeking in this file is not frame-exact; paint is now decoded
+  sequentially from the first frame.
+
+**Venue.** The clip is at Anfield, not the Amex: the scoreboard reads LIV 0-0 BHA with Liverpool listed first as the
+home side, the home stands are red, and the Premier League 2026/27 graphics are Liverpool's. The geometry alone does not
+separate the two grounds (no Amex camera has been fitted to compare). The fitted Anfield prior is recorded in
+`venues.json`: C = (52.43, 103.61, 16.43) m (about 36 m behind the near touchline, 16 m up), roll -0.008 rad, k1 0.40,
+focal 1.4 to 3.4 image widths, pan -0.62 to 0.49 rad, tilt 0.17 to 0.31 rad. `venue_guesses("anfield", frame)` returns
+candidate starting homographies from it; on a labelled frame the best candidate lands within roughly 200 px of the far corners of the
+calibrated pitch, close enough to start `camera.fit`.
+
+**Runtime.** The whole clip (two rounds) takes about 3 to 4 minutes on one core once paint is extracted. A 60 s trial
+of `solve_video` at 5 fps takes 63 s and fits 270 of 279 frames (9 interpolated); in-sample line error is 1.26 px
+against 1.03 px for the per-frame chain.
+
+Limitations: one clip and one camera position; interpolated frames and the Amex hypothesis are unchecked; the pitch
+length is inferred from the fit, not surveyed.

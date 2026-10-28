@@ -1,0 +1,179 @@
+{
+  "anfield": {
+    "name": "Anfield",
+    "club": "Liverpool",
+    "pitch": {
+      "length": 105,
+      "width": 68,
+      "verified": false,
+      "source": "published figure is 101 x 68 (from memory); the Liverpool-Brighton broadcast clip fits a 105 x 68 marking model better than 103 or 101 (see docs/NEXT10.md, whole-match calibration), so 105 is used until the markings are surveyed"
+    },
+    "camera": {
+      "centre": [
+        52.42500904864978,
+        103.60840022608542,
+        16.432677537704155
+      ],
+      "centre_sigma": [
+        0.005391141926622527,
+        0.03321494627783819,
+        0.008581629790744486
+      ],
+      "roll": -0.008436692362914134,
+      "k1": 0.3983290546325019,
+      "k2": 0.0,
+      "focal_rel": [
+        1.4245672565895062,
+        3.430150075732864
+      ],
+      "pan": [
+        -0.622369388783914,
+        0.4900709751790503
+      ],
+      "tilt": [
+        0.17086112519801638,
+        0.3060097869952326
+      ],
+      "image_size": [
+        960,
+        544
+      ]
+    },
+    "history": 1,
+    "notes": [
+      "fitted on the Liverpool-Brighton broadcast clip (sdr.mov, 10561 main frames, round 2 of solve_match, 105 x 68 markings model); camera = gantry about 36 m behind the near touchline at 16.4 m; k1 is weakly identified (0.14 to 0.46 across pitch-length hypotheses)"
+    ]
+  },
+  "etihad": {
+    "name": "Etihad Stadium",
+    "club": "Manchester City",
+    "pitch": {
+      "length": 105,
+      "width": 68,
+      "verified": false,
+      "source": "published figure from memory, not surveyed or checked against a source"
+    },
+    "camera": null,
+    "history": 0
+  },
+  "amex": {
+    "name": "American Express Community Stadium",
+    "club": "Brighton",
+    "pitch": {
+      "length": 105,
+      "width": 68,
+      "verified": false,
+      "source": "published figure from memory, not surveyed or checked against a source"
+    },
+    "camera": null,
+    "history": 0
+  },
+  "villa_park": {
+    "name": "Villa Park",
+    "club": "Aston Villa",
+    "pitch": {
+      "length": 105,
+      "width": 68,
+      "verified": false,
+      "source": "published figure from memory, not surveyed or checked against a source"
+    },
+    "camera": null,
+    "history": 0
+  },
+  "emirates": {
+    "name": "Emirates Stadium",
+    "club": "Arsenal",
+    "pitch": {
+      "length": 105,
+      "width": 68,
+      "verified": false,
+      "source": "published figure from memory, not surveyed or checked against a source"
+    },
+    "camera": null,
+    "history": 0
+  },
+  "spotify_camp_nou": {
+    "name": "Spotify Camp Nou",
+    "club": "Barcelona",
+    "pitch": {
+      "length": 105,
+      "width": 68,
+      "verified": false,
+      "source": "published figure from memory, not surveyed or checked against a source"
+    },
+    "camera": null,
+    "history": 0
+  },
+  "bernabeu": {
+    "name": "Santiago Bernabeu",
+    "club": "Real Madrid",
+    "pitch": {
+      "length": 105,
+      "width": 68,
+      "verified": false,
+      "source": "published figure from memory, not surveyed or checked against a source"
+    },
+    "camera": null,
+    "history": 0
+  },
+  "metropolitano": {
+    "name": "Riyadh Air Metropolitano",
+    "club": "Atletico Madrid",
+    "pitch": {
+      "length": 105,
+      "width": 68,
+      "verified": false,
+      "source": "published figure from memory, not surveyed or checked against a source"
+    },
+    "camera": null,
+    "history": 0
+  },
+  "allianz_arena": {
+    "name": "Allianz Arena",
+    "club": "Bayern Munich",
+    "pitch": {
+      "length": 105,
+      "width": 68,
+      "verified": false,
+      "source": "published figure from memory, not surveyed or checked against a source"
+    },
+    "camera": null,
+    "history": 0
+  },
+  "red_bull_arena_leipzig": {
+    "name": "Red Bull Arena",
+    "club": "RB Leipzig",
+    "pitch": {
+      "length": 105,
+      "width": 68,
+      "verified": false,
+      "source": "published figure from memory, not surveyed or checked against a source"
+    },
+    "camera": null,
+    "history": 0
+  },
+  "parc_des_princes": {
+    "name": "Parc des Princes",
+    "club": "Paris Saint-Germain",
+    "pitch": {
+      "length": 105,
+      "width": 68,
+      "verified": false,
+      "source": "published figure from memory, not surveyed or checked against a source"
+    },
+    "camera": null,
+    "history": 0
+  },
+  "estadio_do_dragao": {
+    "name": "Estadio do Dragao",
+    "club": "Porto",
+    "pitch": {
+      "length": 105,
+      "width": 68,
+      "verified": false,
+      "source": "published figure from memory, not surveyed or checked against a source"
+    },
+    "camera": null,
+    "history": 0
+  }
+}
