@@ -41,3 +41,7 @@ HANDOFF.md
 logs/
 # Local speech output
 *.mp3
+
+# Personal Claude preview config (local paths)
+.claude/launch.json
+.claude/worktrees/
