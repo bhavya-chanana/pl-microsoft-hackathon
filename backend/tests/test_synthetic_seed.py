@@ -167,3 +167,150 @@ def test_data_insights_follow_correction_revisions(tmp_path):
     assert any(i['signal_type'] == 'goal' and i['revision'] == 1 and i['supersedes_revision'] == 0 for i in insights)
     assert all(i['fact_check']['status'] in ('data_only','blocked') and not i['agents'] for i in insights)
     assert docs['overlays']
+
+
+# --- explicit Azure target (no network) ---------------------------------------------------
+
+AZ = 'https://cosmos-7npbct7a7fan6.documents.azure.com:443/'
+
+
+def _argv(endpoint, *extra, db='matchlens'):
+    return ['--dataset', 'unused', '--endpoint', endpoint, '--database', db, *extra]
+
+
+def _run_main(monkeypatch, argv):
+    """main() with the dataset check and the apply step stubbed; returns True when _apply was reached."""
+    called = []
+    monkeypatch.setattr(seed, 'inspect_dataset', lambda _: {'matches': []})
+    async def fake_apply(args, manifest): called.append(args)
+    monkeypatch.setattr(seed, '_apply', fake_apply)
+    seed.main(argv)
+    return called
+
+
+def test_localhost_without_azure_still_works(monkeypatch):
+    assert _run_main(monkeypatch, _argv('http://127.0.0.1:8081', db='matchlens_codex')) == []
+    (args,) = _run_main(monkeypatch, _argv('http://localhost:8081', '--apply'))
+    assert not args.azure and seed.store_settings(args).key == seed.EMULATOR_KEY
+
+
+@pytest.mark.parametrize('argv', [
+    _argv(AZ),                                                    # azure host, no --azure
+    _argv(AZ, '--apply'),
+    _argv('https://cosmos-7npbct7a7fan6.documents.azure.com/', '--apply'),
+    _argv('http://127.0.0.1:8081', '--confirm-azure', 'x'),       # confirm without --azure
+    _argv('http://127.0.0.1', '--azure'),                         # localhost is not an Azure target
+    _argv('http://127.0.0.1:8081', '--azure'),
+    _argv('http://cosmos-7npbct7a7fan6.documents.azure.com:443/', '--azure'),          # http
+    _argv('https://evil.example.com/', '--azure'),                                    # non-Azure host
+    _argv('https://cosmos-7npbct7a7fan6.documents.azure.com.evil.com/', '--azure'),
+    _argv('https://x.documents.azure.com@evil.com/', '--azure'),
+    _argv('https://user:pw@cosmos-7npbct7a7fan6.documents.azure.com:443/', '--azure'),  # credentials
+    _argv('https://cosmos-7npbct7a7fan6.documents.azure.com:8081/', '--azure'),
+    _argv('https://cosmos-7npbct7a7fan6.documents.azure.com/dbs?x=1', '--azure'),
+    _argv(AZ, '--azure', '--apply'),                                                  # missing confirmation
+    _argv(AZ, '--azure', '--apply', '--confirm-azure', 'cosmos-other'),                # mismatch
+    _argv(AZ, '--azure', '--apply', '--confirm-azure', 'COSMOS-7NPBCT7A7FAN6'),
+    _argv(AZ, '--azure', '--confirm-azure', 'cosmos-other'),                           # mismatch even on preview
+])
+def test_target_rejected(monkeypatch, argv):
+    with pytest.raises(SystemExit) as exc:
+        _run_main(monkeypatch, argv)
+    assert exc.value.code == 2
+
+
+def test_azure_accepted_with_confirmation(monkeypatch):
+    assert _run_main(monkeypatch, _argv(AZ, '--azure')) == []                  # preview needs no confirmation
+    assert _run_main(monkeypatch, _argv('https://cosmos-7npbct7a7fan6.documents.azure.com/', '--azure')) == []
+    (args,) = _run_main(monkeypatch, _argv(AZ, '--azure', '--apply', '--confirm-azure', 'cosmos-7npbct7a7fan6'))
+    assert seed.store_settings(args).key is None
+
+
+class _FakeContainer:
+    def __init__(self, name, log, status=None): self.name, self.log, self.status = name, log, status
+    async def read(self):
+        self.log.append(('read', self.name))
+        if self.status:
+            from azure.cosmos.exceptions import CosmosHttpResponseError
+            raise CosmosHttpResponseError(status_code=self.status,
+                message='Request blocked: principal [11111111-2222-3333-4444-555555555555] does not have RBAC permissions')
+
+
+class _FakeDatabase:
+    def __init__(self, log, status): self.log, self.status = log, status
+    def get_container_client(self, name): return _FakeContainer(name, self.log, self.status)
+    async def create_container_if_not_exists(self, **_): raise AssertionError('must not create containers')
+
+
+class _FakeClient:
+    instances = []
+    status = None
+    def __init__(self, endpoint, credential):
+        self.endpoint, self.credential, self.log, self.closed = endpoint, credential, [], False
+        _FakeClient.instances.append(self)
+    def get_database_client(self, name):
+        self.log.append(('database', name))
+        return _FakeDatabase(self.log, _FakeClient.status)
+    async def create_database_if_not_exists(self, *_a, **_k): raise AssertionError('must not create a database')
+    async def close(self): self.closed = True
+
+
+class _FakeCredential:
+    instances = []
+    def __init__(self, **kwargs): self.kwargs, self.closed = kwargs, False; _FakeCredential.instances.append(self)
+    async def close(self): self.closed = True
+    async def get_token(self, *_scopes): raise AssertionError('no token needed here')
+
+
+@pytest.fixture
+def fake_azure(monkeypatch):
+    import azure.identity.aio
+    from matchlens.store import cosmos
+    _FakeClient.instances, _FakeClient.status, _FakeCredential.instances = [], None, []
+    monkeypatch.setattr(cosmos, 'CosmosClient', _FakeClient)
+    monkeypatch.setattr(azure.identity.aio, 'DefaultAzureCredential', _FakeCredential)
+    monkeypatch.setenv('MATCHLENS_COSMOS_KEY', 'must-not-be-used')
+    return _FakeClient
+
+
+def _azure_args():
+    import argparse
+    ns = argparse.Namespace(dataset=Path('unused'), endpoint=AZ, database='matchlens', apply=True, azure=True,
+                            confirm_azure='cosmos-7npbct7a7fan6')
+    return ns
+
+
+def test_azure_apply_uses_entra_credential_and_never_creates(fake_azure, monkeypatch, tmp_path):
+    from matchlens.store.base import CONTAINERS
+    seen = []
+    async def fake_seed(store, folder, manifest=None):
+        seen.append(store.settings)
+        return {'run-a': {}}
+    monkeypatch.setattr(seed, 'seed_dataset', fake_seed)
+    asyncio.run(seed._apply(_azure_args(), {'matches': []}))
+    (client,) = fake_azure.instances
+    assert client.endpoint == AZ
+    assert isinstance(client.credential, _FakeCredential) and client.credential.closed and client.closed
+    assert seen[0].key is None and seen[0].database == 'matchlens'
+    read = [name for kind, name in client.log if kind == 'read']
+    assert set(read) >= set(CONTAINERS)            # every existing container validated with .read()
+    assert ('database', 'matchlens') in client.log
+
+
+def test_azure_403_names_the_role_and_principal(fake_azure, monkeypatch):
+    fake_azure.status = 403
+    async def boom(*_a, **_k): raise AssertionError('seeding must not start')
+    monkeypatch.setattr(seed, 'seed_dataset', boom)
+    with pytest.raises(SystemExit) as exc:
+        asyncio.run(seed._apply(_azure_args(), {'matches': []}))
+    text = str(exc.value)
+    assert 'Built-in Data Contributor' in text and 'cosmos-7npbct7a7fan6' in text
+    assert '11111111-2222-3333-4444-555555555555' in text
+    assert fake_azure.instances[0].closed
+
+
+def test_emulator_apply_still_uses_emulator_key(monkeypatch):
+    import argparse
+    args = argparse.Namespace(endpoint='http://127.0.0.1:8081', database='d', azure=False)
+    settings = seed.store_settings(args)
+    assert settings.key == seed.EMULATOR_KEY and settings.endpoint == 'http://127.0.0.1:8081'
