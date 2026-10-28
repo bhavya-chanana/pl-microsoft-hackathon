@@ -1,0 +1,18 @@
+@font-face {
+  font-family: "Matchlens Display";
+  src: url("../public/fonts/barlow-condensed-bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: "Matchlens Text";
+  src: url("../public/fonts/ibm-plex-sans.woff2") format("woff2");
+  font-weight: 400 600;
+  font-display: block;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
