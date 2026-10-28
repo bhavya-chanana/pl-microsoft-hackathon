@@ -23,10 +23,10 @@ fictional. The optional historical league warehouse stays local and separate; se
 > restarting or switching it changes it for everyone.
 >
 > **Region:** the app, Cosmos DB and Speech run in Azure **Central India**, and the language model (gpt-5-mini,
-> Global Standard deployment) is served from **South India**. From the UK or US, expect some extra network latency:
-> the first page load can take a few seconds while the site wakes up, and AI insights and Pundit answers can arrive
-> 10 seconds or more after the moment they explain, because each one is written and then fact-checked. The pitch,
-> clock and stats update live without waiting on the model.
+> Global Standard deployment) is served from **South India**. Both the frontend and the backend keep one
+> replica running, so there is no cold start. From the UK or US, expect a little extra network latency, and AI
+> insights and Pundit answers can arrive 10 seconds or more after the moment they explain, because each one is
+> written and then fact-checked. The pitch, clock and stats update live without waiting on the model.
 
 ## What it does
 
