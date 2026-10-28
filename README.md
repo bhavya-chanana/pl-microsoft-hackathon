@@ -7,10 +7,17 @@ what matters and why, checks every claim against the data, and publishes each in
 overlays for a studio, and as a personalised companion feed for every fan, in their mode, club, player and
 language.
 
-Built for the Microsoft Premier League Hackathon (October 2026). Clubs, players, venues and competitions in the
-synthetic match experience are fictional. The optional historical league warehouse stays local and separate; see
-[Data policy](#data-policy).
+Fans can ask the Pundit anything about the match and get grounded answers that link to the moments they cite.
+Coaches get the Tactics Brain: state a goal in plain words, and agents propose ideas, the simulator plays each one
+10 seconds forward, and a tactical model ranks them by the chance of a shot, a goal or conceding. The whole
+experience runs on synthetic match data.
 
+Built for the Microsoft Premier League Hackathon (October 2026) with Azure OpenAI, Azure AI Speech and MAI-Voice,
+Cosmos DB and Azure Container Apps. Clubs, players, venues and competitions in the synthetic match experience are
+fictional. The optional historical league warehouse stays local and separate; see [Data policy](#data-policy).
+
+> **Demo video (2 min):** <https://youtu.be/cgJjoJ6LpYI>
+>
 > **Live demo:** <https://ca-frontend-7npbct7a7fan6.grayfield-727b5fb5.centralindia.azurecontainerapps.io>
 > (Azure Container Apps, deployed from `main` by GitHub Actions). Every visitor watches the same live match, so
 > restarting or switching it changes it for everyone.
