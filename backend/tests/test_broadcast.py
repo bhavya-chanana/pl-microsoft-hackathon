@@ -148,7 +148,10 @@ def test_tracker_follows_a_pan_and_zoom(ground):
         assert cal is not None, i
         errors.append(reprojection_px(cal.homography, truth))
     # Worst once the penalty area leaves the shot: the centre circle and halfway line pin down less.
-    assert np.mean(errors) < 1.5 and max(errors) < 3.5
+    # There the fit can settle in either of two nearby spots, and which one depends on last-bit float
+    # differences between CPUs (BLAS and SIMD kernels), not on any random draw: the worst frame came out
+    # at 2.2 to 2.6 px or at 3.7 to 3.9 px. A tracker that has lost the camera is off by far more.
+    assert np.mean(errors) < 1.5 and max(errors) < 5.0
     assert len(tracker.keyframes.items) >= 2
 
 
