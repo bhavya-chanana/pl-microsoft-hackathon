@@ -7,8 +7,10 @@ what matters and why, checks every claim against the data, and publishes each in
 overlays for a studio, and as a personalised companion feed for every fan, in their mode, club, player and
 language.
 
-Built for the Microsoft Premier League Hackathon (October 2026). Clubs, players, venues and competitions in the
-synthetic match experience are fictional. The optional historical league warehouse stays local and separate.
+Built for the Microsoft Premier League Hackathon (October 2026), where every club and player was fictional. Since
+then the rule is lifted (BRD §9.3): Matchlens runs on real matches too — real names, real event feeds and tracking
+derived from broadcast video — while the fictional synthetic match stays as the offline demo. Raw data and footage
+stay local and gitignored. See [docs/NEXT10.md](docs/NEXT10.md) for the next-10-seconds companion.
 
 > **Demo link:** to be added after deployment (see [docs/DEPLOY.md](docs/DEPLOY.md)).
 
@@ -159,8 +161,8 @@ ball. The result plays like any other match from the Past matches card.
 
 It is built and measured on [SoccerTrack v2](https://github.com/AtomScott/SoccerTrack-v2) research footage
 (CC BY 4.0, [dataset](https://huggingface.co/datasets/atomscott/soccertrack-v2)). That footage, its labels and everything derived from it stay in `backend/data/local/` (gitignored): none
-of it is in this repository, the deployed demo or the demo video, and a match built from it is shown as the fictional
-Westmoor v Eastbrook (BRD §6.3).
+of it is in this repository. Matches built from it were shown as the fictional Westmoor v Eastbrook during the
+hackathon (BRD §6.3, since amended by §9.3).
 
 Measured on a 4-minute clip of match 128057 (from the first-half kick-off), against the dataset's hand labels:
 
@@ -227,10 +229,10 @@ Use only footage you have the right to use. Like the SoccerTrack data, it and ev
   Regenerate it with `npm run export:dataset`.
 - **[Synthetic seasons](docs/SYNTHETIC_SEASONS.md):** read local 2024–25/2023–24 population aggregates, independently
   generate a fictional multi-match season under ignored data paths, preview it, then explicitly seed completed
-  archives into a local Cosmos emulator. Real match records are not imported.
+  archives into a local Cosmos emulator. Real matches come in through their own feeds (BRD §9.3).
 - **Calibration:** the simulator is tuned against aggregate statistics of 100 real top-flight matches (passing
-  lengths and completion, pressure, shot locations, xG, set pieces, fouls and cards). Only the averages are kept;
-  no real names or match data are used. Real-data calibration:
+  lengths and completion, pressure, shot locations, xG, set pieces, fouls and cards). Only the averages are kept in
+  the simulator. Real-data calibration:
   [StatsBomb Open Data](https://github.com/statsbomb/open-data), data provided by StatsBomb.
 
 ## Repository layout

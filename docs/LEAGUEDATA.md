@@ -2,7 +2,7 @@
 
 The league dataset behind the Tactics Brain. It is built from public sources for the Premier League, La Liga, Serie A, the Champions League and, optionally, the Bundesliga and Ligue 1, for seasons 2019-20 to 2025-26.
 
-Real names are allowed for this feature only (BRD §9.3 amendment). Everything downloaded or derived stays under `backend/data/local/leaguedata/`, which is gitignored. Test fixtures use fictional names.
+Real names and data are allowed product-wide (BRD §9.3 amendment). Everything downloaded or derived stays under `backend/data/local/leaguedata/`, which is gitignored. Test fixtures use fictional names.
 
 ## Pipeline
 

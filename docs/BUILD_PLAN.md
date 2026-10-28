@@ -59,7 +59,7 @@ These already exist, so the estimates assume them:
 - Azure AI Speech text-to-speech (`speech.py`, `/api/speech`, `infra/speech.bicep`) is **in progress in the working
   tree** and is not committed yet. Plan 5 covers only the parts that come after it.
 
-Constraints that still apply: synthetic data only on screen (no real match data); the feed never waits for a model; every
+Constraints that still apply (the synthetic-only rule was lifted on 28 October 2026, BRD §9.3): the feed never waits for a model; every
 number on screen comes from the engine, and the Fact-Checker checks every model sentence.
 
 ---

@@ -35,7 +35,7 @@ cd backend && uv run python -m matchlens.dataset.export
 - **Identifiers:** `match_id`, `team_id` and `player_id` are stable strings (e.g. `ml-demo-001`, `NBR`, `NBR-09`).
   Event ids are `<match_id>-e<sequence>`.
 - **Unavailable values** are `null`, never `0` (FR-045).
-- **Fictional identity:** every club, player, venue and competition is invented (BRD §9.3).
+- **Identity:** synthetic matches use invented clubs, players and venues; real-match feeds carry real names (BRD §9.3).
 
 ## Event
 

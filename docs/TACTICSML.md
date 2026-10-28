@@ -229,8 +229,8 @@ Plan targets, honestly:
   agree with itself and be wrong.
 * **No post-hoc calibration.** Calibration is whatever training gives; the report measures it.
 * **One league per source.** Results do not carry over to leagues, tracking vendors or eras not in the data.
-* **Real names.** The real-data features may use real club and player names (BRD section 9.3 amendment); the
-  licences in section 2 apply to anything derived from those datasets.
+* **Real names.** Real club and player names and data are allowed product-wide (BRD section 9.3 amendment);
+  the licences in section 2 apply to anything derived from those datasets.
 
 ## 8. Intended use
 

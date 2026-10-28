@@ -79,7 +79,7 @@ Added in version 1.1, after the first build was complete:
 
 ### 6.3 Out of scope
 
-- Real Premier League or other real match data, footage, club names, crests or player names. One exception, for development only: video auto-eventing is built and measured on SoccerTrack v2 research footage and labels (CC BY 4.0, university matches). That footage, its labels and anything derived from it stay on the developer's machine; none of it enters the repository, the deployed demo or the demo video, and a match built from it is shown under fictional club names.
+- Club crests, kits and other trademarks as artwork. (Real match data, footage-derived tracking, and real club, player and competition names are in scope since the post-hackathon amendment in §9.3.)
 - Real video clipping and video-rights management.
 - User accounts, sign-in and identity merging.
 - Predictive tracking simulation (5–10-second futures).
@@ -272,17 +272,15 @@ Each event must include: `event_id`, `match_id`, `sequence`, `period`, `match_cl
 
 Periodic samples per player and for the ball: `timestamp`, `entity_id`, `xy`, `speed`.
 
-### 9.3 Fictional identity
+### 9.3 Identity and real data
 
-All clubs, players, venues and competition names must be fictional. No real trademarks, crests or names may appear in the product, repository or video.
+The hackathon build used fictional clubs, players, venues and competitions only. **Post-hackathon amendment (28 October 2026):** that rule is lifted product-wide. Matchlens now works on real matches: real club, player, manager and competition names, real match and event data, and tracking derived from broadcast video, live or recorded (see `docs/NEXT10.md`).
 
-**Amendment (Tactics Brain).** The Tactics Brain feature (`leaguedata/`, `tactics/`, `tacticsml/`, `/tactics`) may use real club, player, manager and competition names, because its value is reasoning over real league history. The amendment covers names only:
-
-- No crests, kits or other trademarks.
-- Real-league data stays under `backend/data/local/` (gitignored) and is never committed.
-- Test fixtures keep fictional names.
-- The rest of the product, and the demo video unless it shows the Tactics Board, stays fictional.
-- Deploying a real-data knowledge base publicly needs the owner's sign-off on source licences (see `docs/LEAGUEDATA.md`).
+- No crests, kits or other trademarks as artwork.
+- Raw downloads, footage and anything derived from them stay under `backend/data/local/` (gitignored) and are never committed. Each source's terms are recorded in `docs/LEAGUEDATA.md` and `docs/TACTICSML.md`.
+- Test fixtures keep fictional names, so tests never depend on real data.
+- The fictional synthetic match stays as the offline demo source.
+- Deploying real data publicly needs the owner's sign-off on source terms.
 
 ## 10. Non-functional requirements
 
@@ -377,7 +375,7 @@ The prototype is ready for submission when:
 - Overlay JSON validates against the documented schema and renders in sync on the broadcast view.
 - The same moment produces visibly different output in Casual, Analyst and Player-Focus modes and in all three languages.
 - "What did I miss?" works for 5, 15 and 30 minutes, and the full-time recap generates automatically.
-- No real club, player or competition names appear anywhere.
+- (Hackathon criterion, retired by the §9.3 amendment) No real club, player or competition names appear anywhere.
 - The deployed demo, public repository, pitch and a demo video under two minutes are submitted by 27 October 2026, 11:59 pm Pacific Time.
 
 ## 15. Open decisions

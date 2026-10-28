@@ -80,7 +80,7 @@ top-flight matches (English top flight, 2015/16, from StatsBomb Open Data) and o
 simulator is tuned until every simulated average lies within one real match-to-match standard deviation of the real
 average. Only aggregate statistics of the real matches are kept
 ([`reference_profile.json`](../backend/src/matchlens/simulator/reference_profile.json)): no real club, player,
-competition or match names or data are in this dataset or the product.
+competition or match names or data are in this dataset.
 
 Mean over 20 unscripted matches (seeds 1 to 20) against the real average, both teams combined:
 
