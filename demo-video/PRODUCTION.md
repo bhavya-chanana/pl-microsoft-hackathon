@@ -1,44 +1,47 @@
-# Matchlens hackathon film
+# Matchlens replacement submission film
 
-An editable 118.5-second, 1920×1080, 30 fps Remotion film for Inside the Game, aligned to the supplied human narration.
+The only registered composition is **Matchlens-Submission**: 1920×1080, 30 fps, 3,346 frames (111.53 seconds). It replaces the previous submission edit.
 
-Product footage is recorded from **ui-redesign-codex**, including its local UI changes. Film source lives here; application development stays in its own worktree.
+## Current delivery state
 
-## Preview
+The product footage was freshly recorded from an isolated snapshot of `ui-redesign-codex` at revision `50dfce526dd8d9f102c908e94518cf180d9a4cce`. Application development and the public demo were not restarted. The capture uses a memory store, synthetic seed 7, and the recorded-demo cassette with offline fallbacks. Source and model labels are retained in product footage.
+
+Seven scenes reuse edited portions of the original human take at its original speed. The supplied `agent-recording.m4a` contains all three replacement sections (Agents, Coach and Platform). It is preserved locally as `public/audio/v2/replacement-takes-original.m4a`, split at natural pauses and transcribed word by word. All ten narration sections are present. See [VOICEOVER.md](VOICEOVER.md).
+
+## Preview and export
 
 ```sh
-npm ci
 npm run assets
 npm run dev
 ```
 
-Open http://localhost:3200/Matchlens-Hackathon. The opening, agent workflow and closing also have individual compositions for editing.
+Open http://localhost:3200/Matchlens-Submission.
 
-## Version control
+```sh
+npm run check
+npm run render:preview
+```
 
-Keep source, package lock, fonts, recording guide and capture tooling. Dependencies, downloaded skills, capture scratch files, raw clips, human voice recordings and exports are ignored. This independent npm project does not add Remotion to the product's frontend or backend dependencies.
+The review export is `out/matchlens-new-cut.mp4`. All replacement voice files have been transcribed and aligned. To reproduce the final export:
 
-## Media workflow
+```sh
+npm run assets
+npm run check -- --final
+npm run render:final
+```
 
-1. Record the redesigned frontend against an isolated **memory** backend. Never restart another developer's match to film.
-2. Put the ten clips under `public/footage/`, named `01-opening.mp4` through `10-winner.mp4`. See `src/storyboard.ts` for the capture list.
-3. Record the nine segments in [VOICEOVER.md](VOICEOVER.md). Put the files under `public/audio/` with the numbered names in that guide.
-4. Run `npm run assets` to refresh the local manifest, then review the composition.
-5. Align captions to the delivered human voice. Draft scene timings are editorial targets, not a transcript.
-6. Run `npm run check`. After reviewing the edit and audio, render a preview or final export.
+The final command refuses missing voice takes. It exports `out/matchlens-submission.mp4`; final listening and subtitle wording review remain necessary before publishing. Set the verified demo URL and `showGuide: false` in ignored `delivery-props.local.json`.
 
-The current human take is preserved as ignored `public/audio/pl-demo-hackathon-original.m4a`. Its 121.344 seconds are edited to 117.95 seconds by trimming the ends and shortening three pauses, with playback rate 1. The 118.5-second film leaves a closing hold. `scripts/prepare-human-voice.py` reproduces the edit from the ignored word transcript; `src/voice-timing.ts` keeps the visual scenes on the recorded paragraph boundaries. The local transcript uses faster-whisper small.en and includes pronunciation/recognition uncertainty; listen to the finished export before submission.
+## Coach proof sequence
 
-The capture tooling uses real Chrome frames and timestamps, encoded at CRF 16. It does not manufacture app states, answers, latency or statistics. The capture report stays in ignored `out/`.
+The actual application produced three playable tactical ideas against a frozen synthetic match situation. Each was evaluated over 24 simulations with a ten-second horizon; representative rollouts can terminate earlier at a shot or turnover. The recorded board returned **No clear winner**, with overlapping uncertainty ranges. The film preserves this verdict instead of manufacturing a winning tactic.
 
-The Azure scene describes implementation and deployment architecture. It does not assert a verified public deployment. Demo mode retains actual source labels.
+The 15-second Coach sequence shows advice with evidence and a trade-off, the Build ideas action, the baseline comparison, worst-case playback and the actual verdict. Evaluation wait is omitted between the setup and ready-state shots, and the edit labels that cut. The horizon is a simulation parameter, not a claim that real football can be predicted ten seconds ahead.
 
-## Final export
+## Source and privacy
 
-Create ignored `delivery-props.local.json` with `demoUrl` set to the verified public application URL and `showGuide` set to `false`. Supply reviewed captions in `public/audio/captions-reviewed.json`. `npm run render:final` checks required media before exporting `out/matchlens-submission.mp4`.
+Editable film source, safe metadata, capture tooling and licensed fonts belong in Git. Raw captures, private human narration, local delivery settings, model transcripts, scratch frames and exports are ignored. Source provenance, board output, capture reports and visual review frames are local under `out/v2/`. Preserve the original voice recording for revisions.
 
-Upload the approved export to a permitted video platform and check public playback. Nothing here automatically publishes the video or submits the entry.
+Only original code graphics, actual product footage and the supplied human voice are used. No voice cloning, stock match footage, commercial music or third-party logos are added. Fonts are Barlow Condensed and IBM Plex Sans under their included SIL Open Font Licenses.
 
-## Rights
-
-Film graphics and monogram are authored in code. Fonts are the open-source Barlow Condensed and IBM Plex Sans used by the product, under the SIL Open Font License. Only original narration and product footage are planned. No stock match footage, third-party logos or music are included.
+Publishing and hackathon submission are separate actions. Nothing in this project automatically uploads or submits a video.

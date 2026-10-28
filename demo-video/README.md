@@ -1,6 +1,6 @@
 # Remotion video
 
-**Matchlens film:** start with [PRODUCTION.md](PRODUCTION.md) and [VOICEOVER.md](VOICEOVER.md). The main composition is `Matchlens-Hackathon` (115 seconds).
+**Matchlens film:** start with [PRODUCTION.md](PRODUCTION.md) and [VOICEOVER.md](VOICEOVER.md). The replacement composition is `Matchlens-Submission` (111.53 seconds), including a dedicated Coach and tactical simulation sequence.
 
 <p align="center">
   <a href="https://github.com/remotion-dev/logo">

@@ -1,47 +1,27 @@
-# Your voice for the Matchlens demo
+# Voice takes for the replacement Matchlens film
 
-Record nine separate takes in a quiet room. A phone microphone is fine. Keep it 15–20 cm away, use the same position throughout, and leave a second of silence at either end. WAV, M4A or MP3 is fine. Keep the raw takes; we can trim silence and adjust scene timing around your natural delivery. You can also send one continuous recording; I can split it at paragraph boundaries.
+All three replacement takes have been supplied in `agent-recording.m4a` and are included in the 111.53-second final cut. Seven other sections reuse the original recording. The paragraphs below remain the editable script for future retakes; their wording may differ slightly from the natural delivered recording.
 
-The film is 115 seconds, with about 225 words. These are timing targets; do not rush. Speak as the person who built Matchlens, with energy in the opening and a small pause before the final line.
+## Agents — up to 11 seconds
 
-## 01-opening.m4a — about 8 seconds
+Specialist agents explain each moment. Their claims are checked against deterministic statistics before producer and personaliser agents create the audience experiences.
 
-Northbridge are two-nil down. The pressure is shifting. A comeback is building—but the scoreline hasn’t caught up.
+Local filename after import: `public/audio/v2/agents-raw.m4a`.
 
-## 02-introduction.m4a — about 12 seconds
+## Coach — up to 15 seconds
 
-I built Matchlens to explain the game behind the score, for fans and broadcasters. This demonstration uses synthetic, football-realistic events and tracking, with entirely fictional teams and players.
+For coaches, freeze a match moment and ask for tactical ideas. Compare each idea with the baseline, watch ten-second simulated outcomes, and inspect the benefits, risks, and uncertainty.
 
-## 03-evidence.m4a — about 13 seconds
+Local filename after import: `public/audio/v2/coach-raw.m4a`.
 
-Watch the momentum shift. Matchlens connects pressure and key events into an explanation. Open the evidence, inspect the supporting numbers, then replay the moment with tactical annotations.
+## Platform — up to 8 seconds
 
-## 04-agents.m4a — about 15 seconds
+Microsoft Agent Framework and Azure OpenAI power Matchlens, with Azure Container Apps and Cosmos DB.
 
-Here’s how the agents collaborate. A coordinator selects the moment. Tactical and narrator agents develop the explanation. Claims are checked against a deterministic statistics engine, before producer and personaliser agents create the audience experiences.
+Local filename after import: `public/audio/v2/platform-raw.m4a`.
 
-## 05-correction.m4a — about 11 seconds
+## Assembly
 
-Live data changes. Here, the feed corrects a goalscorer. Matchlens updates affected statistics and insights, and retracts explanations that no longer hold.
+Transcribe the real takes locally with `scripts/transcribe-voice.py`, saving one `<scene>-transcript.json` beside each raw file. Run `npm run assets:v2` to build aligned narration and captions. The preparation script refuses to truncate speech that exceeds a scene; adjust the authored timeline explicitly instead.
 
-## 06-multiverse.m4a — about 17 seconds
-
-Now, one match becomes four experiences: a casual fan in Hindi, an analyst in English, a player-focused fan in Spanish, and a coach receiving tactical recommendations. Same match data. Different depth, language, and perspective.
-
-## 07-pundit.m4a — about 14 seconds
-
-Ask, “Why did the momentum change?” The answer brings supporting numbers and links back to match moments. Missed the action? Generate a catch-up that explains the story so far.
-
-## 08-platform.m4a — about 11 seconds
-
-The workflow uses Microsoft Agent Framework and Azure OpenAI in Microsoft Foundry. The application is built for Azure Container Apps, with Cosmos DB supporting persisted match history.
-
-## 09-closing.m4a — about 5 seconds
-
-Matchlens. Beyond the scoreline. Every moment, understood.
-
-## Other human input
-
-- The working public application URL for the final frame.
-- Your preferred pronunciation of Matchlens, if specific.
-- A factual review of the captured UI before submission. The first recording uses the current ui-redesign-codex snapshot; individual clips can be replaced after the final build.
+The original recording is preserved locally. No voice cloning or synthetic replacement is used.

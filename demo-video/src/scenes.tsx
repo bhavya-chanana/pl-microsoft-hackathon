@@ -601,8 +601,7 @@ export const Multiverse = () => {
     { name: "Player focus", language: "Spanish", color: C.green },
     { name: "Coach", language: "Tactical brief", color: "#CAA1E9" },
   ];
-  const current =
-    f / fps < 6.6 ? 0 : f / fps < 8.2 ? 1 : f / fps < 10.1 ? 2 : 3;
+  const current = f / fps < 5.6 ? 0 : f / fps < 7.0 ? 1 : f / fps < 9.0 ? 2 : 3;
   const tiles = personas.every((_, i) => footage[`multiverse${i + 1}`]);
   return (
     <SceneBase>

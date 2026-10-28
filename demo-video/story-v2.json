@@ -1,19 +1,126 @@
 {
-  "title": "Matchlens — understand the moment, explore the next move",
+  "title": "Matchlens \u2014 understand the moment, explore the next move",
   "fps": 30,
   "width": 1920,
   "height": 1080,
   "maxSeconds": 120,
   "scenes": [
-    {"id":"opening","title":"The score is only the beginning","frames":240,"sourceRanges":[[0.85,8.85]],"narration":"Northbridge are two-nil down. The pressure is shifting. A comeback is building—but the scoreline hasn’t caught up."},
-    {"id":"introduction","title":"Live football intelligence","frames":374,"sourceRanges":[[9,14.7],[15.35,22.1]],"narration":"I built Matchlens to explain the game behind the score, for fans and broadcasters. This demonstration uses synthetic, football-realistic events and tracking, with entirely fictional teams and players."},
-    {"id":"evidence","title":"Explain. Inspect. Replay.","frames":344,"sourceRanges":[[23.35,29.15],[29.65,35.3]],"narration":"Watch the momentum shift. Matchlens connects pressure and key events into an explanation. Open the evidence, inspect the supporting numbers, then replay the moment with tactical annotations."},
-    {"id":"agents","title":"Specialists, grounded in evidence","frames":360,"replacement":true,"narration":"Specialist agents explain each moment. Their claims are checked against deterministic statistics before producer and personaliser agents create the audience experiences."},
-    {"id":"correction","title":"Trust when the feed changes","frames":351,"sourceRanges":[[55.1,57.4],[58.1,67.5]],"narration":"Live data changes. Here, the feed corrects a goalscorer. Matchlens updates affected statistics and insights, and retracts explanations that no longer hold."},
-    {"id":"coach","title":"Explore the next move","frames":540,"replacement":true,"narration":"For coaches, freeze a match moment and ask for tactical ideas. Compare each idea with the baseline, watch ten-second simulated outcomes, and inspect the benefits, risks, and uncertainty."},
-    {"id":"multiverse","title":"One match. Every audience.","frames":471,"sourceRanges":[[69.4,85.1]],"narration":"Now, one match becomes four experiences: a casual fan in Hindi, an analyst in English, a player-focused fan in Spanish, and a coach receiving tactical recommendations. Same match data. Different depth, language, and perspective."},
-    {"id":"pundit","title":"Ask. Catch up. Stay in the game.","frames":366,"sourceRanges":[[86.4,98.6]],"narration":"You could ask, why did the momentum change? The answer brings supporting numbers and links back to match moments. Missed the action? Generate a catch-up that explains the story so far."},
-    {"id":"platform","title":"Built with Microsoft and Azure","frames":300,"replacement":true,"narration":"Microsoft Agent Framework and Azure OpenAI power Matchlens, with Azure Container Apps and Cosmos DB."},
-    {"id":"closing","title":"Every moment, understood","frames":180,"sourceRanges":[[115.7,120.75]],"narration":"Matchlens. Beyond the scoreline. Every match, understood."}
+    {
+      "id": "opening",
+      "title": "The score is only the beginning",
+      "frames": 240,
+      "sourceRanges": [
+        [
+          0.85,
+          8.85
+        ]
+      ],
+      "narration": "Northbridge are two-nil down. The pressure is shifting. A comeback is building\u2014but the scoreline hasn\u2019t caught up."
+    },
+    {
+      "id": "introduction",
+      "title": "Live football intelligence",
+      "frames": 374,
+      "sourceRanges": [
+        [
+          9,
+          14.7
+        ],
+        [
+          15.35,
+          22.1
+        ]
+      ],
+      "narration": "I built Matchlens to explain the game behind the score, for fans and broadcasters. This demonstration uses synthetic, football-realistic events and tracking, with entirely fictional teams and players."
+    },
+    {
+      "id": "evidence",
+      "title": "Explain. Inspect. Replay.",
+      "frames": 344,
+      "sourceRanges": [
+        [
+          23.35,
+          29.15
+        ],
+        [
+          29.65,
+          35.3
+        ]
+      ],
+      "narration": "Watch the momentum shift. Matchlens connects pressure and key events into an explanation. Open the evidence, inspect the supporting numbers, then replay the moment with tactical annotations."
+    },
+    {
+      "id": "agents",
+      "title": "Specialists, grounded in evidence",
+      "frames": 330,
+      "replacement": true,
+      "narration": "Specialist agents explain each moment. Their claims are checked against deterministic statistics before producer and personaliser agents create the audience experiences."
+    },
+    {
+      "id": "correction",
+      "title": "Trust when the feed changes",
+      "frames": 351,
+      "sourceRanges": [
+        [
+          55.1,
+          57.4
+        ],
+        [
+          58.1,
+          67.5
+        ]
+      ],
+      "narration": "Live data changes. Here, the feed corrects a goalscorer. Matchlens updates affected statistics and insights, and retracts explanations that no longer hold."
+    },
+    {
+      "id": "coach",
+      "title": "Explore the next move",
+      "frames": 450,
+      "replacement": true,
+      "narration": "For coaches, freeze a match moment and ask for tactical ideas. Compare each idea with the baseline, watch ten-second simulated outcomes, and inspect the benefits, risks, and uncertainty."
+    },
+    {
+      "id": "multiverse",
+      "title": "One match. Every audience.",
+      "frames": 471,
+      "sourceRanges": [
+        [
+          69.4,
+          85.1
+        ]
+      ],
+      "narration": "Now, one match becomes four experiences: a casual fan in Hindi, an analyst in English, a player-focused fan in Spanish, and a coach receiving tactical recommendations. Same match data. Different depth, language, and perspective."
+    },
+    {
+      "id": "pundit",
+      "title": "Ask. Catch up. Stay in the game.",
+      "frames": 366,
+      "sourceRanges": [
+        [
+          86.4,
+          98.6
+        ]
+      ],
+      "narration": "You could ask, why did the momentum change? The answer brings supporting numbers and links back to match moments. Missed the action? Generate a catch-up that explains the story so far."
+    },
+    {
+      "id": "platform",
+      "title": "Built with Microsoft and Azure",
+      "frames": 240,
+      "replacement": true,
+      "narration": "Microsoft Agent Framework and Azure OpenAI power Matchlens, with Azure Container Apps and Cosmos DB."
+    },
+    {
+      "id": "closing",
+      "title": "Every moment, understood",
+      "frames": 180,
+      "sourceRanges": [
+        [
+          115.7,
+          120.75
+        ]
+      ],
+      "narration": "Matchlens. Beyond the scoreline. Every match, understood."
+    }
   ]
 }

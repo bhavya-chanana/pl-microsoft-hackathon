@@ -233,10 +233,15 @@ const Agents = () => {
               position: "relative",
               width: 411,
               padding: "38px 26px",
-              border: `1px solid ${f > i * 34 ? C.blue : C.border}`,
+              border: `1px solid ${f > [0, 36, 96, 180][i] ? C.blue : C.border}`,
               borderRadius: 16,
               background: C.panel,
-              opacity: interpolate(f, [i * 34, i * 34 + 16], [0.25, 1], clamp),
+              opacity: interpolate(
+                f,
+                [[0, 36, 96, 180][i], [0, 36, 96, 180][i] + 16],
+                [0.25, 1],
+                clamp,
+              ),
             }}
           >
             <div
@@ -280,20 +285,22 @@ const Agents = () => {
 
 const Coach = () => {
   const f = useCurrentFrame();
-  const step = f < 90 ? 0 : f < 135 ? 1 : f < 435 ? 2 : 3;
+  const step = f < 90 ? 0 : f < 135 ? 1 : f < 255 ? 2 : f < 330 ? 3 : 4;
   const labels = [
     "EVIDENCE + TRADE-OFFS",
     "FREEZE A MOMENT · BUILD IDEAS",
     "COMPARE WITH THE BASELINE",
     "RISK + UNCERTAINTY",
+    "THE VERDICT · NO CLEAR WINNER",
   ];
   const files = [
     "11-coach-advice-detail.mp4",
     "12-coach-build.mp4",
     "13-coach-compare-detail.mp4",
     "14-coach-risk-detail.mp4",
+    "15-coach-verdict-detail.mp4",
   ];
-  const starts = [0, 90, 135, 435];
+  const starts = [0, 90, 135, 255, 330];
   return (
     <>
       <Enter style={{ position: "absolute", left: 96, top: 145 }}>
@@ -301,7 +308,7 @@ const Coach = () => {
         <Title size={79}>
           {step < 2
             ? "FROM A MATCH MOMENT TO TACTICAL IDEAS."
-            : "TEN SECONDS. TWO POSSIBLE APPROACHES."}
+            : "A TEN-SECOND HORIZON. REAL TRADE-OFFS."}
         </Title>
       </Enter>
       <Sequence from={starts[step]} layout="none">
@@ -408,7 +415,7 @@ const Platform = () => {
         }
         body="From synthetic match events to explainable intelligence."
       />
-      {f < 225 ? (
+      {f < 165 ? (
         <div
           style={{
             position: "absolute",
@@ -439,7 +446,7 @@ const Platform = () => {
           ))}
         </div>
       ) : (
-        <Sequence from={225} layout="none">
+        <Sequence from={165} layout="none">
           <Shot
             file="10-winner.mp4"
             trimBefore={60}
@@ -492,51 +499,330 @@ export const MatchlensSubmission = ({
       <FontGate />
       <Background />
       <Track name="Updated product story">
-        {v2.scenes.map((s) => (
-          <Sequence
-            key={s.id}
-            name={s.title}
-            from={s.startFrame}
-            durationInFrames={s.durationInFrames}
-          >
-            <Scene id={s.id} demoUrl={demoUrl} />
-          </Sequence>
-        ))}
+        <Sequence
+          name="The score is only the beginning"
+          from={v2.scenes[0].startFrame}
+          durationInFrames={v2.scenes[0].durationInFrames}
+        >
+          <Scene id="opening" demoUrl={demoUrl} />
+        </Sequence>
+        <Sequence
+          name="Live football intelligence"
+          from={v2.scenes[1].startFrame}
+          durationInFrames={v2.scenes[1].durationInFrames}
+        >
+          <Scene id="introduction" demoUrl={demoUrl} />
+        </Sequence>
+        <Sequence
+          name="Explain. Inspect. Replay."
+          from={v2.scenes[2].startFrame}
+          durationInFrames={v2.scenes[2].durationInFrames}
+        >
+          <Scene id="evidence" demoUrl={demoUrl} />
+        </Sequence>
+        <Sequence
+          name="Specialists, grounded in evidence"
+          from={v2.scenes[3].startFrame}
+          durationInFrames={v2.scenes[3].durationInFrames}
+        >
+          <Scene id="agents" demoUrl={demoUrl} />
+        </Sequence>
+        <Sequence
+          name="Trust when the feed changes"
+          from={v2.scenes[4].startFrame}
+          durationInFrames={v2.scenes[4].durationInFrames}
+        >
+          <Scene id="correction" demoUrl={demoUrl} />
+        </Sequence>
+        <Sequence
+          name="Explore the next move"
+          from={v2.scenes[5].startFrame}
+          durationInFrames={v2.scenes[5].durationInFrames}
+        >
+          <Scene id="coach" demoUrl={demoUrl} />
+        </Sequence>
+        <Sequence
+          name="One match. Every audience."
+          from={v2.scenes[6].startFrame}
+          durationInFrames={v2.scenes[6].durationInFrames}
+        >
+          <Scene id="multiverse" demoUrl={demoUrl} />
+        </Sequence>
+        <Sequence
+          name="Ask. Catch up. Stay in the game."
+          from={v2.scenes[7].startFrame}
+          durationInFrames={v2.scenes[7].durationInFrames}
+        >
+          <Scene id="pundit" demoUrl={demoUrl} />
+        </Sequence>
+        <Sequence
+          name="Built with Microsoft and Azure"
+          from={v2.scenes[8].startFrame}
+          durationInFrames={v2.scenes[8].durationInFrames}
+        >
+          <Scene id="platform" demoUrl={demoUrl} />
+        </Sequence>
+        <Sequence
+          name="Every moment, understood"
+          from={v2.scenes[9].startFrame}
+          durationInFrames={v2.scenes[9].durationInFrames}
+        >
+          <Scene id="closing" demoUrl={demoUrl} />
+        </Sequence>
       </Track>
       <Track name="Your voice">
-        {v2.scenes.map((s) =>
-          takePaths[s.id] ? (
-            <Audio
-              key={s.id}
-              name={`${s.id} · human narration`}
-              src={staticFile(takePaths[s.id])}
-              from={s.startFrame}
-              durationInFrames={s.durationInFrames}
-            />
-          ) : null,
+        {takePaths.opening && (
+          <Audio
+            name="opening human narration"
+            src={staticFile(takePaths.opening)}
+            from={v2.scenes[0].startFrame}
+            durationInFrames={v2.scenes[0].durationInFrames}
+          />
+        )}
+        {takePaths.introduction && (
+          <Audio
+            name="introduction human narration"
+            src={staticFile(takePaths.introduction)}
+            from={v2.scenes[1].startFrame}
+            durationInFrames={v2.scenes[1].durationInFrames}
+          />
+        )}
+        {takePaths.evidence && (
+          <Audio
+            name="evidence human narration"
+            src={staticFile(takePaths.evidence)}
+            from={v2.scenes[2].startFrame}
+            durationInFrames={v2.scenes[2].durationInFrames}
+          />
+        )}
+        {takePaths.agents && (
+          <Audio
+            name="agents human narration"
+            src={staticFile(takePaths.agents)}
+            from={v2.scenes[3].startFrame}
+            durationInFrames={v2.scenes[3].durationInFrames}
+          />
+        )}
+        {takePaths.correction && (
+          <Audio
+            name="correction human narration"
+            src={staticFile(takePaths.correction)}
+            from={v2.scenes[4].startFrame}
+            durationInFrames={v2.scenes[4].durationInFrames}
+          />
+        )}
+        {takePaths.coach && (
+          <Audio
+            name="coach human narration"
+            src={staticFile(takePaths.coach)}
+            from={v2.scenes[5].startFrame}
+            durationInFrames={v2.scenes[5].durationInFrames}
+          />
+        )}
+        {takePaths.multiverse && (
+          <Audio
+            name="multiverse human narration"
+            src={staticFile(takePaths.multiverse)}
+            from={v2.scenes[6].startFrame}
+            durationInFrames={v2.scenes[6].durationInFrames}
+          />
+        )}
+        {takePaths.pundit && (
+          <Audio
+            name="pundit human narration"
+            src={staticFile(takePaths.pundit)}
+            from={v2.scenes[7].startFrame}
+            durationInFrames={v2.scenes[7].durationInFrames}
+          />
+        )}
+        {takePaths.platform && (
+          <Audio
+            name="platform human narration"
+            src={staticFile(takePaths.platform)}
+            from={v2.scenes[8].startFrame}
+            durationInFrames={v2.scenes[8].durationInFrames}
+          />
+        )}
+        {takePaths.closing && (
+          <Audio
+            name="closing human narration"
+            src={staticFile(takePaths.closing)}
+            from={v2.scenes[9].startFrame}
+            durationInFrames={v2.scenes[9].durationInFrames}
+          />
         )}
       </Track>
       <Track name="Synchronized captions">
-        {v2.scenes.map((s) => (
-          <Sequence
-            key={s.id}
-            name={`${s.id} captions`}
-            from={s.startFrame}
-            durationInFrames={s.durationInFrames}
-          >
-            <BasicCaptions
-              captions={[...captions[s.id]]}
-              width={3000}
-              style={{
-                position: "absolute",
-                bottom: 78,
-                left: 210,
-                scale: 0.5,
-                transformOrigin: "bottom left",
-              }}
-            />
-          </Sequence>
-        ))}
+        <Sequence
+          name="opening subtitles"
+          from={v2.scenes[0].startFrame}
+          durationInFrames={v2.scenes[0].durationInFrames}
+        >
+          <BasicCaptions
+            captions={[...captions.opening]}
+            width={3000}
+            style={{
+              position: "absolute",
+              bottom: 78,
+              left: 210,
+              scale: 0.5,
+              transformOrigin: "bottom left",
+            }}
+          />
+        </Sequence>
+        <Sequence
+          name="introduction subtitles"
+          from={v2.scenes[1].startFrame}
+          durationInFrames={v2.scenes[1].durationInFrames}
+        >
+          <BasicCaptions
+            captions={[...captions.introduction]}
+            width={3000}
+            style={{
+              position: "absolute",
+              bottom: 78,
+              left: 210,
+              scale: 0.5,
+              transformOrigin: "bottom left",
+            }}
+          />
+        </Sequence>
+        <Sequence
+          name="evidence subtitles"
+          from={v2.scenes[2].startFrame}
+          durationInFrames={v2.scenes[2].durationInFrames}
+        >
+          <BasicCaptions
+            captions={[...captions.evidence]}
+            width={3000}
+            style={{
+              position: "absolute",
+              bottom: 78,
+              left: 210,
+              scale: 0.5,
+              transformOrigin: "bottom left",
+            }}
+          />
+        </Sequence>
+        <Sequence
+          name="agents subtitles"
+          from={v2.scenes[3].startFrame}
+          durationInFrames={v2.scenes[3].durationInFrames}
+        >
+          <BasicCaptions
+            captions={[...captions.agents]}
+            width={3000}
+            style={{
+              position: "absolute",
+              bottom: 78,
+              left: 210,
+              scale: 0.5,
+              transformOrigin: "bottom left",
+            }}
+          />
+        </Sequence>
+        <Sequence
+          name="correction subtitles"
+          from={v2.scenes[4].startFrame}
+          durationInFrames={v2.scenes[4].durationInFrames}
+        >
+          <BasicCaptions
+            captions={[...captions.correction]}
+            width={3000}
+            style={{
+              position: "absolute",
+              bottom: 78,
+              left: 210,
+              scale: 0.5,
+              transformOrigin: "bottom left",
+            }}
+          />
+        </Sequence>
+        <Sequence
+          name="coach subtitles"
+          from={v2.scenes[5].startFrame}
+          durationInFrames={v2.scenes[5].durationInFrames}
+        >
+          <BasicCaptions
+            captions={[...captions.coach]}
+            width={3000}
+            style={{
+              position: "absolute",
+              bottom: 78,
+              left: 210,
+              scale: 0.5,
+              transformOrigin: "bottom left",
+            }}
+          />
+        </Sequence>
+        <Sequence
+          name="multiverse subtitles"
+          from={v2.scenes[6].startFrame}
+          durationInFrames={v2.scenes[6].durationInFrames}
+        >
+          <BasicCaptions
+            captions={[...captions.multiverse]}
+            width={3000}
+            style={{
+              position: "absolute",
+              bottom: 78,
+              left: 210,
+              scale: 0.5,
+              transformOrigin: "bottom left",
+            }}
+          />
+        </Sequence>
+        <Sequence
+          name="pundit subtitles"
+          from={v2.scenes[7].startFrame}
+          durationInFrames={v2.scenes[7].durationInFrames}
+        >
+          <BasicCaptions
+            captions={[...captions.pundit]}
+            width={3000}
+            style={{
+              position: "absolute",
+              bottom: 78,
+              left: 210,
+              scale: 0.5,
+              transformOrigin: "bottom left",
+            }}
+          />
+        </Sequence>
+        <Sequence
+          name="platform subtitles"
+          from={v2.scenes[8].startFrame}
+          durationInFrames={v2.scenes[8].durationInFrames}
+        >
+          <BasicCaptions
+            captions={[...captions.platform]}
+            width={3000}
+            style={{
+              position: "absolute",
+              bottom: 78,
+              left: 210,
+              scale: 0.5,
+              transformOrigin: "bottom left",
+            }}
+          />
+        </Sequence>
+        <Sequence
+          name="closing subtitles"
+          from={v2.scenes[9].startFrame}
+          durationInFrames={v2.scenes[9].durationInFrames}
+        >
+          <BasicCaptions
+            captions={[...captions.closing]}
+            width={3000}
+            style={{
+              position: "absolute",
+              bottom: 78,
+              left: 210,
+              scale: 0.5,
+              transformOrigin: "bottom left",
+            }}
+          />
+        </Sequence>
       </Track>
       {pending && v2.pending.some((id) => id === current.id) && (
         <div
@@ -554,16 +840,12 @@ export const MatchlensSubmission = ({
         >
           <div
             style={{
-              fontSize: 13,
+              fontSize: 18,
               color: C.gold,
               letterSpacing: 2,
-              marginBottom: 5,
             }}
           >
-            NEW VOICE TAKE PENDING · SCRIPT GUIDE
-          </div>
-          <div style={{ fontSize: 25, lineHeight: 1.25 }}>
-            {current.narration}
+            NEW VOICE TAKE PENDING · {current.id.toUpperCase()}
           </div>
         </div>
       )}
