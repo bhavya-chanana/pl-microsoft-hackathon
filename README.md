@@ -7,10 +7,20 @@ what matters and why, checks every claim against the data, and publishes each in
 overlays for a studio, and as a personalised companion feed for every fan, in their mode, club, player and
 language.
 
-Built for the Microsoft Premier League Hackathon (October 2026). Clubs, players, venues and competitions in the
-synthetic match experience are fictional. The optional historical league warehouse stays local and separate.
+Fans can ask the Pundit anything about the match and get grounded answers that link to the moments they cite.
+Coaches get the Tactics Brain: state a goal in plain words, and agents propose ideas, the simulator plays each one
+10 seconds forward, and a tactical model ranks them by the chance of a shot, a goal or conceding. The whole
+experience runs on synthetic match data.
 
-> **Demo link:** to be added after deployment (see [docs/DEPLOY.md](docs/DEPLOY.md)).
+Built for the Microsoft Premier League Hackathon (October 2026) with Azure OpenAI, Azure AI Speech and MAI-Voice,
+Cosmos DB and Azure Container Apps. Clubs, players, venues and competitions in the synthetic match experience are
+fictional. The optional historical league warehouse stays local and separate; see [Data policy](#data-policy).
+
+> **Demo video (2 min):** <https://youtu.be/cgJjoJ6LpYI>
+>
+> **Live demo:** <https://ca-frontend-7npbct7a7fan6.grayfield-727b5fb5.centralindia.azurecontainerapps.io>
+> (Azure Container Apps, deployed from `main` by GitHub Actions). Every visitor watches the same live match, so
+> restarting or switching it changes it for everyone.
 
 ## What it does
 
@@ -22,6 +32,7 @@ synthetic match experience are fictional. The optional historical league warehou
 | **Render** | A Producer agent turns each insight into timed overlay JSON with priority and screen slot; a scheduler caps what is on screen. The broadcast view plays them over a live 2D pitch. | `agents/producer.py`, `frontend/src/features/broadcast/` |
 | **Personalise** | A Personaliser agent writes every insight for Casual, Analyst and Player-Focus modes in English, Hindi and Spanish, plus each club's angle. Fans also get "What did I miss?" catch-ups and half-time and full-time recaps. | `agents/services.py`, `frontend/src/features/companion/` |
 | **Coach** | Short ranked tactical briefs, each with its evidence, trade-off and confidence, fact-checked like every other insight. | `agents/`, `frontend/src/features/coach/` |
+| **Tactics Brain** | The coach states a goal in plain words. Tactician agents propose ideas, the simulator plays each one forward from the current moment, and a tactical model scores where the ball goes next and the chance of a shot, goal, turnover or conceding. Ideas come back ranked with their risk and evidence. The learned model (a GATv2 critic ensemble with uncertainty and a cVAE that proposes repositionings) is documented in the [model card](docs/TACTICSML.md); without its weights, the board uses a pitch-control and expected-threat baseline. | `tactics/`, `tacticsml/`, `agents/tactician.py`, `frontend/src/features/tactics/` |
 | **Engage** | Fan polls open at key moments and resolve against what happened. Every player gets a rating from the data next to the fans' rating, and a match card (overall and six attributes) computed from this match alone. Insights can be read aloud with Azure AI Speech. | `runtime/fans.py`, `interpret/ratings.py`, `speech.py`, `frontend/src/features/fans/` |
 | **Replay** | Any key moment can be watched back on the monitor with telestrator strokes (passing lanes, carries, the shot and its speed, pressing zones) worked out from the stats engine. Goals get a full-frame call and roll straight into their replay. The Match Pulse strip shows the match minute by minute (momentum, control or chaos, pressing), with every key moment pinned. | `interpret/moments.py`, `interpret/pulse.py`, `frontend/src/features/broadcast/` |
 | **Ask the Pundit** | Fans ask about the match in English, Hindi or Spanish. Each answer is built from a data pack the engine prepares, fact-checked, and links to the moments it cites. | `agents/pundit.py`, `frontend/src/features/pundit/` |
@@ -216,6 +227,34 @@ cd backend && uv run --group vision python -m matchlens.vision.broadcast --overl
 Use only footage you have the right to use. Like the SoccerTrack data, it and everything made from it stay in
 `backend/data/local/`.
 
+## Data policy
+
+**At run time, everything is synthetic.** The deployed app and the demo video only show matches the simulator
+generates, between fictional clubs and players: the hero match, the open [dataset/](dataset/), Scenario Lab
+matches and the fictional synthetic season. No real match data is served, stored in Cosmos DB, or shipped in the
+container images.
+
+**Real open data is used only on a developer's machine, for research and calibration, and is never redistributed.**
+Downloads and everything built from them stay under `backend/data/local/`, which is gitignored. That covers the
+league warehouse, the tactics-model training shards and weights, and video footage with its labels. What this
+repository does contain from real data is aggregate only:
+
+- the simulator's calibration averages over 100 real top-flight matches, in `dataset/`;
+- the expected-threat grid fitted to StatsBomb open event data (`backend/src/matchlens/tacticsml/xt_grid.json`).
+
+| Used for | Source | Licence and attribution |
+|---|---|---|
+| Simulator calibration, expected-threat grid, tactics-model training | [StatsBomb Open Data](https://github.com/statsbomb/open-data) (events and 360 frames) | StatsBomb open-data user agreement. Data provided by StatsBomb |
+| Tactics-model training | DFL / IDSSE open tracking and event data | CC BY 4.0. Bassek et al., *Scientific Data* 12, 195 (2025) |
+| Tactics-model training | [SkillCorner open data](https://github.com/SkillCorner/opendata) | MIT, copyright SkillCorner |
+| Tactics-model training (parity check) | [Metrica Sports sample data](https://github.com/metrica-sports/sample-data) | CC BY-NC 4.0, Metrica Sports. The trained weights are therefore for non-commercial use |
+| Video auto-eventing (local) | [SoccerTrack v2](https://github.com/AtomScott/SoccerTrack-v2) | CC BY 4.0 |
+| Player detection (local) | [RT-DETR](https://huggingface.co/PekingU/rtdetr_r50vd) weights, downloaded on first use | Apache-2.0 |
+| League warehouse for the Tactics Brain (local) | Understat, football-data.co.uk, ClubElo, Transfermarkt datasets, Fantasy Premier League, openfootball, Wikidata, Wikipedia | Per source; see [docs/LEAGUEDATA.md](docs/LEAGUEDATA.md#sources-and-licences) |
+
+The Tactics Brain is the one feature allowed to reason with real club and player names (BRD §9.3 amendment), and
+only on a developer's machine with a locally built warehouse. The deployed app has no warehouse and stays fictional.
+
 ## Data and schemas
 
 - **[docs/DATABASE.md](docs/DATABASE.md):** the Cosmos DB containers, write and read paths, cache, resuming after a
@@ -268,7 +307,13 @@ infra/                   Bicep for Azure Container Apps and Cosmos DB (azd up)
 | Tools | MCP server for match state |
 | Database | Azure Cosmos DB for NoSQL (serverless), managed identity |
 | Frontend | Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui, Motion, Recharts, React Flow |
-| Voice | Azure AI Speech, browser speech synthesis as fallback |
+| Voice | MAI-Voice narration and Azure AI Speech, browser speech synthesis as fallback |
 | Vision (local only) | PyTorch, RT-DETR (Transformers), OpenCV, SciPy |
 | Hosting | Azure Container Apps, Azure Container Registry, Cosmos DB, managed identity, Log Analytics |
 | Infrastructure as code | Bicep with the Azure Developer CLI |
+| CI/CD | GitHub Actions: backend, frontend, image and Bicep checks on every pull request; deploys `main` with OIDC (no stored secrets) |
+
+## License
+
+The code is released under the [MIT License](LICENSE). Third-party data, model weights and fonts keep their own
+licences; see [Data policy](#data-policy).
