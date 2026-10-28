@@ -474,6 +474,13 @@ class Sink:
                 log.warning("store write to %s failed: %s", container, exc)
 
 
+def reliability(p: np.ndarray, y: np.ndarray, bins: int = 10) -> list[dict[str, float]]:
+    """Mean prediction against observed frequency in equal-width probability bins (empty bins left out)."""
+    idx = np.minimum((p * bins).astype(int), bins - 1)
+    return [{"lo": b / bins, "hi": (b + 1) / bins, "n": int((idx == b).sum()), "mean_p": float(p[idx == b].mean()),
+             "freq": float(y[idx == b].mean())} for b in range(bins) if (idx == b).any()]
+
+
 def score_match(details: dict[str, Any], predictions: Sequence[dict[str, Any]], model: HazardModel,
                 match_id: str) -> dict[str, Any]:
     """Label every prediction from the final shot map and compare it with the base rate and persistence."""
@@ -491,9 +498,11 @@ def score_match(details: dict[str, Any], predictions: Sequence[dict[str, Any]], 
                     "observed_rate": float(y.mean()), "brier": brier(p, y), "logloss": logloss(p, y),
                     "brier_baseline": brier(base, y), "logloss_baseline": logloss(base, y),
                     "brier_persistence": brier(pers, y), "logloss_persistence": logloss(pers, y),
-                    "auc": auc(p, y)}
+                    "auc": auc(p, y), "reliability": reliability(p, y)}
+    outcomes = [{"team_side": s.team, "minute": s.minute, "t_s": s.minute * 60, "type": "goal" if s.goal else "shot",
+                 "xg": s.xg} for s in state.shots]
     return {"id": f"score:{match_id}", "match_id": match_id, "kind": "score", "scored_at": datetime.now(UTC).isoformat(),
-            "model_version": model.version, "heads": heads}
+            "model_version": model.version, "heads": heads, "outcomes": outcomes}
 
 
 async def watch_fixture(fx: Fixture, model: HazardModel, sink: Sink, elo: dict[str, float] | None,

@@ -157,6 +157,10 @@ def test_score_compares_with_both_baselines():
     shot1 = result["heads"]["shot_1m"]
     assert shot1["n"] == 120 and shot1["positives"] == 3
     assert {"brier", "brier_baseline", "brier_persistence", "logloss", "logloss_baseline"} <= set(shot1)
+    assert sum(b["n"] for b in shot1["reliability"]) == 120
+    assert all(b["lo"] <= b["mean_p"] <= b["hi"] for b in shot1["reliability"])
+    assert [(o["team_side"], o["t_s"], o["type"]) for o in result["outcomes"]] == [
+        ("home", 240, "shot"), ("away", 1020, "shot"), ("home", 2760, "goal")]
     assert result["heads"]["goal_5m"]["positives"] == 5  # minutes 41-45 for the home goal at floor 46; own goal ignored
 
 
