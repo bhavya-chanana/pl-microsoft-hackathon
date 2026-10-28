@@ -922,6 +922,7 @@ export const copy = {
     broadcast: { title: "Broadcast view", body: "A TV-style overlay you can put on a big screen." },
     lab: { title: "Scenario lab", body: "Script a famous comeback or a ten-man heist and watch it play." },
     replay: { title: "Replay a match", body: "Go back to a past match or a recorded video." },
+    next10: { title: "Next 10 seconds", subtitle: "Real matches, live and stored", body: "Where the ball goes next, who gets it and whether a shot follows, checked against what happened." },
   },
   pitch: {
     label: "Live pitch",

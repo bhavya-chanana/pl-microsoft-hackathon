@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Clapperboard, FlaskConical, History, LayoutGrid } from "lucide-react";
+import { ArrowUpRight, Clapperboard, FlaskConical, History, LayoutGrid, Timer } from "lucide-react";
 import Link from "next/link";
 import type { ComponentType, ReactNode } from "react";
 
@@ -137,6 +137,17 @@ function Rows() {
   );
 }
 
+/** A heat patch over a pitch outline: where the ball may be in ten seconds. */
+function Next10Preview() {
+  return (
+    <div className="relative h-full w-full overflow-hidden rounded-lg bg-turf">
+      {PITCH}
+      <span aria-hidden className="absolute top-1/2 left-[62%] size-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/40 blur-xl" />
+      <span aria-hidden className="absolute top-[44%] left-[52%] size-2.5 rounded-full bg-graphic-foreground ring-2 ring-graphic" />
+    </div>
+  );
+}
+
 /** Things to try beyond following the match. */
 export function ExplorePage() {
   const setStream = useShell((s) => s.setStream);
@@ -160,6 +171,11 @@ export function ExplorePage() {
         <li>
           <Link href={routes.lab} className={tileClass} onPointerMove={spot}>
             <Body icon={FlaskConical} title={T.lab.title} body={T.lab.body} preview={<Spark />} />
+          </Link>
+        </li>
+        <li className="md:col-span-2">
+          <Link href={routes.next10} className={tileClass} onPointerMove={spot}>
+            <Body wide icon={Timer} title={T.next10.title} subtitle={T.next10.subtitle} body={T.next10.body} preview={<Next10Preview />} />
           </Link>
         </li>
         <li className="md:col-span-2">

@@ -32,6 +32,11 @@ export const PROXY_GET = [
   /^dataset$/,
   /^tactics\/boards\/[\w-]+$/,
   /^tactics\/boards\/[\w-]+\/rollouts\/[\w-]+$/,
+  // Next-10s companion (backend flag MATCHLENS_NEXT10=1). Match ids look like "fotmob:123".
+  /^next10\/matches$/,
+  /^next10\/matches\/[\w:.\-]+$/,
+  /^next10\/matches\/[\w:.\-]+\/(predictions|frames|moments|jobs)$/,
+  /^next10\/verify$/,
 ];
 
 /** Replay controls and the match archive (demo only), fan votes and fan ratings, the pundit, Scenario Lab, the tactics board. */

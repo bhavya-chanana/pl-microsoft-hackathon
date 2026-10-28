@@ -89,6 +89,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   useTeamColours();
   if (pathname === routes.broadcast) return <main>{children}</main>;
+  // Next-10s pages are about real matches, not the demo match the chrome follows: they bring their own header.
+  if (pathname === routes.next10 || pathname.startsWith(`${routes.next10}/`)) {
+    return (
+      <>
+        <a href="#main" className="sr-only z-[100] rounded-full bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2">
+          {copy.nav.skip}
+        </a>
+        <div aria-hidden className="match-ambient fixed inset-0 -z-10" />
+        <main id="main" className="min-h-dvh pb-8">
+          {children}
+        </main>
+      </>
+    );
+  }
   const hero = pathname === routes.live;
   return (
     <>
