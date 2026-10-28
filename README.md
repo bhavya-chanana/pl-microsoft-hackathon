@@ -21,6 +21,12 @@ fictional. The optional historical league warehouse stays local and separate; se
 > **Live demo:** <https://ca-frontend-7npbct7a7fan6.grayfield-727b5fb5.centralindia.azurecontainerapps.io>
 > (Azure Container Apps, deployed from `main` by GitHub Actions). Every visitor watches the same live match, so
 > restarting or switching it changes it for everyone.
+>
+> **Region:** the app, Cosmos DB and Speech run in Azure **Central India**, and the language model (gpt-5-mini,
+> Global Standard deployment) is served from **South India**. From the UK or US, expect some extra network latency:
+> the first page load can take a few seconds while the site wakes up, and AI insights and Pundit answers can arrive
+> 10 seconds or more after the moment they explain, because each one is written and then fact-checked. The pitch,
+> clock and stats update live without waiting on the model.
 
 ## What it does
 
