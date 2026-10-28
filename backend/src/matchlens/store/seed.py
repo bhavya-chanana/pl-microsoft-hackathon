@@ -1,4 +1,8 @@
-"""Preview or strictly import a generated fictional season into a local Cosmos emulator."""
+"""Preview or strictly import a generated fictional season into a local Cosmos emulator, or, with an
+explicit --azure flag (and --confirm-azure <account> to apply), into the hosted Azure Cosmos DB account.
+
+Offline tooling only: nothing in the app's runtime calls this. Azure uses Microsoft Entra (az login), never a
+key or dotenv, and only attaches to containers that already exist; it never creates databases or containers."""
 from __future__ import annotations
 
 import argparse
@@ -8,6 +12,8 @@ import re
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
+
+from azure.core.exceptions import ClientAuthenticationError
 
 from matchlens.agents import templates
 from matchlens.agents.context import signal_pack
@@ -191,33 +197,113 @@ async def seed_dataset(store: Store, folder: Path, manifest: dict | None = None)
     return counts
 
 
-async def _apply(args, manifest):
-    from matchlens.store.cosmos import CosmosStore
-    store = CosmosStore(StoreSettings(kind='cosmos', endpoint=args.endpoint, database=args.database, key=EMULATOR_KEY))
+AZURE_HOST = re.compile(r'([a-z0-9][a-z0-9-]{1,42}[a-z0-9])\.documents\.azure\.com')
+
+def azure_account(endpoint: str) -> str | None:
+    """The account name of a plain https://<account>.documents.azure.com[:443]/ endpoint, else None."""
     try:
-        await store.open()
-        for name in CONTAINERS:
-            await store._containers[name].read()
-        result = await seed_dataset(store,args.dataset,manifest)
+        u = urlparse(endpoint)
+        host, port = u.hostname or '', u.port
+    except ValueError:
+        return None
+    m = AZURE_HOST.fullmatch(host)
+    if (not m or u.scheme != 'https' or u.username is not None or u.password is not None or '@' in u.netloc
+            or port not in (None, 443) or u.path not in ('', '/') or u.params or u.query or u.fragment):
+        return None
+    return m.group(1)
+
+
+def target_error(args) -> str | None:
+    """Why the requested target is refused, or None. Pure: no network, no environment."""
+    account = azure_account(args.endpoint)
+    if args.azure:
+        if account is None:
+            return '--azure needs an endpoint of the form https://<account>.documents.azure.com[:443]/ (https, no credentials, path or query)'
+        if args.apply and args.confirm_azure != account:
+            return f'--azure --apply needs --confirm-azure {account} (typed exactly; the account in the endpoint)'
+        if args.confirm_azure is not None and args.confirm_azure != account:
+            return f'--confirm-azure {args.confirm_azure!r} does not match the account in the endpoint ({account!r})'
+        return None
+    if args.confirm_azure is not None:
+        return '--confirm-azure only applies together with --azure'
+    if account is not None or (urlparse(args.endpoint).hostname or '').endswith('.azure.com'):
+        return 'an Azure endpoint needs the explicit --azure flag (and --confirm-azure <account> with --apply)'
+    u = urlparse(args.endpoint)
+    try:
+        port = u.port
+    except ValueError:
+        port = None
+    if u.scheme not in ('http','https') or u.hostname not in ('localhost','127.0.0.1') or u.username or u.password or not port:
+        return 'explicit localhost emulator endpoint and port required (or --azure with a documents.azure.com endpoint)'
+    return None
+
+
+def store_settings(args) -> StoreSettings:
+    """Emulator: the emulator key. Azure: no key at all, so CosmosStore uses Microsoft Entra (az login)
+    and only attaches to the containers that infra/cosmos.bicep already created."""
+    key = None if args.azure else EMULATOR_KEY
+    return StoreSettings(kind='cosmos', endpoint=args.endpoint, database=args.database, key=key)
+
+
+async def _principal_id(store, message: str, account: str) -> str:
+    found = re.search(r'principal \[([0-9a-fA-F-]{36})\]', message)
+    if found: return found.group(1)
+    try:  # best effort: the object id claim of the token the credential obtains
+        import base64
+        token = await store._credential.get_token(f'https://{account}.documents.azure.com/.default')
+        payload = token.token.split('.')[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + '=' * (-len(payload) % 4)))
+        return str(claims.get('oid') or '')
+    except Exception:
+        return ''
+
+
+async def _apply(args, manifest):
+    from azure.cosmos.exceptions import CosmosHttpResponseError
+    from matchlens.store.cosmos import CosmosStore
+    settings = store_settings(args)
+    if args.azure and settings.key is not None:
+        raise RuntimeError('refusing to use a key against Azure')
+    store = CosmosStore(settings)
+    try:
+        try:
+            await store.open()
+            for name in CONTAINERS:
+                await store._containers[name].read()
+            result = await seed_dataset(store,args.dataset,manifest)
+        except CosmosHttpResponseError as e:
+            if not args.azure or e.status_code != 403: raise
+            message = getattr(e, 'message', None) or str(e)
+            oid = await _principal_id(store, message, azure_account(args.endpoint))
+            who = f' Signed-in principal object id: {oid}.' if oid else ''
+            raise SystemExit(
+                'Cosmos DB refused access (403). The signed-in principal needs the Cosmos DB Built-in Data Contributor '
+                f'role (00000000-0000-0000-0000-000000000002) on account {azure_account(args.endpoint)}; see docs/SYNTHETIC_SEASONS.md.{who}'
+                f' A network firewall can also cause a 403. Server said: {message.strip().splitlines()[0][:300]}') from None
+        except ClientAuthenticationError as e:
+            if not args.azure: raise
+            raise SystemExit(f'Microsoft Entra sign-in failed; run `az login` first. ({str(e).strip().splitlines()[0][:200]})') from None
         print(f'Imported and verified {len(result)} synthetic archives')
     finally:
         await store.close()
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dataset',type=Path,required=True)
     parser.add_argument('--endpoint',required=True)
     parser.add_argument('--database',required=True)
     parser.add_argument('--apply',action='store_true')
-    args = parser.parse_args()
-    u = urlparse(args.endpoint)
-    if u.scheme not in ('http','https') or u.hostname not in ('localhost','127.0.0.1') or u.username or u.password or not u.port:
-        parser.error('explicit localhost emulator endpoint and port required')
+    parser.add_argument('--azure',action='store_true',
+        help='target the hosted Azure Cosmos DB account (Microsoft Entra auth via az login; never a key)')
+    parser.add_argument('--confirm-azure',metavar='ACCOUNT',
+        help='with --azure --apply: the account name in the endpoint, typed out as confirmation')
+    args = parser.parse_args(argv)
+    if (error := target_error(args)): parser.error(error)
     if not re.fullmatch(r'[A-Za-z0-9_-]+',args.database):
         parser.error('invalid database name')
     manifest = inspect_dataset(args.dataset)
-    print(f"Preview: {len(manifest['matches'])} synthetic archives; target {args.endpoint}, database {args.database}; apply={args.apply}")
+    print(f"Preview: {len(manifest['matches'])} synthetic archives; target {args.endpoint}, database {args.database}; azure={args.azure}; apply={args.apply}")
     if args.apply: asyncio.run(_apply(args,manifest))
 
 if __name__ == '__main__':
