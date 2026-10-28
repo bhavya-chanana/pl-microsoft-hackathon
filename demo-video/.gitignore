@@ -1,0 +1,25 @@
+node_modules
+dist
+.DS_Store
+.env
+
+# Ignore the output video from Git but not videos you import into src/.
+out
+
+# Downloaded reference skills and local agent metadata.
+agent-skills/
+.agents/
+.claude/
+
+# Raw product captures and human voice recordings remain local.
+public/footage/*
+!public/footage/.gitkeep
+public/audio/*
+!public/audio/.gitkeep
+public/asset-manifest.local.json
+src/generated/assets.ts
+delivery-props.local.json
+
+# Capture scratch files and review exports.
+capture-cache/
+*.log
