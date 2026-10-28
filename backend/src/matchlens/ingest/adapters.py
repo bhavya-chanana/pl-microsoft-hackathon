@@ -96,6 +96,9 @@ async def paced(items: Iterable[FeedItem], control: ReplayControl) -> AsyncItera
                     continue
                 remaining = item.elapsed - control.start_elapsed - (control._progress - start_progress)
                 if remaining <= 0:
+                    # Running behind the clock (a fast replay on a slow host): still let other tasks run, or the
+                    # feed starves the event loop, and whoever polls the session sees it only after the match.
+                    await asyncio.sleep(0)
                     break
                 control._changed.clear()
                 try:

@@ -92,3 +92,32 @@ def test_join_mid_match_catches_up_instantly(demo_match):
 
     state = asyncio.run(main())
     assert state["score"] == {"NBR": 0, "HBC": 2}
+
+
+def test_a_feed_running_behind_the_clock_still_lets_other_tasks_run():
+    """A fast replay on a slow host is always late for the next item. It must hand control back anyway:
+    otherwise it starves the event loop until the match is over, and anything that polls the session
+    (the restart test stops it 'at 50 minutes' and found it at 61 on a slow CI runner) sees it far too late."""
+    from matchlens.ingest.adapters import paced
+
+    class Item:
+        def __init__(self, elapsed: float) -> None:
+            self.elapsed = elapsed
+
+    async def main():
+        ticks = 0
+
+        async def ticker():
+            nonlocal ticks
+            while True:
+                ticks += 1
+                await asyncio.sleep(0)
+
+        task = asyncio.create_task(ticker())
+        control = ReplayControl(speed=1e9)  # every item is due the moment it is asked for
+        seen = [i async for i in paced([Item(float(s)) for s in range(1, 101)], control)]
+        task.cancel()
+        return len(seen), ticks
+
+    seen, ticks = asyncio.run(main())
+    assert seen == 100 and ticks >= 50

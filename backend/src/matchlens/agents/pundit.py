@@ -42,7 +42,7 @@ from matchlens.interpret.ratings import data_rating, has_played
 from matchlens.interpret.signals import SignalType
 
 Intent = Literal["score", "momentum", "rhythm", "best_player", "player", "pressure", "chances", "change",
-                 "team", "prediction", "summary", "off_topic"]
+                 "team", "prediction", "discipline", "summary", "off_topic"]
 
 MAX_QUESTION = 200
 PUNDIT_TIMEOUT_S = 15.0
@@ -85,6 +85,8 @@ _WORDS: dict[Intent, tuple[str, ...]] = {
                     "सबसे अच्छा", "बेहतरीन", "सर्वश्रेष्ठ", "स्टार", "mejor", "figura", "destacado"),
     "prediction": ("will win", "who wins", "predict", "going to win", "final score", "जीतेगा", "जीतेगी",
                    "ganará", "va a ganar", "predicción"),
+    "discipline": ("card", "yellow", "booking", "booked", "sent off", "sending off", "dismiss", "foul",
+                   "कार्ड", "पीला", "पीले", "फाउल", "tarjeta", "amarilla", "roja", "expuls", "falta"),
     "rhythm": ("chaos", "chaotic", "control", "rhythm", "tempo", "messy", "अफरा", "नियंत्रण", "लय", "caos",
                "ritmo", "controla"),
     "pressure": ("press", "pressure", "pressing", "दबाव", "प्रेस", "presión", "presiona"),
@@ -132,7 +134,7 @@ def route(question: str, engine: MatchEngine) -> tuple[Intent, str | None, str |
     q = _norm(question)
     player = _player_in(question, engine)
     team = _team_in(question, engine)
-    for intent in ("best_player", "prediction", "rhythm", "pressure", "chances", "change", "momentum", "score",
+    for intent in ("best_player", "prediction", "discipline", "rhythm", "pressure", "chances", "change", "momentum", "score",
                    "summary"):
         if any(w in q for w in _WORDS[intent]):  # type: ignore[index]
             if intent in ("best_player",) or not player:
@@ -187,13 +189,32 @@ def _moments(engine: MatchEngine, insights: dict[str, dict[str, Any]]) -> list[d
     return out[-14:]
 
 
+def _discipline_focus(question: str) -> list[str]:
+    """What a discipline question is about: cards, fouls, or both."""
+    q = _norm(question)
+    fouls = any(w in q for w in ("foul", "फाउल", "falta"))
+    cards = any(w in q for w in _WORDS["discipline"] if w not in ("foul", "फाउल", "falta"))
+    return [k for k, on in (("cards", cards or not fouls), ("fouls", fouls)) if on]
+
+
+def _cards(engine: MatchEngine) -> list[dict[str, Any]]:
+    """Every card shown so far, with the event id a claim can cite, the minute and the player's name."""
+    out = []
+    for e in engine.events(types={EventType.CARD}):
+        player = engine.meta.players.get(e.player_id or "")
+        out.append({"event_id": e.event_id, "minute": e.minute_label, "team_id": e.team_id,
+                    "player": player.name if player else None, "card": e.outcome.value})
+    return out
+
+
 def pundit_pack(engine: MatchEngine, insights: dict[str, dict[str, Any]], intent: Intent, player_id: str | None,
-                team_id: str | None) -> dict[str, Any]:
+                team_id: str | None, question: str = "") -> dict[str, Any]:
     teams = {}
     for tid in (engine.meta.home.team_id, engine.meta.away.team_id):
         stats = engine.team_stats(tid)
         teams[tid] = {k: stats[k] for k in ("goals", "possession_pct", "shots", "shots_on_target", "big_chances",
-                                            "xg", "passes", "pass_accuracy", "high_turnovers", "players_on_pitch")
+                                            "xg", "passes", "pass_accuracy", "high_turnovers", "players_on_pitch",
+                                            "yellow_cards", "red_cards", "fouls")
                       if stats.get(k) is not None}
     ratings = _ratings(engine)
     focus = player_id or (ratings[0]["player_id"] if intent == "best_player" and ratings else None)
@@ -207,6 +228,7 @@ def pundit_pack(engine: MatchEngine, insights: dict[str, dict[str, Any]], intent
         "top_rated": ratings,
         "player": player_brief(engine, focus) if focus else None,
         "moments": _moments(engine, insights),
+        **({"cards": _cards(engine), "asked_about": _discipline_focus(question)} if intent == "discipline" else {}),
     }
 
 
@@ -240,19 +262,42 @@ _T: dict[str, dict[str, str]] = {
         "es": "{team} suma {shots} tiros ({xg} xG) y un {poss}% de posesión; {opp}, {oshots} tiros ({oxg} xG).",
     },
     "rhythm_chaos": {
-        "en": "The game is chaotic: {tpm} turnovers a minute, so neither side can keep the ball.",
-        "hi": "खेल में अफरा-तफरी है: हर मिनट {tpm} टर्नओवर, कोई टीम गेंद नहीं रख पा रही।",
-        "es": "El partido es caótico: {tpm} pérdidas por minuto, nadie retiene el balón.",
+        "en": "The game is chaotic: {tpm} a minute, so neither side can keep the ball.",
+        "hi": "खेल में अफरा-तफरी है: हर मिनट {tpm}, कोई टीम गेंद नहीं रख पा रही।",
+        "es": "El partido es caótico: {tpm} por minuto, nadie retiene el balón.",
     },
     "rhythm_control": {
-        "en": "{team} are controlling it: long spells on the ball, only {tpm} turnovers a minute.",
-        "hi": "{team} खेल पर नियंत्रण रखे हुए है: लंबे समय तक गेंद, हर मिनट सिर्फ़ {tpm} टर्नओवर।",
-        "es": "{team} controla el partido: largas posesiones y solo {tpm} pérdidas por minuto.",
+        "en": "{team} are controlling it: long spells on the ball, only {tpm} a minute.",
+        "hi": "{team} खेल पर नियंत्रण रखे हुए है: लंबे समय तक गेंद, हर मिनट सिर्फ़ {tpm}।",
+        "es": "{team} controla el partido: largas posesiones y solo {tpm} por minuto.",
     },
     "rhythm_balanced": {
-        "en": "It's a balanced game: {tpm} turnovers a minute, with no side in full control.",
-        "hi": "खेल संतुलित है: हर मिनट {tpm} टर्नओवर, किसी का पूरा नियंत्रण नहीं।",
-        "es": "Partido equilibrado: {tpm} pérdidas por minuto y nadie lo controla del todo.",
+        "en": "The tempo is steady: {tpm} a minute.",
+        "hi": "खेल की गति स्थिर है: हर मिनट {tpm}।",
+        "es": "El ritmo es estable: {tpm} por minuto.",
+    },
+    "cards_none": {
+        "en": "No cards have been shown yet.", "hi": "अभी तक कोई कार्ड नहीं दिखाया गया।",
+        "es": "Todavía no se ha mostrado ninguna tarjeta.",
+    },
+    "cards_total": {
+        "en": "So far: {y} and {r}.", "hi": "अब तक: {y} और {r}।", "es": "Hasta ahora: {y} y {r}.",
+    },
+    "cards_team": {
+        "en": "{team}: {y} yellow, {r} red.", "hi": "{team}: {y} पीले, {r} लाल।",
+        "es": "{team}: amarillas {y}, rojas {r}.",
+    },
+    "cards_focus": {
+        "en": "{team} have {y} and {r} so far.", "hi": "{team} के अब तक {y} और {r} हैं।",
+        "es": "{team} lleva {y} y {r}.",
+    },
+    "sent_off": {
+        "en": "Sent off: {name} ({team}, {minute}).", "hi": "बाहर भेजे गए: {name} ({team}, {minute})।",
+        "es": "Expulsado: {name} ({team}, {minute}).",
+    },
+    "fouls": {
+        "en": "Fouls: {team} {n}, {opp} {on}.", "hi": "फाउल: {team} {n}, {opp} {on}।",
+        "es": "Faltas: {team} {n}, {opp} {on}.",
     },
     "best": {
         "en": "{name} has been the standout so far, with a data rating of {rating}.",
@@ -331,6 +376,14 @@ _SINGULAR: dict[str, dict[str, str]] = {
     "tackles": {"en": "tackle", "es": "entrada"},
     "saves": {"en": "save", "es": "parada"},
 }
+# (one, many) per language, for counts that must read "1 yellow card" and "2 yellow cards".
+_UNITS: dict[str, dict[str, tuple[str, str]]] = {
+    "yellow": {"en": ("yellow card", "yellow cards"), "hi": ("पीला कार्ड", "पीले कार्ड"),
+               "es": ("tarjeta amarilla", "tarjetas amarillas")},
+    "red": {"en": ("red card", "red cards"), "hi": ("लाल कार्ड", "लाल कार्ड"),
+            "es": ("tarjeta roja", "tarjetas rojas")},
+    "turnover": {"en": ("turnover", "turnovers"), "hi": ("टर्नओवर", "टर्नओवर"), "es": ("pérdida", "pérdidas")},
+}
 PLAYER_STATS = ("goals", "assists", "shots", "key_passes", "tackles", "saves", "pass_accuracy", "distance_km",
                 "top_speed_kmh")
 
@@ -338,6 +391,12 @@ PLAYER_STATS = ("goals", "assists", "shots", "key_passes", "tackles", "saves", "
 def _t(key: str, lang: str, **values: Any) -> str:
     table = _T[key]
     return (table.get(lang) or table["en"]).format(**values)
+
+
+def _count(n: Any, unit: str, lang: str) -> str:
+    """"1 turnover", "1.4 turnovers", "0 red cards": the noun agrees with the number."""
+    one, many = _UNITS[unit].get(lang) or _UNITS[unit]["en"]
+    return f"{_num(n)} {one if n == 1 else many}"
 
 
 def _label(key: str, lang: str) -> str:
@@ -395,11 +454,50 @@ def _cite(pack: dict[str, Any], intent: Intent) -> list[str]:
         picked = [m for m in moments if m["type"] == "pressure_spell"]
     elif intent == "chances":
         picked = [m for m in moments if m["type"] in ("goal", "big_chance", "big_save")]
+    elif intent == "discipline":
+        picked = [m for m in moments if m["type"] == "card"]
     elif intent in ("score", "summary", "team", "prediction"):
         picked = [m for m in moments if m["type"] in ("goal", "card", "momentum_swing")]
     else:
         picked = []
     return [m["signal_id"] for m in picked[-3:]]
+
+
+def _discipline(pack: dict[str, Any], lang: str, names: dict[str, str],
+                focus: str | None) -> tuple[list[str], list[KeyNumber]]:
+    """Cards and fouls counted from the match data (team stats and the card events), never estimated."""
+    teams = pack["teams"]
+    home, away = pack["match"]["home"]["team_id"], pack["match"]["away"]["team_id"]
+    shown = [focus] if focus in (home, away) else [home, away]
+    y = sum(teams[t].get("yellow_cards", 0) for t in shown)
+    r = sum(teams[t].get("red_cards", 0) for t in shown)
+    asked = pack.get("asked_about") or ["cards"]
+    sentences: list[str] = []
+    numbers: list[KeyNumber] = []
+    if "cards" in asked:
+        if not (y or r):
+            sentences.append(_t("cards_none", lang))
+        elif len(shown) == 1:
+            sentences.append(_t("cards_focus", lang, team=names[focus], y=_count(y, "yellow", lang),
+                                r=_count(r, "red", lang)))
+        else:
+            sentences.append(_t("cards_total", lang, y=_count(y, "yellow", lang), r=_count(r, "red", lang)))
+            sentences += [_t("cards_team", lang, team=names[t], y=teams[t].get("yellow_cards", 0),
+                             r=teams[t].get("red_cards", 0)) for t in shown]
+        for c in pack.get("cards", []):
+            if c["card"] in ("red", "second_yellow") and c["team_id"] in shown:
+                sentences.append(_t("sent_off", lang, name=c["player"] or "?", team=names[c["team_id"]],
+                                    minute=c["minute"]))
+        numbers += [KeyNumber(label=_UNITS["yellow"].get(lang, _UNITS["yellow"]["en"])[1].capitalize(),
+                              value=_num(y), unit=None),
+                    KeyNumber(label=_UNITS["red"].get(lang, _UNITS["red"]["en"])[1].capitalize(),
+                              value=_num(r), unit=None)]
+    if "fouls" in asked:
+        other = away if shown == [home] else home
+        a, b = (shown[0], other) if len(shown) == 1 else (home, away)
+        sentences.append(_t("fouls", lang, team=names[a], n=teams[a].get("fouls", 0), opp=names[b],
+                            on=teams[b].get("fouls", 0)))
+    return sentences, numbers
 
 
 def template(pack: dict[str, Any], lang: str) -> PunditDraft:
@@ -431,7 +529,7 @@ def template(pack: dict[str, Any], lang: str) -> PunditDraft:
 
     def rhythm_line() -> str:
         r = pack["momentum"].get("rhythm") or {"state": "balanced", "turnovers_per_min": 0, "controlling_team": None}
-        tpm = _num(r["turnovers_per_min"])
+        tpm = _count(r["turnovers_per_min"], "turnover", lang)
         if r["state"] == "chaos":
             return _t("rhythm_chaos", lang, tpm=tpm)
         if r["state"] == "control" and r["controlling_team"]:
@@ -474,6 +572,8 @@ def template(pack: dict[str, Any], lang: str) -> PunditDraft:
         listed = "; ".join(f"{mm['minute']} {mm['headline'] or mm['type'].replace('_', ' ')}" for mm in turns)
         sentences.append(_t("change", lang, moments=listed) if turns else _t("no_moments", lang))
         sentences.append(on_top())
+    elif intent == "discipline":
+        sentences, numbers = _discipline(pack, lang, names, pack.get("team_focus"))
     elif intent == "prediction":
         sentences = [_t("prediction", lang), score_line(), on_top()]
     else:  # team, summary, or a player question without a player
@@ -487,8 +587,14 @@ def template(pack: dict[str, Any], lang: str) -> PunditDraft:
 # ------------------------------------------------------------------ service
 
 
+# Bump when the router, pack, templates or prompt change what an answer says: answers cached under an
+# older version (Cosmos ``fan_outputs`` outlives the process) are then never served again.
+ANSWER_VERSION = 2
+
+
 def _key(engine: MatchEngine, question: str, profile: FanProfile) -> str:
-    raw = [int(engine.c.elapsed // 60), len(engine.signals()), _norm(question), profile.model_dump_json()]
+    raw = [ANSWER_VERSION, int(engine.c.elapsed // 60), len(engine.signals()), _norm(question),
+           profile.model_dump_json()]
     return hashlib.sha256(json.dumps(raw).encode()).hexdigest()[:32]
 
 
@@ -505,9 +611,11 @@ async def ask(team: Any, session: Any, question: str, profile: FanProfile) -> Pu
     intent, player_id, team_id = route(question, engine)
     if not player_id and intent == "player" and profile.player_id:
         player_id = profile.player_id
-    if not team_id and profile.club_id in (engine.meta.home.team_id, engine.meta.away.team_id):
+    # "How many yellow cards?" is about the match; only a team named in the question narrows it.
+    if (not team_id and intent != "discipline"
+            and profile.club_id in (engine.meta.home.team_id, engine.meta.away.team_id)):
         team_id = profile.club_id
-    pack = pundit_pack(engine, session.insights, intent, player_id, team_id)
+    pack = pundit_pack(engine, session.insights, intent, player_id, team_id, question)
     lang = profile.language.value
     draft: PunditDraft | None = None
     report = FactCheckReport(status=FactCheckStatus.DATA_ONLY)
@@ -536,7 +644,9 @@ async def ask(team: Any, session: Any, question: str, profile: FanProfile) -> Pu
         profile=profile, fact_check=report, source=source, agents=agents,
         latency_ms=round((time.perf_counter() - started) * 1000, 1),
     )
-    session.recorder.fan_output(key, "pundit", result.model_dump(mode="json"))
+    # A live model that was blocked or failed may succeed on a retry, so that fallback is not remembered.
+    if source == "agent" or team.label == "offline-templates":
+        session.recorder.fan_output(key, "pundit", result.model_dump(mode="json"))
     session.recorder.agent_run({"kind": "pundit", "outcome": source, "model": team.label,
                                 "fact_check": report.status.value, "intent": intent,
                                 "latency_ms": result.latency_ms})
