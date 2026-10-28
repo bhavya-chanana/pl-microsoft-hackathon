@@ -156,12 +156,14 @@ az ad sp create --id "$APP_ID"
 az ad app federated-credential create --id "$APP_ID" --parameters '{
   "name": "github-production",
   "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:bhavya-chanana/pl-microsoft-hackathon:environment:production",
+  "subject": "repo:bhavya-chanana@65809399/pl-microsoft-hackathon@1432364730:environment:production",
   "audiences": ["api://AzureADTokenExchange"]}'
 az role assignment create --assignee "$APP_ID" --role Contributor --scope /subscriptions/$SUB/resourceGroups/$RG
 az role assignment create --assignee "$APP_ID" --role AcrPush \
   --scope /subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.ContainerRegistry/registries/cr7npbct7a7fan6
 ```
+
+The subject includes the owner and repository IDs because this repo uses GitHub's immutable OIDC subject. If sign-in fails with `AADSTS700213`, the error shows the subject GitHub presented; the credential must match it exactly. (`gh api repos/bhavya-chanana/pl-microsoft-hackathon/actions/oidc/customization/sub` shows the setting.)
 
 Then create a GitHub environment named `production` (add required reviewers for a manual approval before each
 deploy) and add these **variables** to it (none is a secret):
