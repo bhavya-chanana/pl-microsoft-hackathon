@@ -36,7 +36,7 @@ param reasoningStrong string = 'high'
 @description('Minimum backend replicas. 0 scales to zero; a cold start resumes the stored match where it stopped.')
 @minValue(0)
 @maxValue(1)
-param backendMinReplicas int = 0
+param backendMinReplicas int = 1
 
 @description('Replay speed the demo match starts at.')
 param matchSpeed string = '1'
@@ -44,6 +44,13 @@ param matchSpeed string = '1'
 @description('Speech tier for voice narration. F0 is free (one per subscription); use S0 if one exists.')
 @allowed(['F0', 'S0'])
 param speechSku string = 'F0'
+
+@description('Also deploy an S0 Speech resource for MAI voices (preview), tried before the speech resource above. Needs a MAI region (see speech-mai.bicep); set false to keep neural voices only.')
+param enableMaiSpeech bool = true
+
+@description('MAI voice model suffix for narration. MAI-Voice-2.1-Flash is the low-latency one; MAI-Voice-2.1 is higher fidelity.')
+@allowed(['MAI-Voice-2.1-Flash', 'MAI-Voice-2.1', 'MAI-Voice-2-Flash', 'MAI-Voice-2'])
+param maiVoiceModel string = 'MAI-Voice-2.1-Flash'
 
 @description('Set by azd after the first deploy, so re-provisioning keeps the running images.')
 param backendImageName string = ''
@@ -76,6 +83,8 @@ module app 'app.bicep' = {
     backendImageName: backendImageName
     frontendImageName: frontendImageName
     speechSku: speechSku
+    enableMaiSpeech: enableMaiSpeech
+    maiVoiceModel: maiVoiceModel
   }
 }
 
@@ -97,4 +106,6 @@ output BACKEND_INTERNAL_URL string = app.outputs.backendUrl
 output MATCHLENS_COSMOS_ENDPOINT string = app.outputs.cosmosEndpoint
 output MATCHLENS_SPEECH_REGION string = app.outputs.speechRegion
 output MATCHLENS_SPEECH_RESOURCE_ID string = app.outputs.speechResourceId
+output MATCHLENS_MAI_SPEECH_REGION string = app.outputs.maiSpeechRegion
+output MATCHLENS_MAI_SPEECH_RESOURCE_ID string = app.outputs.maiSpeechResourceId
 output MATCHLENS_LLM_MODE string = useOpenAi ? 'online' : 'offline'
