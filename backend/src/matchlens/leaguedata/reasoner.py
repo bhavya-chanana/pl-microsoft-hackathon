@@ -27,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import functools
+import gzip
 import json
 import logging
 import os
@@ -448,18 +449,18 @@ def _parts(word: str) -> list[str]:
 _ENGLISH_SUFFIX = re.compile(r"(?:ed|ing|ly|ion|ions|ness|ment|ments|ive|ous|ful|ity|ally|able|ible|ence|ance|less)$")
 
 
-WORD_LIST = Path("/usr/share/dict/words")
+# The English word list ships with the package (lower-case entries of the public-domain Webster's Second,
+# the same list macOS keeps at /usr/share/dict/words). The check must not depend on what the host has installed:
+# Linux CI images have no system list, so "Territorial" was a name there and an English word on a Mac.
+WORD_LIST = Path(__file__).with_name("english_words.txt.gz")
 _FOOTBALL_ENGLISH = frozenset("equaliser equalizer winner opener".split())
 
 
 @functools.cache
 def _english_words() -> frozenset[str]:
-    """Lower-case entries of the system word list (proper nouns there are capitalised, so they stay out)."""
-    try:
-        text = WORD_LIST.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return _FOOTBALL_ENGLISH
-    return _FOOTBALL_ENGLISH | frozenset(w for w in text.split() if w.islower())
+    """Lower-case entries of the bundled word list (proper nouns are not in it, so they stay out)."""
+    with gzip.open(WORD_LIST, "rt", encoding="utf-8") as fh:
+        return _FOOTBALL_ENGLISH | frozenset(fh.read().split())
 
 
 def _plain(word: str, vocab: set[str], initial: bool, known: frozenset[str] = frozenset()) -> bool:
