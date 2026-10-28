@@ -238,3 +238,177 @@ Decision support inside the Matchlens Tactics Board: ranking ideas, showing whic
 moment, and finding similar real moments. Not for betting, for judging or ranking individual players, for
 automatic decisions about people, or as evidence about real matches without the checks above. Outputs should
 carry their uncertainty and the model version (`ScoreResult.model_version`).
+
+## 9. Next10 (round 1): what happens in the next 10 seconds
+
+Next10 extends the critic of section 3 with new heads, team conditioning and view-mask training, adds a joint trajectory
+forecaster, and ships a numpy inference path for the live service. The deployed Tactics Board path (`learned.py`,
+`registry.get_tactical_model()`, `infer_numpy.py`, `weights/`, `ckpt/`) is untouched; every Next10 artefact lives under
+`backend/data/local/tacticsml/next10/`. Old checkpoints still load into the new class (`load_critic`, `strict=False`, FiLM off).
+
+### 9.1 Heads and losses (`train/heads.py`, `train/next10.py`)
+
+The backbone is the section 3 GATv2 critic (25 nodes, D2 frame averaging). Let `z` be the critic embedding, `h_i` the node states,
+`c` the carrier vector, `q_i` the receiver softmax over the 11 possession-team slots plus "lost" (index 11).
+
+* **ball_zone10.** The ball position at t+10 s on a 16 x 12 grid over the 105 x 68 m pitch (cells 6.56 x 5.67 m, canonical frame).
+  Per-cell logits come from a query MLP on `[z, h_ball, cell features]` (cell centre, cell minus ball, distance, distance to goal), so
+  the grid head shares weights across cells. Target: a Gaussian bump with sigma = 1 cell around the true cell, normalised,
+  `t_c = exp(-d_c^2 / 2) / sum_c' exp(-d_c'^2 / 2)`. Loss: soft cross-entropy `-sum_c t_c log softmax(l)_c`. The head is D2 *equivariant*:
+  `p(g x) = flip_g p(x)` (columns for the x mirror, rows for the y mirror); averaging the four reflections in logit space makes it exact.
+* **poss10.** `P(possession team has the ball at t+10 s)`, binary cross-entropy, logit bias initialised at the base rate.
+* **action_next.** Softmax over {pass, carry, shot, other} for the next on-ball action; cross-entropy; labels only where the source has
+  carry events (SkillCorner among the tracking sources), -1 elsewhere and then ignored.
+* **Receiver-conditioned shot (TacticAI-style marginalisation).** Direct head `l_d` (the existing shot10 logit). Per outcome
+  `i in {1..11, lost}` a residual `delta_i` from `[h_i, c, z]` gives `P(shot | i) = sigma(l_d + delta_i)`, with slot 2 and the lost branch
+  zero-initialised (the decomposition starts equal to the direct head). Then
+
+      P(shot) = sum_i P(shot | recv = i) P(recv = i)        (i over the 11 slots and the ball-lost outcome)
+
+  Training uses both a teacher-forced conditional term (BCE of `P(shot | i*)` with the observed receiver `i*`) and the marginal BCE of the sum.
+  The served shot probability is `blend` = the mean of the direct and the decomposed value (`manifest.serve.shot`; chosen from validation).
+* **Total.** `masked_losses` of section 4 (receiver, shot10, goal10, concede10, turn5) plus `w_zone L_zone + w_poss L_poss + w_act L_act +
+  w_cond L_cond + w_marg L_marg` (`heads.NEXT10_WEIGHTS`). Labels of -1 are ignored in every term.
+
+### 9.2 Open-play filter, FiLM, view-mask augmentation
+
+* **Open play** (`data10._open_play`): no set-piece flag on the sample and at least 10 s since the last dead ball. Where the feed has no
+  ball state (Metrica and SkillCorner through kloppy) a dead ball is inferred (`infer_alive`): ball off the pitch, or ball nearly
+  still (< 0.5 m/s) for 1.5 s. All headline targets are scored on open play; the report also shows "all".
+* **FiLM on the team (`Next10GAT._post_layer`).** For possession team `a` and opponent `b`,
+  `c = [E[a] + S(style_a * mask_a), E[b] + S(style_b * mask_b)]` and in every GAT layer
+  `h <- (h (1 + gamma_l) + beta_l) * node_mask`, `(gamma_l, beta_l) = W_l c`, `W_l` bias-free and zero-initialised. `style` is a 14-value
+  z-score vector from the league-data playbooks (`leaguedata/kb/playbooks.json`, latest season of the club) where the club is there; otherwise the
+  learned embedding alone. Id 0 is "unknown team": `E[0] = 0`, `style[0] = 0`, so `c = 0` and FiLM is exactly the identity. Training
+  replaces each id by 0 with probability 0.3 so that path is trained and an unseen club gets the plain critic. Honest scope: this is
+  team-name + latest-season style, not a true per-season conditioning; only clubs seen at least 1000 training samples get an id.
+* **View-mask augmentation (`train/augment.py`).** A broadcast camera is a cone: a random camera 8-25 m outside a touchline near the ball,
+  looking within a few metres of it, with a 35-65 degree field of view. Players outside the cone get `observed = 0`, their position is
+  displaced by static noise of sigma in [0.5, 1] m (ball: 2x) plus per-step jitter, velocities follow, edge features are recomputed; goal
+  anchors stay known; at least 4 players remain observed. Applied to 50% of training samples in the critic runs (`Fit10Config.view_mask_p`; the evaluation masks 100% of the inputs).
+
+### 9.3 Trajectory forecaster (`train/trajectory.py`)
+
+A mixture-density set-attention model. Tokens are (node, time) pairs over the 5 s history; axial blocks alternate agent attention
+(25 nodes, additive bias from an MLP of the relative position) and time attention. The last-time tokens are copied for K = 6 modes, a learned
+mode embedding is added and two agent-attention blocks make each mode one joint scenario for the 22 players and the ball. The head emits, for
+horizons h = 1..10 s,
+
+    mu_{k,i,h}    = pos_i + v_i h + (1 + h) r_{k,i,h}                 (constant velocity plus a learned residual)
+    sigma_{k,i,h} = (0.3 + softplus(s_{k,i,h})) (1 + 0.3 h)
+    pi_k          = softmax_k( mean over real nodes of Linear(token_{k,i}) )
+
+Loss (winner-take-all / hard EM): with `cost_k` the mean Euclidean error of mode k, `k* = argmin cost_k`,
+`L = 0.3 (cost_{k*} + 0.05 mean_k cost_k) + CE(pi, k*) + 0.1 NLL(mu_{k*}.detach(), sigma_{k*})`. D2: the network runs on the four reflections,
+`mu` is mapped back and averaged mode-wise, so `mu(g x) = g mu(x)` and `pi(g x) = pi(x)` exactly.
+
+### 9.4 Metrics and baselines (`train/evaluate10.py`)
+
+* Binary heads: AUC, Brier (and the base-rate Brier `p(1-p)`), ECE with 15 bins, reliability bins.
+* ball_zone10: top-1/3/5 cell accuracy; hard-cell NLL; ranked probability score along each axis,
+  `RPS = 1/(R-1) mean_n sum_{r<R} (F_r - O_r)^2` with `F` the predicted and `O` the observed cumulative distribution over the R ordered bins
+  (R = 16 for x, 12 for y); expected distance (m) between the predicted distribution and the true ball position. Baselines: uniform; the static
+  prior (train-split histogram); persistence (Gaussian around the current ball position, sigma tuned on train).
+* poss10: Brier against the train base rate. Receiver: top-1/3 against chance; lost-outcome AUC. Shot: against the pitch-control + xT
+  `BaselineModel`. Ensemble spread against error (Spearman).
+* Trajectories: minADE / minFDE (best of K = 6 per player and for the ball), minJADE / minJFDE (one mode for all players, averaged over players),
+  the most probable mode, constant velocity, and standing still. Constant velocity is a weak 10 s baseline because players turn; the report also
+  gives the comparison with standing still.
+* D2 check: largest output change over the four reflections, in float32 and float64.
+* Ablations on the same samples: FiLM on / off / teams set to unknown; view-mask augmentation on / off, on clean and on view-masked test inputs;
+  direct vs receiver-decomposed shot. Targets are marked PASS / FAIL, or NOT_EVALUATED below 30 labelled samples.
+
+Round-1 targets: open-play shot10 AUC >= 0.85; shot10 ECE <= 0.03; ball_zone10 top-5 >= 0.6; minFDE@10s at least 25% better than constant
+velocity; D2 error < 1e-5. (The last is checked in float64 for positions in metres: a float32 value of 50 m has a 4e-6 spacing, so 1e-5 is not
+meaningful there; the float32 numbers are in the report.)
+
+### 9.5 Generative "play it out" (`train/diffusion.py`)
+
+Design and a tested skeleton only; no training on real data in round 1. A conditional DDPM over the 10 s future of 23 agents,
+`x_0 = (fut - pos_T) / 20 m`, cosine schedule with S = 100 steps, epsilon-prediction loss `E ||eps - eps_theta(x_s, s, c)||^2`, ancestral sampler,
+an axial-attention denoiser, and D2 frame averaging of `eps_theta` (the law of the samples is then D2 equivariant). Unit tests cover the
+schedule, the loss and its masking, equivariance, and that 150 steps on one scene bring the samples closer to the truth than the untrained model.
+Round 2: train on the real tracking, evaluate minJADE/minJFDE over 20 samples against the K = 6 forecaster, add guidance and DDIM sampling.
+
+### 9.6 Data, commands and files
+
+Training data: the tracking sources need future frames, so `sportec`, `skillcorner` and `metrica` shards were rebuilt into
+`next10/shards/` (new keys: `fut_pos` f16 (n, 10, 25, 2) canonical absolute future positions, `fut_valid`, `since_dead`, `poss10`, `action_next`,
+`poss_team`, `opp_team`, `period`). The StatsBomb 360 shards of section 2 are reused unchanged (`--legacy-shards`): they have no future
+frames, so they train only the old heads. Raw files are read from `MATCHLENS_TACTICSML_RAW`; downloads now need `MATCHLENS_TACTICSML_DOWNLOAD=1`.
+
+    cd backend
+    uv run --group tactics-ml python -m matchlens.tacticsml.train shards --sources sportec skillcorner metrica --root data/local/tacticsml/next10/shards
+    uv run --group tactics-ml python -m matchlens.tacticsml.train.fit10 --legacy-shards <statsbomb360 shards> --seeds 0 1 [--no-film] [--no-view-mask --tag _noaug]
+    uv run --group tactics-ml python -m matchlens.tacticsml.train.trajectory --epochs 14
+    uv run --group tactics-ml python -m matchlens.tacticsml.train.evaluate10 --legacy-shards <statsbomb360 shards>   # -> report_next10.md/json
+    uv run --group tactics-ml python -m matchlens.tacticsml.train.export10 --shot-mode blend                           # -> next10/weights/
+    # serving: from matchlens.tacticsml.infer_next10 import infer_next10   (numpy only; MATCHLENS_NEXT10_WEIGHTS overrides the directory)
+
+Tests: `backend/tests/test_next10_model.py` (D2 invariance and equivariance, view-mask correctness, FiLM unknown-team identity and zero init,
+old-checkpoint loading, loss sanity, numpy-vs-torch parity, export / serve round trip, tamper refusal, DDPM).
+
+### 9.7 Results of the round-1 run (copied from `backend/data/local/tacticsml/next10/report_next10.md`)
+
+Two critic seeds (8 epochs, about 12.7k steps each) and one forecaster seed (14 epochs), trained on Apple MPS in under 30 minutes each; evaluated on the held-out test matches (38,920 samples, 1 Hz and overlapping, so the effective sample size is far smaller). StatsBomb 360 contributes no future labels. Differences of a few thousandths in AUC between ablations are within what one more seed would change; no confidence intervals were computed.
+
+| target | scope | value | status |
+|---|---|---|---|
+| open-play shot10 AUC >= 0.85 | pooled/open_play | 0.865 | **PASS** |
+| open-play shot10 ECE <= 0.03 | pooled/open_play | 0.003 | **PASS** |
+| open-play shot10 AUC >= 0.85 | sportec/open_play | 0.888 | **PASS** |
+| open-play shot10 ECE <= 0.03 | sportec/open_play | 0.005 | **PASS** |
+| open-play shot10 AUC >= 0.85 | skillcorner/open_play | 0.893 | **PASS** |
+| open-play shot10 ECE <= 0.03 | skillcorner/open_play | 0.017 | **PASS** |
+| open-play shot10 AUC >= 0.85 | statsbomb360/open_play | 0.847 | **FAIL** |
+| open-play shot10 ECE <= 0.03 | statsbomb360/open_play | 0.005 | **PASS** |
+| ball_zone10 top-5 cell accuracy >= 0.6 | pooled/open_play | 0.110 | **FAIL** |
+| ball_zone10 top-5 cell accuracy >= 0.6 | sportec/open_play | 0.121 | **FAIL** |
+| ball_zone10 top-5 cell accuracy >= 0.6 | skillcorner/open_play | 0.080 | **FAIL** |
+| player minFDE@10s >= 25% better than constant velocity (K=6 best-of vs 1 CV) | sportec/open_play | 0.739 | **PASS** |
+| player minFDE@10s >= 25% better than constant velocity (K=6 best-of vs 1 CV) | skillcorner/open_play | 0.747 | **PASS** |
+| player minFDE@10s >= 25% better than constant velocity (K=6 best-of vs 1 CV) | pooled/open_play | 0.741 | **PASS** |
+| D2 error < 1e-5 (float32, critic probabilities) | test open play | 0.000000 | **PASS** |
+| D2 error < 1e-5 (float64, critic probabilities) | test open play | 0.000000 | **PASS** |
+| D2 error < 1e-5 (float64, trajectory mu in m / pi / log sigma) | test open play | 0.000000 | **PASS** |
+
+| open play | n | shot10 AUC | Brier (base rate) | goal10 AUC | turn5 AUC | poss10 Brier (base) | receiver top-1 / top-3 | zone top-1 / 3 / 5 |
+|---|---|---|---|---|---|---|---|---|
+| sportec | 8,760 | 0.888 | 0.0376 (0.0441) | 0.862 | 0.813 | 0.1593 (0.1831) | 0.342 / 0.683 | 0.034 / 0.081 / 0.121 |
+| skillcorner | 3,625 | 0.893 | 0.0534 (0.0692) | 0.790 | 0.746 | 0.1972 (0.2032) | 0.535 / 0.825 | 0.019 / 0.048 / 0.080 |
+| statsbomb360 | 21,746 | 0.847 | 0.0388 (0.0440) | 0.836 | 0.751 | n/a (n/a) | n/a / n/a | n/a / n/a / n/a |
+| pooled | 34,131 | 0.865 | 0.0401 (0.0468) | 0.820 | 0.768 | 0.1704 (0.1893) | 0.410 / 0.733 | 0.029 / 0.071 / 0.110 |
+
+Shot10 against the pitch-control + xT baseline on an even subsample of 1,498 open-play samples: AUC 0.872 vs 0.837, Brier 0.0374 vs 0.0426 (base rate 0.0433).
+
+ball_zone10, pooled open play (n = 12,160): model top-5 0.110, NLL 4.875, RPS x/y 0.1236 / 0.1715; best baseline (persistence) top-5 0.077, NLL 5.103; uniform top-5 0.016, NLL 5.257.
+
+Trajectories, pooled open play (SportEC + SkillCorner, n = 6,080): player minADE 3.96 m, minFDE 5.99 m (constant velocity 23.15 m, standing still 15.14 m); most-probable-mode FDE 13.38 m; joint minJFDE 7.59 m vs constant velocity 23.14 m; ball minFDE 12.62 m vs 31.99 m. With view-masked inputs minFDE is 6.02 m.
+
+Ablations (pooled / sportec / skillcorner shot10 AUC on up to 6,000 open-play samples per source):
+
+| variant | input | pooled | sportec | skillcorner |
+|---|---|---|---|---|
+| main ensemble (2 seeds) | clean | 0.876 | 0.886 | 0.893 |
+| main ensemble | view-masked | 0.876 | 0.885 | 0.894 |
+| teams set to unknown | clean | 0.878 | 0.888 | 0.898 |
+| FiLM on, seed 0 | clean | 0.878 | 0.887 | 0.898 |
+| FiLM off | clean | 0.877 | 0.889 | 0.895 |
+| view-mask aug on, seed 0 | clean | 0.878 | 0.887 | 0.898 |
+| view-mask aug on, seed 0 | view-masked | 0.878 | 0.885 | 0.898 |
+| view-mask aug off | clean | 0.876 | 0.886 | 0.892 |
+| view-mask aug off | view-masked | 0.872 | 0.881 | 0.887 |
+
+Receiver decomposition: direct head AUC 0.865, decomposed 0.865, served blend 0.865 (pooled open play).
+
+D2 (200 test samples, four reflections): critic probabilities change by at most 1.19e-07 in float32 and 3.33e-16 in float64; trajectory outputs 7.63e-06 (float32, metres) and 1.42e-14 (float64).
+
+How to read these results.
+
+* **Passed:** pooled and SportEC / SkillCorner open-play shot10 AUC and ECE, trajectory minFDE against constant velocity, D2. **Failed:** StatsBomb 360 shot10 AUC (0.847, just under 0.85) and ball_zone10 top-5 (0.110 against 0.6). The 0.6 target is probably not reachable: the ball moves about 30 to 40 m in 10 s and five cells cover about 190 m2 of a 7,140 m2 pitch. The head does beat every baseline (uniform 0.016, static prior 0.060, persistence 0.077 top-5; lower NLL and RPS), so it learned something, but it is a smooth density, not a cell classifier.
+* **ECE is easy at a 4 to 7% base rate.** Brier against the base rate and AUC are the more informative numbers; shot10 Brier improves on the base rate by 14% pooled.
+* **The 25% trajectory target is weak.** Constant velocity is worse than standing still at 10 s (23.2 m against 15.1 m). The best-of-6 per player (6.0 m) is generous, and the most probable mode (13.4 m) is only 12% better than standing still: the mode probabilities carry little information (the mode cross-entropy ended at 1.58 against ln 6 = 1.79). The joint minJFDE (7.6 m) is the fairer multi-modal number. Use the forecaster as a set of plausible scenarios, not as a point prediction.
+* **No ablation shows a measurable gain.** FiLM on / off and teams unknown differ by at most 0.002 pooled AUC; only 11.6% of test samples have a known possession team (the other clubs are not in the training vocabulary or the playbook KB), so FiLM is barely exercised and nothing here says whether it would help with more clubs. View-mask augmentation helps on view-masked inputs by 0.006 AUC pooled (0.878 against 0.872) and costs nothing on clean input, which is the intended direction but small and from one seed. The receiver decomposition is neutral (0.865 direct and decomposed), as designed: it adds per-receiver explanations (what the live UI draws) without hurting the probability.
+* **Masking the test input changes almost nothing for any model** (0.876 to 0.876 for the main ensemble). The headline shot10 signal sits in the ball and carrier, which the camera cone always keeps, and the masking only degrades far players. This is not a test of real broadcast detection noise.
+
+Limitations of this round. The training data is small and in effect three sources: SportEC (3 test matches, no validation match), SkillCorner (8 of 20 matches were on disk, the rest were not downloaded) and Metrica (two matches, no test split; CC BY-NC); StatsBomb 360 has no future frames, so it trains the old heads only. Samples are 1 Hz and overlapping, so test errors have wide intervals, and no seed-to-seed or bootstrap interval was computed. `action_next` exists for SkillCorner only (accuracy 0.695 against 0.600 for the majority class, NLL 0.717). poss10 beats the base rate on SportEC and SkillCorner (Brier 0.159 and 0.197 against 0.183 and 0.204). The FiLM team vocabulary has 15 clubs. The open-play filter uses an inferred dead ball for Metrica and SkillCorner. The live service will feed a camera-limited, 5 Hz, video-derived view, which none of these data sources reproduces; the view-mask augmentation is a geometric stand-in for it. During the round an unintended 124 MB download of the Metrica raw files happened (the raw path was not exported in that shell); it was deleted, and downloads are now refused unless `MATCHLENS_TACTICSML_DOWNLOAD=1`.

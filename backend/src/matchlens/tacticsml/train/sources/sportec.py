@@ -22,7 +22,7 @@ from matchlens.tacticsml.train.sources._common import (
 )
 
 SOURCE = "sportec"
-RAW = schema.ROOT / "raw" / "sportec"
+RAW = schema.RAW_ROOT / "sportec"
 MATCH_IDS = ("J03WPY", "J03WMX", "J03WR9", "J03WN1", "J03WOH", "J03WQQ", "J03WOY")
 SAMPLE_RATE = 1 / 5
 

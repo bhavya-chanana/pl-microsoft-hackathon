@@ -184,6 +184,10 @@ class TacticsGAT(nn.Module):
         prof = (node_feat[..., a:b] - self.feat_mean) / self.feat_std * node_feat[..., b:b + P]
         return torch.cat([node_feat[..., :a], prof, node_feat[..., b:]], dim=-1)
 
+    def _post_layer(self, index: int, h: Tensor, batch: dict[str, Tensor], mask: Tensor) -> Tensor:
+        """Hook after each GAT layer; the base critic leaves ``h`` alone (Next10 applies FiLM here)."""
+        return h
+
     # ------------------------------------------------------------ core
     def node_states(self, batch: dict[str, Tensor], signs: Tensor | None = None) -> tuple[Tensor, Tensor]:
         """One non-averaged pass for the cVAE: ``(h (B,N,H), emb (B,64))`` in the reflected frame."""
@@ -205,8 +209,8 @@ class TacticsGAT(nn.Module):
         last = pos[:, -1]
         rel = (last[:, None, :, :] - last[:, :, None, :]) / REL_SCALE  # [b,i,j] = pos_j - pos_i
         e = torch.cat([batch["edge_feat"], rel], dim=-1)
-        for layer in self.layers:
-            h = layer(h, e, mask)
+        for li, layer in enumerate(self.layers):
+            h = self._post_layer(li, layer(h, e, mask), batch, mask)
         # attention pooling and carrier context
         w = self.pool_vec(torch.tanh(self.pool_proj(h))).squeeze(-1).masked_fill(mask == 0, NEG)
         w = torch.softmax(w, dim=-1)

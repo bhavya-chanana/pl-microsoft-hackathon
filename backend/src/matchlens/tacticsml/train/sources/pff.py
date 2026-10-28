@@ -32,7 +32,7 @@ from matchlens.tacticsml.train.sources._common import (
 )
 
 SOURCE = "pff"
-RAW = schema.ROOT / "raw" / "pff"
+RAW = schema.RAW_ROOT / "pff"
 SAMPLE_RATE = 1 / 6  # 30 Hz -> 5 Hz
 KNOCKOUT_FROM_WEEK = 4
 INSTRUCTIONS = (

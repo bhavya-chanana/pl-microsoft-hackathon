@@ -22,7 +22,7 @@ from matchlens.tacticsml.train.sources._common import (
 )
 
 SOURCE = "skillcorner"
-RAW = schema.ROOT / "raw" / "skillcorner"
+RAW = schema.RAW_ROOT / "skillcorner"
 BASE = "https://github.com/SkillCorner/opendata/raw/master/data/matches"
 MATCH_IDS = ("1925299", "1874553", "1886347", "1899585", "1927964", "1953632", "1959846", "1986691", "1996435",
              "1996436", "2006229", "2006363", "2007448", "2007721", "2010085", "2011166", "2013725", "2015213",

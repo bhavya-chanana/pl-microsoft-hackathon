@@ -51,6 +51,10 @@ class LEvent:
     period: int = 1
 
 
+ACTIONS = ("pass", "carry", "shot", "other")  # ``action_next`` classes; "other" = the ball is lost / no action
+POSS_HORIZON = 10.0
+
+
 @dataclass(frozen=True)
 class Labels:
     receiver_id: str | None
@@ -59,6 +63,8 @@ class Labels:
     goal10: int
     concede10: int
     turn5: int
+    poss10: int = -1  # the possession team has the ball 10 s later (1/0, -1 unknown)
+    action_next: int = -1  # index into ACTIONS of the next action (-1 unknown)
 
 
 UNKNOWN = Labels(None, RECEIVER_UNKNOWN, -1, -1, -1, -1)
@@ -147,12 +153,31 @@ class EventStream:
                    for s in self._switches)
         rid, state = self._receiver(t, period, team_id, event)
         return Labels(
+            poss10=self.poss10(t, period, team_id), action_next=self.action_next(t, period, team_id, event),
             receiver_id=rid, receiver_state=state,
             shot10=self._flag(shot, t, period, SHOT_WINDOW),
             goal10=self._flag(goal, t, period, SHOT_WINDOW),
             concede10=self._flag(concede, t, period, SHOT_WINDOW),
             turn5=self._flag(turn, t, period, TURN_WINDOW),
         )
+
+    def poss10(self, t: float, period: int, team_id: str) -> int:
+        """1 if ``team_id`` is in possession at ``t + 10`` s, 0 if the other team is, -1 if not covered."""
+        if not self._known_until(period, t + POSS_HORIZON):
+            return -1
+        later = self.possession_at(t + POSS_HORIZON, period)
+        return -1 if later is None else int(later == team_id)
+
+    def action_next(self, t: float, period: int, team_id: str, event: LEvent | None) -> int:
+        """The next pass / carry / shot of ``team_id`` (the anchoring event, else the first one within
+        ``MAX_ACTION_GAP``); "other" when the other team acts first or nothing happens. Sources without carry
+        events must not use this label (their carries show up as later passes)."""
+        if event is not None and event.team_id == team_id and event.kind in ("pass", "carry"):
+            return ACTIONS.index(event.kind)
+        nxt = next((e for e in self._window(t, period, MAX_ACTION_GAP) if e.kind in (*_ACTIONS, "shot")), None)
+        if nxt is None:
+            return len(ACTIONS) - 1 if self._known_until(period, t + MAX_ACTION_GAP) else -1
+        return ACTIONS.index(nxt.kind) if nxt.team_id == team_id else len(ACTIONS) - 1
 
     def _receiver(self, t: float, period: int, team_id: str, event: LEvent | None) -> tuple[str | None, str]:
         if event is None:

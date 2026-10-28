@@ -19,7 +19,7 @@ from matchlens.tacticsml.train.sources._common import (
 )
 
 SOURCE = "metrica"
-RAW = schema.ROOT / "raw" / "metrica"
+RAW = schema.RAW_ROOT / "metrica"
 BASE = "https://raw.githubusercontent.com/metrica-sports/sample-data/master/data"
 GAMES = ("1", "2")
 SAMPLE_RATE = 1 / 5

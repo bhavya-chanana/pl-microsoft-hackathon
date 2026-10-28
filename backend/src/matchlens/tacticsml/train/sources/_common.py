@@ -14,6 +14,7 @@ simulator.
 from __future__ import annotations
 
 import math
+import os
 import random
 from bisect import bisect_left
 from dataclasses import dataclass, field
@@ -72,7 +73,16 @@ def write_match(source: str, match_id: str, items: list[Item], root: Path | None
     kind: list[int] = []
     futures: list[dict[str, tuple[float, float]] | None] = []
     set_piece: list[int] = []
-    for frame, lab, meta in items:
+    B = len(items)
+    H, Nn = schema.HORIZONS, F.N_NODES
+    fut_pos = np.zeros((B, H, Nn, 2), dtype=np.float16)
+    fut_valid = np.zeros((B, H, Nn), dtype=bool)
+    since_dead = np.full(B, np.nan, dtype=np.float32)
+    poss10 = np.full(B, -1, dtype=np.int8)
+    action_next = np.full(B, -1, dtype=np.int8)
+    poss_team = np.full(B, "", dtype="<U48")
+    opp_team = np.full(B, "", dtype="<U48")
+    for b, (frame, lab, meta) in enumerate(items):
         s = F.build_sample(frame, observed_ids=meta.get("observed_ids"))
         samples.append(s)
         recv.append(receiver_index(lab, s.node_ids))
@@ -82,12 +92,45 @@ def write_match(source: str, match_id: str, items: list[Item], root: Path | None
         futures.append(_canonical_future(meta.get("target")))
         set_piece.append(schema.SET_PIECE_CODES.get(frame.set_piece, 0) if meta.get("knows_set_piece")
                          else schema.SET_PIECE_UNKNOWN)
+        poss10[b] = lab.poss10
+        action_next[b] = lab.action_next if meta.get("has_action_labels") else -1
+        since_dead[b] = meta.get("since_dead", np.nan)
+        poss_team[b], opp_team[b] = meta.get("poss_team", "")[:48], meta.get("opp_team", "")[:48]
+        if "future" in meta:
+            fut_pos[b], fut_valid[b] = _canonical_block(s.node_ids, meta)
     if not samples:
         return None
     tp, tv = schema.target_positions(samples, futures)
-    arrays = schema.pack(samples, recv, labs, kind, tp, tv, set_piece)
+    extra = {"fut_pos": fut_pos, "fut_valid": fut_valid, "since_dead": since_dead, "poss10": poss10,
+             "action_next": action_next, "poss_team": poss_team, "opp_team": opp_team,
+             "period": np.array([int(m.get("period", 1)) for _, _, m in items], dtype=np.int8)}
+    arrays = schema.pack(samples, recv, labs, kind, tp, tv, set_piece, extra)
     split = items[0][2].get("split")
     return schema.write_shard(source, match_id, arrays, split=split, root=root, note=note)
+
+
+def _canonical_block(node_ids: list[str], meta: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
+    """Future positions ``(H, N, 2)`` in the sample's canonical frame and a validity mask ``(H, N)``."""
+    fp, fb = meta["future"]
+    col = {pid: j for j, pid in enumerate(meta["future_ids"])}
+    H = fp.shape[0]
+    out = np.zeros((H, F.N_NODES, 2), dtype=np.float32)
+    ok = np.zeros((H, F.N_NODES), dtype=bool)
+    sign = np.array([-1.0 if meta["flip"] else 1.0, 1.0])
+    centre = np.array([F.HALF_L, F.HALF_W])
+    for j, nid in enumerate(node_ids[: F.BALL]):
+        c = col.get(nid)
+        if c is None:
+            continue
+        xy = np.clip(fp[:, c], [0.0, 0.0], [PITCH_LENGTH, PITCH_WIDTH])
+        out[:, j] = (xy - centre) * sign
+        ok[:, j] = ~np.isnan(fp[:, c, 0])
+    out[:, F.BALL] = (np.clip(fb, [0.0, 0.0], [PITCH_LENGTH, PITCH_WIDTH]) - centre) * sign
+    ok[:, F.BALL] = ~np.isnan(fb[:, 0])
+    out[:, F.GOAL_OWN] = F.GOAL_XY[F.GOAL_OWN]
+    out[:, F.GOAL_TARGET] = F.GOAL_XY[F.GOAL_TARGET]
+    ok[:, F.GOAL_OWN] = ok[:, F.GOAL_TARGET] = True
+    return np.nan_to_num(out), ok
 
 
 def _canonical_future(target: TFrame | None) -> dict[str, tuple[float, float]] | None:
@@ -114,6 +157,11 @@ class _Period:
     xy: np.ndarray  # (T, P, 2) absolute metres, NaN where the player is not tracked
     ball: np.ndarray  # (T, 2)
     alive: np.ndarray  # (T,) bool
+    dead_t: np.ndarray = field(init=False, repr=False)  # (T,) time of the latest dead-ball frame so far
+
+    def __post_init__(self) -> None:
+        dead = ~self.alive | np.isnan(self.ball[:, 0])
+        self.dead_t = np.maximum.accumulate(np.where(dead, self.times, -np.inf))
 
 
 @dataclass
@@ -122,6 +170,7 @@ class TrackingTable:
 
     players: list[PlayerMeta]
     periods: dict[int, _Period] = field(default_factory=dict)
+    team_names: dict[str, str] = field(default_factory=dict)  # team id -> display name (when the feed has one)
 
     @property
     def teams(self) -> list[str]:
@@ -214,6 +263,27 @@ class TrackingTable:
             return None
         return self._frame(i, period, poss, None, self.attacking_right(period))
 
+    def since_dead(self, t: float, period: int) -> float:
+        """Seconds since the ball was last dead (``inf`` if it has been alive since the start of the period)."""
+        i = self.index(t, period, max(0.5 * self.spacing(), 0.12))
+        if i is None:
+            return float("nan")
+        return float(t - self.periods[period].dead_t[i])
+
+    def future_block(self, t: float, period: int, horizon: int = schema.HORIZONS
+                     ) -> tuple[np.ndarray, np.ndarray]:
+        """Absolute positions at ``t + 1 .. t + horizon`` s: players ``(H, P, 2)`` and ball ``(H, 2)`` (NaN where the
+        tracking does not cover the instant, e.g. past the end of the period)."""
+        per = self.periods[period]
+        tol = max(0.5 * self.spacing(), 0.12)
+        fp = np.full((horizon, len(self.players), 2), np.nan)
+        fb = np.full((horizon, 2), np.nan)
+        for k in range(1, horizon + 1):
+            i = self.index(t + k, period, tol)
+            if i is not None:
+                fp[k - 1], fb[k - 1] = per.xy[i], per.ball[i]
+        return fp, fb
+
     def _nearest_mate(self, i: int, period: int, poss: str) -> str | None:
         per = self.periods[period]
         best, best_d = None, 1e9
@@ -226,6 +296,20 @@ class TrackingTable:
         return best
 
     _attack_cache: dict[int, dict[str, bool]] = field(default_factory=dict, repr=False)
+
+
+def infer_alive(times: np.ndarray, ball: np.ndarray, still_speed: float = 0.5, still_seconds: float = 1.5,
+                margin: float = 0.5) -> np.ndarray:
+    """Ball-in-play flag for feeds without a ball state: dead when the ball is off the pitch or has barely moved
+    for ``still_seconds`` (throw-ins, free kicks, kick-offs and goal kicks all start from a stationary ball)."""
+    out_of_play = ((ball[:, 0] < -margin) | (ball[:, 0] > PITCH_LENGTH + margin)
+                   | (ball[:, 1] < -margin) | (ball[:, 1] > PITCH_WIDTH + margin) | np.isnan(ball[:, 0]))
+    dt = np.maximum(np.diff(times, prepend=times[0] - 1.0), 1e-3)
+    speed = np.linalg.norm(np.diff(np.nan_to_num(ball), axis=0, prepend=np.nan_to_num(ball[:1])), axis=1) / dt
+    slow = (speed < still_speed).astype(float)
+    win = max(1, int(round(still_seconds / max(float(np.median(dt)), 1e-3))))
+    run = np.convolve(slow, np.ones(win), mode="same") >= win  # every frame in the window is slow
+    return ~(out_of_play | run)
 
 
 def table_from_kloppy(ds, time_fn, normalised: bool = True) -> TrackingTable:
@@ -251,13 +335,18 @@ def table_from_kloppy(ds, time_fn, normalised: bool = True) -> TrackingTable:
             if c is not None and d.coordinates is not None:
                 xy[c] = (d.coordinates.x * sx, d.coordinates.y * sy)
         ball = np.array([fr.ball_coordinates.x * sx, fr.ball_coordinates.y * sy])
-        alive = str(getattr(fr.ball_state, "value", fr.ball_state)).lower() == "alive"
+        state = getattr(fr.ball_state, "value", fr.ball_state)
+        alive = None if state is None else str(state).lower() == "alive"  # None: the feed has no ball state
         raw.setdefault(int(fr.period.id), []).append((float(time_fn(fr)), xy, ball, alive))
-    table = TrackingTable(players=[metas[p] for p in order])
+    table = TrackingTable(players=[metas[p] for p in order],
+                          team_names={str(t.team_id): str(getattr(t, "name", "") or t.team_id)
+                                      for t in ds.metadata.teams})
     for pid, rows in raw.items():
         rows.sort(key=lambda r: r[0])
-        table.periods[pid] = _Period(times=np.array([r[0] for r in rows]), xy=np.stack([r[1] for r in rows]),
-                                     ball=np.stack([r[2] for r in rows]), alive=np.array([r[3] for r in rows]))
+        times, ball = np.array([r[0] for r in rows]), np.stack([r[2] for r in rows])
+        alive = (infer_alive(times, ball) if any(r[3] is None for r in rows)
+                 else np.array([r[3] for r in rows], dtype=bool))
+        table.periods[pid] = _Period(times=times, xy=np.stack([r[1] for r in rows]), ball=ball, alive=alive)
     # drop players that were never tracked
     keep = [i for i in range(len(order)) if any(not np.isnan(p.xy[:, i, 0]).all() for p in table.periods.values())]
     if len(keep) != len(order):
@@ -274,6 +363,7 @@ def tracking_samples(source: str, match_id: str, table: TrackingTable, events: l
                      note: str = "") -> Iterator[Item]:
     """Pass/carry starts plus random alive-ball frames of a match with tracking and events."""
     stream = EventStream(events, table.ends())
+    has_carry_events = any(e.kind == "carry" for e in events)
     rng = random.Random(seed if seed is not None else int.from_bytes(f"{source}:{match_id}".encode()[:8], "big"))
     base = {"source": source, "match_id": match_id, "split": split, "note": note}
 
@@ -283,6 +373,13 @@ def tracking_samples(source: str, match_id: str, table: TrackingTable, events: l
             return None
         lab = stream.labels_at(t, period, team, ev)
         meta = dict(base, elapsed=frame.elapsed, period=period, kind=kind, target=table.future(t, period, team))
+        fp, fb = table.future_block(t, period)
+        other = [x for x in table.teams if x != team]
+        meta.update(future=(fp, fb), future_ids=[p.player_id for p in table.players],
+                    flip=not table.attacking_right(period)[team], since_dead=table.since_dead(t, period),
+                    poss_team=table.team_names.get(team, team),
+                    opp_team=table.team_names.get(other[0], other[0]) if other else "",
+                    has_action_labels=has_carry_events)
         return frame, lab, meta
 
     for e in stream.events:
@@ -316,6 +413,9 @@ def download(url: str, dest: Path, retries: int = 4) -> Path:
 
     if dest.exists() and dest.stat().st_size > 0:
         return dest
+    if os.environ.get("MATCHLENS_TACTICSML_DOWNLOAD") != "1":  # fetching is opt-in
+        raise RuntimeError(f"{dest} is missing; set MATCHLENS_TACTICSML_DOWNLOAD=1 to fetch {url}, or point "
+                           "MATCHLENS_TACTICSML_RAW at an existing raw/ directory")
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")
     last: Exception | None = None

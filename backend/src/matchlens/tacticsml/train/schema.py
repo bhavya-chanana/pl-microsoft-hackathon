@@ -28,6 +28,19 @@ source,        0-d <U         provenance (``read_shards`` expands them to (B,) a
 match_id, split
 =============  =============  =====================================================================
 
+Next10 shards (``NEXT10_SHARDS``, tracking sources only) add, all canonical like ``pos``:
+
+=============  =============  =====================================================================
+fut_pos        (B,10,25,2) f2 node positions 1..10 s later (0 where not ``fut_valid``)
+fut_valid      (B,10,25) bool whether the node is tracked at that horizon
+since_dead     (B,) f4        seconds since the last dead-ball frame (NaN unknown); open play >= 10 s
+poss10         (B,) i1        possession team has the ball 10 s later (-1 unknown)
+action_next    (B,) i1        next on-ball action 0 pass, 1 carry, 2 shot, 3 other (-1 unless the source has carries)
+poss_team,     (B,) <U48      club names of the possession team and its opponent (FiLM team ids)
+opp_team
+period         (B,) i1        match period of the sample
+=============  =============  =====================================================================
+
 ``edge_feat`` and ``poss_slots`` / ``opp_slots`` are functions of the stored arrays and are not stored;
 ``read_shards(..., with_edges=True)`` rebuilds ``edge_feat`` (float16, distance / 10 is all that varies).
 
@@ -39,6 +52,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Iterable, Iterator
@@ -59,6 +73,13 @@ HELD_OUT_SPORTEC = frozenset({"J03WMX", "J03WR9"})
 
 ROOT = Path(__file__).resolve().parents[4] / "data" / "local" / "tacticsml"
 SHARDS = ROOT / "shards"
+# Raw downloads. ``MATCHLENS_TACTICSML_RAW`` points the builders at another copy (e.g. a sibling worktree's
+# ``raw/``) without moving 3 GB; the sources only read it.
+RAW_ROOT = Path(os.environ.get("MATCHLENS_TACTICSML_RAW", "") or ROOT / "raw")
+# Next10 artefacts (shards with future labels, checkpoints, weights, reports) never mix with the above.
+NEXT10 = ROOT / "next10"
+NEXT10_SHARDS = NEXT10 / "shards"
+HORIZONS = 10  # seconds of future stored per sample for the Next10 labels (1 Hz)
 MANIFEST = "manifest.json"
 
 
@@ -177,8 +198,8 @@ def target_positions(samples: list[GraphSample], futures: list[dict[str, tuple[f
 
 
 def pack(samples: list[GraphSample], receiver_idx: list[int], labels: dict[str, list[int]], kind: list[int],
-         target_pos: np.ndarray, target_valid: np.ndarray, set_piece: list[int] | None = None
-         ) -> dict[str, np.ndarray]:
+         target_pos: np.ndarray, target_valid: np.ndarray, set_piece: list[int] | None = None,
+         extra: dict[str, np.ndarray] | None = None) -> dict[str, np.ndarray]:
     """GraphSamples and labels -> the arrays of a shard (without provenance)."""
     st = F.stack(samples)
     elapsed = np.array([s.elapsed for s in samples], dtype=np.float32)
@@ -196,6 +217,7 @@ def pack(samples: list[GraphSample], receiver_idx: list[int], labels: dict[str, 
     }
     for k in LABEL_KEYS[1:]:
         out[k] = np.array(labels[k], dtype=np.int8)
+    out.update(extra or {})
     return out
 
 
