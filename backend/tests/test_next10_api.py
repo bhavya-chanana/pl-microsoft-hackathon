@@ -158,6 +158,22 @@ def test_live_socket_hub_and_poll(client, monkeypatch):
         assert ws.receive_json()["type"] == "stats"
 
 
+def test_socket_hello_carries_job_stats_and_only_the_newest_next10_doc(client, monkeypatch):
+    monkeypatch.setattr(next10_routes, "POLL_S", 0.2)
+    repo = next10_routes.state.repo
+    vid = "clip:lab-1"
+    repo.put("video_jobs", {"id": "j9", "job_id": "j9", "match_id": vid, "status": "running",
+                            "updated_at": "2026-10-28T10:00:00Z", "stats": {"live_ready": True, "fps": 6.5}})
+    repo.put("predictions", *({"id": f"n10:{vid}:{t * 1000}", "match_id": vid, "kind": "next10", "t_s": float(t),
+                               "minute": 0, "t_issued": "2026-10-28T10:00:00Z", "probs": {"shot10": 0.1}}
+                              for t in range(30)))
+    with client.websocket_connect(f"/api/next10/live/{vid}") as ws:
+        hello = ws.receive_json()
+        assert hello["doc"]["stats"] == {"live_ready": True, "fps": 6.5}
+        msg = ws.receive_json()
+        assert msg["type"] == "prediction" and msg["doc"]["t_s"] == 29.0  # the newest only, not 30 replays
+
+
 @pytest.mark.skipif(not os.getenv("MATCHLENS_NEXT10_TEST_ENDPOINT"), reason="needs the next10 Cosmos emulator")
 def test_endpoints_against_the_emulator(monkeypatch):
     settings = Next10Settings(endpoint=os.environ["MATCHLENS_NEXT10_TEST_ENDPOINT"],

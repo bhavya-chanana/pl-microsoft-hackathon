@@ -33,11 +33,13 @@ def entity(ident: str, team: str, x: float, y: float, *, observed: bool = True, 
 
 def frame_doc(match_id: str, t_s: float, entities: list[dict[str, Any]], calibrated: bool, *,
               match_clock_s: float | None = None, wall_utc: str | None = None, video_id: str | None = None,
-              view: str = "main") -> dict[str, Any]:
+              view: str = "main", calib_status: str | None = None) -> dict[str, Any]:
     t_s = round(float(t_s), 3)
     doc: dict[str, Any] = {"id": f"{match_id}:{round(t_s * 1000)}", "match_id": match_id, "t_s": t_s,
                            "match_clock_s": match_clock_s, "entities": entities, "calibrated": bool(calibrated),
                            "view": view}
+    if calib_status:
+        doc["calib_status"] = calib_status  # "fitted" | "interpolated" | "none" | "frame" (per-frame fallback)
     if wall_utc:
         doc["wall_utc"] = wall_utc
     if video_id:

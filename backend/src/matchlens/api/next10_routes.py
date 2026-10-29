@@ -10,6 +10,8 @@ shutdown. If the store is unreachable the app still starts and these routes answ
     GET /api/next10/matches/{match_id}/frames?from_s=&to_s=&last=1   tracking frames in a window (at most 3000)
     GET /api/next10/matches/{match_id}/moments?from_s=&to_s=  key moments (play it out)
     GET /api/next10/matches/{match_id}/jobs                   video jobs and live-run stats for the match
+    GET /api/next10/matches/{match_id}/fotmob                 FotMob's header, events, stats, momentum, shots, line-ups,
+                                                              zones, h2h and form (cached file; fotmob:<id> matches)
     GET /api/next10/verify                                    every match's score document
     WS  /api/next10/live/{match_id}                           {type: prediction|frame|stats|hello, doc}
 """
@@ -27,6 +29,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 
+from matchlens.next10 import fotmob_view
 from matchlens.next10.hub import hub
 from matchlens.next10.repo import MAX_FRAMES, CosmosRepo, Repo
 from matchlens.store.next10 import Next10Settings, Next10Store
@@ -118,6 +121,23 @@ async def list_jobs(match_id: str, repo: Repo = REPO) -> list[dict[str, Any]]:
     return await repo.jobs(match_id)
 
 
+@router.get("/matches/{match_id}/fotmob")
+async def get_fotmob(match_id: str) -> dict[str, Any]:
+    """FotMob's other data for the match page (header, events, stats, momentum, shot map, line-ups, zones, h2h, form),
+    trimmed, from the cached file only. A ``fotmob:<id>`` match reads its own file; a video match whose document has a
+    ``fotmob_id`` (the clip) reads that match's. 404 for a match with no FotMob id or no cached file yet."""
+    fid = fotmob_view.parse_match_id(match_id)
+    if fid is None and state.repo is not None:
+        doc = await state.repo.match(match_id)
+        fid = fotmob_view.parse_match_id(str((doc or {}).get("fotmob_id") or ""))
+    if fid is None:
+        raise HTTPException(404, f"{match_id!r} has no FotMob match")
+    view = await asyncio.to_thread(fotmob_view.load_view, f"fotmob:{fid}")
+    if view is None:
+        raise HTTPException(404, f"no FotMob data cached for fotmob:{fid} yet")
+    return {**view, "match_id": match_id}
+
+
 @router.get("/verify")
 async def verify(repo: Repo = REPO) -> list[dict[str, Any]]:
     return await repo.scores()
@@ -150,12 +170,16 @@ async def live(ws: WebSocket, match_id: str) -> None:
     async with hub.subscribe(match_id) as queue:
         try:
             latest: dict[str, dict[str, Any]] = {}
-            for p in await repo.predictions(match_id):
-                latest[p.get("team_side") or p.get("team") or ""] = p
+            # shadow docs are per team (the newest of each); a Next10 stream is one doc a second (only the newest)
+            for p in (*await repo.predictions(match_id, kind="shadow_event"),
+                      *await repo.predictions(match_id, kind="next10", last=True)):
+                latest[p.get("team_side") or p.get("team") or p.get("kind") or ""] = p
             after = max((p.get("t_issued") or "" for p in latest.values()), default=None) or None
             last_s = await repo.latest_frame_s(match_id)
+            jobs = sorted(await repo.jobs(match_id), key=lambda j: j.get("updated_at") or "")
+            stats = next((j["stats"] for j in reversed(jobs) if j.get("stats")), None)
             await ws.send_json({"type": "hello", "doc": {"match_id": match_id, "poll_s": POLL_S,
-                                                          "last_frame_s": last_s}})
+                                                          "last_frame_s": last_s, "stats": stats}})
             for p in latest.values():
                 seen.add("prediction", p)
                 await ws.send_json({"type": "prediction", "doc": p})
