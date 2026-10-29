@@ -88,8 +88,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out-dir", default=str(WEIGHTS10))
     p.add_argument("--tag", default="")
     p.add_argument("--shot-mode", default="blend", choices=("blend", "direct", "decomposed"))
+    p.add_argument("--version", default="next10-v1", help="version prefix; the manifest appends a hash of the weights")
     a = p.parse_args(argv)
-    export(Path(a.ckpt_dir), Path(a.out_dir), a.tag, a.shot_mode)
+    export(Path(a.ckpt_dir), Path(a.out_dir), a.tag, a.shot_mode, a.version)
     return 0
 
 

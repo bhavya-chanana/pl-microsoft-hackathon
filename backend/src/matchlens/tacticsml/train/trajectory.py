@@ -285,6 +285,8 @@ def trajectory_metrics(mu: np.ndarray, pi: np.ndarray, target: np.ndarray, valid
         out[f"{name}_static_FDE"] = mean_over(err_static[..., -1], m_fde)
         out[f"{name}_minFDE_vs_cv"] = 1.0 - out[f"{name}_minFDE"] / out[f"{name}_cv_FDE"]
         out[f"{name}_top1_FDE_vs_cv"] = 1.0 - out[f"{name}_top1_FDE"] / out[f"{name}_cv_FDE"]
+        out[f"{name}_minFDE_vs_still"] = 1.0 - out[f"{name}_minFDE"] / out[f"{name}_static_FDE"]
+        out[f"{name}_top1_FDE_vs_still"] = 1.0 - out[f"{name}_top1_FDE"] / out[f"{name}_static_FDE"]
     # joint metrics over the players that have a full 10 s future: one mode for the whole team sheet
     pm = last & players[None]
     n_p = pm.sum(1)
@@ -298,6 +300,10 @@ def trajectory_metrics(mu: np.ndarray, pi: np.ndarray, target: np.ndarray, valid
         out["cv_JADE"], out["cv_JFDE"] = float(cv_j[use].mean()), float(cv_jf[use].mean())
         out["minJFDE_vs_cv"] = 1.0 - out["minJFDE"] / out["cv_JFDE"]
         out["top1_JFDE"] = float(jfde[np.arange(len(pi)), pi.argmax(1)][use].mean())
+        st_j = (ade(err_static) * pm).sum(-1) / np.maximum(n_p, 1)
+        st_jf = (err_static[..., -1] * pm).sum(-1) / np.maximum(n_p, 1)
+        out["static_JADE"], out["static_JFDE"] = float(st_j[use].mean()), float(st_jf[use].mean())
+        out["minJFDE_vs_static"] = 1.0 - out["minJFDE"] / out["static_JFDE"]
     out["n_samples"] = int(has.any(1).sum())
     out["mode_usage"] = float(np.mean(np.bincount(pi.argmax(1), minlength=mu.shape[1]).max() / len(pi)))
     return out
@@ -315,6 +321,7 @@ class TrajTrainConfig:
     patience: int = 4
     max_steps: int | None = None
     view_mask_p: float = 0.5
+    view_mode: str = "cone"  # "cone" | "video" (see augment.video_config)
     max_hours: float = 0.9  # wall-clock budget; stops early and keeps the best checkpoint
 
 
@@ -324,14 +331,15 @@ def _batch_targets(b: dict[str, Tensor]) -> tuple[Tensor, Tensor]:
 
 @torch.no_grad()
 def predict_numpy(model: TrajectoryNet, ds, idx: np.ndarray, device, batch: int = 128, average: bool = True,
-                  view_rng: np.random.Generator | None = None, view_cfg=None
-                  ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """mu (n,K,A,H,2), pi (n,K), and the (possibly masked) pos_last/vel_last used, for ``idx`` of a Dataset10."""
+                  view_rng: np.random.Generator | None = None, view_cfg=None, return_mask: bool = False
+                  ) -> tuple[np.ndarray, ...]:
+    """mu (n,K,A,H,2), pi (n,K), and the (possibly masked) pos_last/vel_last used, for ``idx`` of a Dataset10.
+    ``return_mask`` appends the node_mask of the inputs actually used (agents removed by the augmentation are 0)."""
     from matchlens.tacticsml.train.augment import view_mask_batch
     from matchlens.tacticsml.train.data10 import to_tensors10
 
     model.eval()
-    mus, pis, last = [], [], []
+    mus, pis, last, nms = [], [], [], []
     for s in range(0, len(idx), batch):
         b = ds.batch(idx[s:s + batch])
         if view_rng is not None:
@@ -341,16 +349,17 @@ def predict_numpy(model: TrajectoryNet, ds, idx: np.ndarray, device, batch: int 
         mus.append(o["mu"][:, :, :N_AGENTS].cpu().numpy())
         pis.append(torch.softmax(o["pi_logits"], -1).cpu().numpy())
         last.append(np.concatenate([b["pos"][:, -1, :N_AGENTS], b["vel"][:, -1, :N_AGENTS]], -1))
-    return np.concatenate(mus), np.concatenate(pis), np.concatenate(last)
+        nms.append(np.asarray(b["node_mask"]))
+    out = (np.concatenate(mus), np.concatenate(pis), np.concatenate(last))
+    return out + (np.concatenate(nms),) if return_mask else out
 
 
 def evaluate_trajectory(model: TrajectoryNet, ds, idx: np.ndarray, device, view_rng=None, view_cfg=None,
                         batch: int = 128) -> dict[str, float]:
-    mu, pi, last = predict_numpy(model, ds, idx, device, batch, True, view_rng, view_cfg)
+    mu, pi, last, node_mask = predict_numpy(model, ds, idx, device, batch, True, view_rng, view_cfg, return_mask=True)
     fut = ds.a["fut_pos"][idx].astype(np.float32)
     valid = ds.a["fut_valid"][idx]
     n = len(idx)
-    node_mask = ds.a["node_mask"][idx]
     # target tensors cover N nodes; pad the agents' arrays to (n,H,N,2) layout for the metric function
     pos_last = np.zeros((n, F.N_NODES, 2), np.float32)
     vel_last = np.zeros((n, F.N_NODES, 2), np.float32)
@@ -362,7 +371,7 @@ def train_trajectory(train, val, cfg: TrajConfig | None = None, tcfg: TrajTrainC
                      device: str | torch.device = "auto", log: Callable[[str], None] = print
                      ) -> tuple[TrajectoryNet, dict]:
     """Train on the samples of ``train`` (a Dataset10) whose future is available and which are open play."""
-    from matchlens.tacticsml.train.augment import ViewMaskConfig, view_mask_batch
+    from matchlens.tacticsml.train.augment import ViewMaskConfig, video_config, view_mask_batch
     from matchlens.tacticsml.train.data10 import to_tensors10
     from matchlens.tacticsml.train.fit import pick_device, seed_everything
 
@@ -379,7 +388,7 @@ def train_trajectory(train, val, cfg: TrajConfig | None = None, tcfg: TrajTrainC
     warm = max(1, int(0.03 * total))
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda s: (s + 1) / warm if s < warm else 0.5 * (1 + math.cos(math.pi * min(1.0, (s - warm) / max(1, total - warm)))) * 0.99 + 0.01)
-    vcfg = ViewMaskConfig(p_apply=tcfg.view_mask_p)
+    vcfg = video_config(p_apply=tcfg.view_mask_p) if tcfg.view_mode == "video" else ViewMaskConfig(p_apply=tcfg.view_mask_p)
     best, best_state, bad, step, t0 = math.inf, None, 0, 0, time.time()
     hist: dict = {"train": [], "val": [], "n_params": model.n_params(), "device": str(dev), "n_train": int(len(use))}
     for epoch in range(tcfg.epochs):
@@ -453,13 +462,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--max-hours", type=float, default=0.9)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--view-mask-p", type=float, default=0.5)
+    p.add_argument("--view-mode", choices=("cone", "video"), default="cone")
     p.add_argument("--device", default="auto")
     p.add_argument("--out", default=str(schema.NEXT10 / "ckpt" / "trajectory_seed0.pt"))
     a = p.parse_args(argv)
     data = load_next10(a.sources, Path(a.shards), None)
     val = data.get("val") or data["train"]
     tcfg = TrajTrainConfig(epochs=a.epochs, batch=a.batch, max_steps=a.max_steps, max_hours=a.max_hours,
-                           view_mask_p=a.view_mask_p)
+                           view_mask_p=a.view_mask_p, view_mode=a.view_mode)
     model, hist = train_trajectory(data["train"], val, None, tcfg, a.seed, a.device)
     save_trajectory(model, Path(a.out), {"history": hist})
     print(f"saved {a.out} ({model.n_params()} parameters, {hist['steps']} steps)")

@@ -16,7 +16,7 @@ from matchlens.tacticsml import next10_common as C  # noqa: E402
 from matchlens.tacticsml.contract import from_tracking  # noqa: E402
 from matchlens.tacticsml.train import diffusion as D  # noqa: E402
 from matchlens.tacticsml.train import export10, heads as H  # noqa: E402
-from matchlens.tacticsml.train.augment import ViewMaskConfig, view_mask_batch  # noqa: E402
+from matchlens.tacticsml.train.augment import ViewMaskConfig, video_config, view_mask_batch  # noqa: E402
 from matchlens.tacticsml.train.data10 import to_tensors10  # noqa: E402
 from matchlens.tacticsml.train.model import ModelConfig, signs_for  # noqa: E402
 from matchlens.tacticsml.train.next10 import Next10Config, Next10GAT, load_critic, save_critic  # noqa: E402
@@ -230,6 +230,92 @@ def test_view_mask_correctness(np_batch):
     assert not m0.any() and np.array_equal(none["pos"], np_batch["pos"])
 
 
+def _bank(tmp_path):
+    """A bank of rectangular footprints, +-25 m by +-20 m around the ball, with the ball anywhere on the pitch."""
+    n = 400
+    rng = np.random.default_rng(0)
+    rel = np.tile(np.array([-25, -25, 25, 25, 20, -20, -20, 20], np.float32), (n, 1))
+    ball = np.stack([rng.uniform(-45, 45, n), rng.uniform(-28, 28, n)], 1).astype(np.float32)
+    path = tmp_path / "footprints.npz"
+    np.savez(path, rel=rel, ball=ball)
+    return path
+
+
+def test_view_mask_video_mode(np_batch, tmp_path):
+    cfg = video_config(p_apply=1.0, bank_path=_bank(tmp_path), p_drop=1.0, p_miss=0.0, obs_noise_m=(0.1, 0.1),
+                       p_ball_missing=0.0, footprint_scale=0.6)
+    nb = dict(np_batch, receiver_idx=np.full(B, 3))
+    out, masked = view_mask_batch(nb, np.random.default_rng(0), cfg)
+    mask = np_batch["node_mask"] > 0
+    dropped = mask & (out["node_mask"] == 0)
+    assert dropped.any() and (dropped == (masked & mask)[:, :]).all()      # p_drop = 1: every unseen player is removed
+    assert not dropped[:, F.BALL:].any()                                   # the ball and the goals stay
+    assert (out["node_feat"][dropped] == 0).all() and (out["pos"][:, :, :][np.repeat(dropped[:, None], 5, 1)] == 0).all()
+    carriers = np_batch["carrier_index"]
+    assert not dropped[np.arange(B), np.maximum(carriers, 0)][carriers >= 0].any()    # the carrier is never removed
+    want = np.where(dropped[:, 3], -1, 3)
+    assert np.array_equal(out["receiver_idx"], want)                       # the label is unknown when that player is gone
+    assert np.allclose(out["edge_feat"], edge_feat_from(out["pos"][:, -1], out["node_mask"], dtype=np.float32), atol=1e-6)
+    assert (out["edge_feat"][dropped].sum() == 0)                          # no edges touch a removed node
+    seen = (out["node_mask"] > 0) & ~masked
+    d = np.abs(out["pos"] - np_batch["pos"])[:, :, :F.BALL + 1]
+    assert 0.02 < d[np.repeat(seen[:, None], 5, 1)[:, :, :F.BALL + 1]].mean() < 0.3      # seen players: ~0.1 m jitter
+    again, m2 = view_mask_batch(nb, np.random.default_rng(0), cfg)
+    assert np.array_equal(masked, m2) and np.array_equal(out["pos"], again["pos"])
+
+
+def test_view_mask_ball_missing(np_batch, tmp_path):
+    cfg = video_config(p_apply=1.0, bank_path=_bank(tmp_path), p_drop=0.0, p_miss=0.0, obs_noise_m=(0.0, 0.0),
+                       p_ball_missing=1.0)
+    out, masked = view_mask_batch(np_batch, np.random.default_rng(1), cfg)
+    keep = ((out["node_mask"] > 0) & ~masked)[:, :F.BALL]
+    cen = (out["pos"][:, -1, :F.BALL] * keep[..., None]).sum(1) / keep.sum(1)[:, None]
+    # the players that stayed observed are untouched, so the ball sits at their centroid
+    assert np.allclose(out["pos"][:, -1, F.BALL], cen, atol=1e-4)
+
+
+def test_domain_gap_helpers():
+    from matchlens.tacticsml.train import domain_gap as DG
+
+    quad = np.array([[0, 10], [0, 0], [10, 0], [10, 10]], float)
+    pts = np.array([[5, 5], [11, 5], [-1, 1], [10, 10]], float)
+    assert DG.in_quad(pts, quad).tolist() == [True, False, False, True]
+    t = np.arange(50) * 0.2
+    straight = np.stack([3.0 * t, 0 * t], 1)                       # 3 m/s, no noise: jitter and acceleration are zero
+    st = DG._series_stats([(t, straight)])
+    assert abs(st["speed"]["p50"] - 3.0) < 1e-6 and st["jitter_m"]["p50"] < 1e-9 and st["accel"]["p50"] < 1e-6
+    noisy = straight + np.random.default_rng(0).normal(0, 0.14, straight.shape)
+    j = DG._series_stats([(t, noisy)])["jitter_m"]["p50"]          # white noise sigma: median |second difference| = 2.88 sigma
+    assert 0.3 < j < 0.5
+    gap = DG._series_stats([(np.array([0.0, 0.2, 1.0, 1.2]), np.zeros((4, 2)))])  # a hole is not a step
+    assert gap["n_steps"] == 2
+
+
+def test_cluster_bootstrap():
+    from matchlens.tacticsml.train import evaluate10 as E10
+
+    groups = [np.arange(i * 10, i * 10 + 10) for i in range(6)]
+    vals = np.concatenate([np.full(10, float(i)) for i in range(6)])
+    r = E10.bootstrap(groups, lambda pos: float(vals[pos].mean()), n_boot=200)
+    assert abs(r["value"] - 2.5) < 1e-9 and r["matches"] == 6 and r["lo"] < 2.5 < r["hi"]
+    assert E10.bootstrap(groups[:2], lambda pos: float(vals[pos].mean()), n_boot=50)["lo"] is None   # < 3 matches: no interval
+    assert E10.bootstrap(groups, lambda pos: float(vals[pos].mean()), n_boot=200) == r                # deterministic
+
+
+def test_metrica_epts_events():
+    from types import SimpleNamespace as NS
+
+    from matchlens.tacticsml.train.sources import metrica as M
+
+    def ev(kind, res, rec=None):
+        return NS(event_type=NS(value=kind), player=NS(player_id="P1"), team=NS(team_id="T1"), result=NS(value=res),
+                  timestamp=NS(total_seconds=lambda: 12.5), period=NS(id=1), receiver_player=rec)
+    out = M.epts_levents(NS(records=[ev("PASS", "COMPLETE", NS(player_id="P2")), ev("PASS", "INCOMPLETE"), ev("SHOT", "GOAL"),
+                                     ev("RECOVERY", None), ev("GENERIC", None)]))
+    assert [e.kind for e in out] == ["pass", "pass", "shot", "gain"]
+    assert out[0].receiver_id == "P2" and out[0].outcome == "success" and out[1].outcome == "fail" and out[2].outcome == "goal"
+
+
 # ---------------------------------------------------------------- losses
 
 def test_loss_sanity(np_batch):
@@ -357,6 +443,8 @@ def test_serve_roundtrip_schema(weights_dir, demo_match):
     assert len(out["receivers"]) == 3 and out["receivers"][0]["p"] >= out["receivers"][1]["p"]
     assert sum(r["p"] for r in out["receivers"]) + out["receiver_lost"] <= 1.0 + 1e-6
     assert abs(sum(out["action_next"].values()) - 1.0) < 1e-5
+    assert len(out["embedding"]) == 64 and all(np.isfinite(out["embedding"]))
+    assert "embedding" not in model.predict(frame, with_embedding=False)
     tr = out["trajectories"]
     assert tr["k"] == 6 and tr["dt_s"] == 1.0 and tr["horizon_s"] == 10
     ents = {e["entity_id"] for e in tr["entities"]}

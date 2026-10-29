@@ -26,7 +26,7 @@ import torch
 from matchlens.tacticsml import features as F
 from matchlens.tacticsml import next10_common as C
 from matchlens.tacticsml.train import schema
-from matchlens.tacticsml.train.augment import ViewMaskConfig, view_mask_batch
+from matchlens.tacticsml.train.augment import ViewMaskConfig, video_config, view_mask_batch
 from matchlens.tacticsml.train.data10 import Dataset10, load_next10, to_tensors10
 from matchlens.tacticsml.train.fit import auc_score, ece_score, pick_device, seed_everything
 from matchlens.tacticsml.train.heads import next10_losses
@@ -47,6 +47,7 @@ class Fit10Config:
     warmup_frac: float = 0.03
     film: bool = True
     view_mask_p: float = 0.5
+    view_mode: str = "cone"  # "cone" (round 1) | "video" (footprint replay, absent players, seen-player noise)
     team_dropout: float = 0.3
     max_steps: int | None = None
     max_hours: float = 0.5
@@ -129,7 +130,7 @@ def train_next10(data: dict[str, Dataset10], cfg: Fit10Config | None = None, see
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: (s + 1) / warm if s < warm else
                                               0.5 * (1 + math.cos(math.pi * min(1.0, (s - warm) / max(1, total - warm)))) * 0.99 + 0.01)
     rng = np.random.default_rng(seed)
-    vcfg = ViewMaskConfig(p_apply=cfg.view_mask_p)
+    vcfg = video_config(p_apply=cfg.view_mask_p) if cfg.view_mode == "video" else ViewMaskConfig(p_apply=cfg.view_mask_p)
     best, best_state, bad, step, t0 = math.inf, None, 0, 0, time.time()
     hist: dict = {"train": [], "val": [], "n_params": model.n_params(), "device": str(dev), "n_train": int(len(tidx)),
                   "config": asdict(cfg)}
@@ -186,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--no-film", action="store_true")
     p.add_argument("--no-view-mask", action="store_true")
+    p.add_argument("--view-mode", choices=("cone", "video"), default="cone")
+    p.add_argument("--view-mask-p", type=float, default=0.5)
     p.add_argument("--tag", default="", help="suffix of the checkpoint names (ablations)")
     p.add_argument("--max-steps", type=int, default=None)
     p.add_argument("--max-hours", type=float, default=0.5)
@@ -196,11 +199,11 @@ def main(argv: list[str] | None = None) -> int:
     for s, d in data.items():
         print(f"{s}: {len(d)} samples, {int(d.a['open_play'].sum())} open play, teams in table {d.table.size - 1}")
     cfg = Fit10Config(epochs=a.epochs, batch=a.batch, lr=a.lr, film=not a.no_film,
-                      view_mask_p=0.0 if a.no_view_mask else 0.5, max_steps=a.max_steps, max_hours=a.max_hours)
+                      view_mask_p=0.0 if a.no_view_mask else a.view_mask_p, view_mode=a.view_mode, max_steps=a.max_steps, max_hours=a.max_hours)
     out_dir = Path(a.ckpt_dir)
     members = []
     for seed in a.seeds:
-        print(f"== seed {seed} film={cfg.film} view_mask_p={cfg.view_mask_p}")
+        print(f"== seed {seed} film={cfg.film} view_mask_p={cfg.view_mask_p} view_mode={cfg.view_mode}")
         model, hist = train_next10(data, cfg, seed, a.device)
         name = f"next10{a.tag}_seed{seed}.pt"
         save_critic(model, out_dir / name, seed, data["train"].table, {"history": hist})

@@ -1,8 +1,11 @@
 """Metrica Sports sample data: two anonymised games at 25 Hz with events (parity / smoke source only).
 
 Source: https://github.com/metrica-sports/sample-data (CC BY-NC 4.0 on the data, attribution to Metrica
-Sports). Cached under ``backend/data/local/tacticsml/raw/metrica``. Games 1 and 2 are CSV; game 3 is
-EPTS and is not used. Events come from the sample ``RawEventsData.csv``.
+Sports). Cached under ``backend/data/local/tacticsml/raw/metrica``. Games 1 and 2 are CSV (events from
+``RawEventsData.csv``); game 3 is EPTS tracking with Metrica JSON events, read through kloppy.
+
+LICENCE: the data is CC BY-NC 4.0, i.e. non-commercial. It is for research and evaluation only and must not
+ship in, or be used to train weights for, a commercial build without a separate licence from Metrica Sports.
 """
 
 from __future__ import annotations
@@ -21,7 +24,8 @@ from matchlens.tacticsml.train.sources._common import (
 SOURCE = "metrica"
 RAW = schema.RAW_ROOT / "metrica"
 BASE = "https://raw.githubusercontent.com/metrica-sports/sample-data/master/data"
-GAMES = ("1", "2")
+GAMES = ("1", "2", "3")
+EPTS_GAMES = ("3",)
 SAMPLE_RATE = 1 / 5
 
 
@@ -53,9 +57,53 @@ def to_levents(rows: list[dict[str, str]]) -> list[LEvent]:
     return out
 
 
+def fetch_epts(game: str, root: Path = RAW) -> tuple[Path, Path, Path]:
+    name = f"Sample_Game_{game}"
+    files = (f"{name}_metadata.xml", f"{name}_tracking.txt", f"{name}_events.json")
+    return tuple(download(f"{BASE}/{name}/{f}", root / name / f) for f in files)  # type: ignore[return-value]
+
+
+def epts_levents(events_ds) -> list[LEvent]:
+    """kloppy event dataset of an EPTS/JSON game -> ``LEvent`` (team ids are the tracking team ids)."""
+    out: list[LEvent] = []
+    for e in events_ds.records:
+        et = str(getattr(e.event_type, "value", e.event_type)).upper()
+        if e.player is None or e.team is None:
+            continue
+        team, pid, t, per = str(e.team.team_id), str(e.player.player_id), e.timestamp.total_seconds(), int(e.period.id)
+        res = str(getattr(e.result, "value", e.result) or "").upper()
+        if et == "PASS":
+            rec = getattr(e, "receiver_player", None)
+            out.append(LEvent(t=t, team_id=team, player_id=pid, kind="pass", period=per,
+                              receiver_id=str(rec.player_id) if rec else None,
+                              outcome="success" if res == "COMPLETE" else "fail"))
+        elif et == "SHOT":
+            out.append(LEvent(t=t, team_id=team, player_id=pid, kind="shot", period=per,
+                              outcome="goal" if res == "GOAL" else "miss"))
+        elif et == "CARRY":
+            out.append(LEvent(t=t, team_id=team, player_id=pid, kind="carry", period=per))
+        elif et == "RECOVERY":
+            out.append(LEvent(t=t, team_id=team, player_id=pid, kind="gain", period=per))
+    return sorted(out, key=lambda x: (x.period, x.t))
+
+
+def iter_match_epts(game: str, root: Path = RAW, random_hz: float = 0.5) -> Iterator[Item]:
+    from kloppy import metrica
+
+    meta, track, events = fetch_epts(game, root)
+    ds = metrica.load_tracking_epts(meta_data=str(meta), raw_data=str(track), sample_rate=SAMPLE_RATE)
+    table = table_from_kloppy(ds, lambda fr: fr.timestamp.total_seconds())
+    ev = metrica.load_event(event_data=str(events), meta_data=str(meta))
+    levents = snap_events(table, epts_levents(ev))
+    yield from tracking_samples(SOURCE, f"game{game}", table, levents, random_hz, note="Metrica sample data (EPTS)")
+
+
 def iter_match(game: str, root: Path = RAW, random_hz: float = 0.5) -> Iterator[Item]:
     from kloppy import metrica
 
+    if game in EPTS_GAMES:
+        yield from iter_match_epts(game, root, random_hz)
+        return
     home, away, events = fetch(game, root)
     ds = metrica.load_tracking_csv(home_data=str(home), away_data=str(away), sample_rate=SAMPLE_RATE)
     table = table_from_kloppy(ds, lambda fr: fr.timestamp.total_seconds())

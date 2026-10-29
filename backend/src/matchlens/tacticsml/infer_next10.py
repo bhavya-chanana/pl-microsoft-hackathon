@@ -4,7 +4,7 @@ It reproduces ``train/next10.py`` (critic + FiLM + heads) and ``train/trajectory
 ``.npz`` files written by ``train/export10.py``; ``tests/test_next10_model.py`` checks numpy against torch to 1e-5.
 Constants are duplicated from the training modules on purpose (importing them would import torch).
 
-Weights are read from ``MATCHLENS_NEXT10_WEIGHTS`` if set, else ``backend/data/local/tacticsml/next10/weights``
+Weights are read from ``MATCHLENS_NEXT10_WEIGHTS`` if set (point it at ``.../weights`` for v1), else ``backend/data/local/tacticsml/next10/weights_v2`` (next10-v2), else ``.../weights``
 (``manifest.json`` + ``critic_seed*.npz`` + optional ``trajectory.npz``); every file's sha256 is checked. The
 deployed Tactics Board model (``learned.py``, ``registry.py``) is a different, untouched code path.
 
@@ -21,6 +21,7 @@ direction is undone), so a home team that attacks +x in the input is still attac
                      "top_cells": [{"row", "col", "p"} x5], "expected_xy": [x, y]},
      "receivers": [{"player_id", "p", "std"} x top_k], "receiver_lost": p,
      "action_next": {"pass", "carry", "shot", "other"},
+     "embedding": [64 floats],      # mean over members of the D2-averaged critic embedding (retrieval / similar moments)
      "trajectories": {"dt_s": 1.0, "horizon_s": 10, "k": 6,
                       "entities": [{"entity_id", "modes": [{"p", "path": [[x, y] x 10]}]}]}}   # path[i] = t+i+1 s
 """
@@ -52,7 +53,9 @@ NEXT10_FORMAT = "tacticsml-next10-v1"
 TRAJ_FORMAT = "tacticsml-traj-v1"
 ENV_WEIGHTS = "MATCHLENS_NEXT10_WEIGHTS"
 BACKEND_DIR = Path(__file__).resolve().parents[3]
-DEFAULT_DIR = BACKEND_DIR / "data" / "local" / "tacticsml" / "next10" / "weights"
+DEFAULT_DIR_V1 = BACKEND_DIR / "data" / "local" / "tacticsml" / "next10" / "weights"
+DEFAULT_DIR_V2 = BACKEND_DIR / "data" / "local" / "tacticsml" / "next10" / "weights_v2"
+DEFAULT_DIR = DEFAULT_DIR_V1  # kept for callers that name it; ``weights_dir`` prefers v2
 MANIFEST = "manifest.json"
 ACTIONS = ("pass", "carry", "shot", "other")
 N_AGENTS = F.BALL + 1
@@ -271,7 +274,7 @@ def _sha(path: Path) -> str:
 
 def weights_dir() -> Path | None:
     env = os.getenv(ENV_WEIGHTS)
-    for d in ([Path(env)] if env else []) + [DEFAULT_DIR]:
+    for d in ([Path(env)] if env else []) + [DEFAULT_DIR_V2, DEFAULT_DIR_V1]:
         if (d / MANIFEST).is_file():
             return d
     return None
@@ -330,7 +333,7 @@ class Next10Model:
     # ------------------------------------------------------------ predict
     def predict_batch(self, frames: Sequence[TFrame], team_names: Sequence[tuple[str | None, str | None]] | None = None,
                       observed_ids: Sequence[frozenset[str] | None] | None = None, top_k: int = 3,
-                      with_trajectories: bool = True) -> list[dict[str, Any]]:
+                      with_trajectories: bool = True, with_embedding: bool = True) -> list[dict[str, Any]]:
         if not frames:
             return []
         batch, samples = self._batch(frames, observed_ids)
@@ -350,20 +353,21 @@ class Next10Model:
         trajs = self.traj.forward(batch) if (self.traj is not None and with_trajectories) else None
         res = []
         for b, (frame, s) in enumerate(zip(frames, samples)):
-            res.append(self._one(b, frame, s, mean, pm, trajs, top_k, ids[b]))
+            res.append(self._one(b, frame, s, mean, pm, trajs, top_k, ids[b], with_embedding))
         return res
 
     def predict(self, frame: TFrame, team_names: tuple[str | None, str | None] | None = None,
-                observed_ids: frozenset[str] | None = None, top_k: int = 3, with_trajectories: bool = True
-                ) -> dict[str, Any]:
+                observed_ids: frozenset[str] | None = None, top_k: int = 3, with_trajectories: bool = True,
+                with_embedding: bool = True) -> dict[str, Any]:
         return self.predict_batch([frame], [team_names] if team_names else None,
-                                  [observed_ids] if observed_ids is not None else None, top_k, with_trajectories)[0]
+                                  [observed_ids] if observed_ids is not None else None, top_k, with_trajectories,
+                                  with_embedding)[0]
 
     def _blend(self, direct, decomp):
         return {"direct": direct, "decomposed": decomp}.get(self.shot_mode, 0.5 * (direct + decomp))
 
     def _one(self, b: int, frame: TFrame, s: F.GraphSample, mean: dict, pm: dict, trajs: dict | None, top_k: int,
-             tids: np.ndarray) -> dict[str, Any]:
+             tids: np.ndarray, with_embedding: bool = True) -> dict[str, Any]:
         flip = np.array([-1.0 if s.flipped_x else 1.0, 1.0])
         sd = lambda key: float(np.std([m[b] for m in pm[key]])) if len(pm[key]) > 1 else 0.0  # noqa: E731
         direct = float(sigmoid(mean["outcome_logits"][b, 0]))
@@ -401,6 +405,8 @@ class Next10Model:
             "receiver_lost": float(rp[N_SLOTS]),
             "action_next": dict(zip(ACTIONS, (float(v) for v in softmax(mean["action_logits"][b], -1)))),
         }
+        if with_embedding:
+            out["embedding"] = [float(v) for v in mean["embedding"][b]]
         if trajs is not None:
             pi = softmax(trajs["pi_logits"][b], -1)
             mu = trajs["mu"][b]  # (K, N, H, 2) canonical
@@ -429,8 +435,8 @@ def _default_model() -> Next10Model | None:
 
 
 def infer_next10(frame: TFrame, team_names: tuple[str | None, str | None] | None = None,
-                 observed_ids: frozenset[str] | None = None, top_k: int = 3, with_trajectories: bool = True
-                 ) -> dict[str, Any] | None:
+                 observed_ids: frozenset[str] | None = None, top_k: int = 3, with_trajectories: bool = True,
+                 with_embedding: bool = True) -> dict[str, Any] | None:
     """The live-service entry point: predict the next 10 s of ``frame`` (None when no weights are installed).
 
     ``frame``: a ``contract.TFrame`` in absolute metres (0..105 x 0..68) with up to 4 history frames 1 s apart,
@@ -439,4 +445,5 @@ def infer_next10(frame: TFrame, team_names: tuple[str | None, str | None] | None
     seen (video); the rest count as imputed (observed = 0).
     """
     model = _default_model()
-    return None if model is None else model.predict(frame, team_names, observed_ids, top_k, with_trajectories)
+    return (None if model is None else
+            model.predict(frame, team_names, observed_ids, top_k, with_trajectories, with_embedding))

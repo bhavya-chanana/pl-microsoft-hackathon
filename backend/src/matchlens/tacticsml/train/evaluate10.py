@@ -37,12 +37,13 @@ from matchlens.tacticsml import features as F
 from matchlens.tacticsml import next10_common as C
 from matchlens.tacticsml.train import evaluate as E
 from matchlens.tacticsml.train import schema
-from matchlens.tacticsml.train.augment import ViewMaskConfig
+from matchlens.tacticsml.train.augment import FOOTPRINT_BANK, ViewMaskConfig, video_config
 from matchlens.tacticsml.train.data10 import Dataset10, load_next10
 
 MIN_N = 30
 SOURCES = ("sportec", "skillcorner", "statsbomb360")
 MASK_SEED = 777
+MASS_RADIUS_M = 10.0  # ball_zone10 headline: probability mass within this distance of the true ball position at t+10 s
 
 
 def _sig(x: np.ndarray) -> np.ndarray:
@@ -84,7 +85,8 @@ def zone_report(probs: np.ndarray, cell: np.ndarray, true_xy: np.ndarray) -> dic
     p3 = probs.reshape(n, C.GRID_ROWS, C.GRID_COLS)
     row, col = cell // C.GRID_COLS, cell % C.GRID_COLS
     dist = np.linalg.norm(C.CELL_CENTRES[None] - true_xy[:, None], axis=-1)
-    return {"n": n, "top1": float((rank < 1).mean()), "top3": float((rank < 3).mean()), "top5": float((rank < 5).mean()),
+    return {"n": n, "mass10m": float((probs * (dist <= MASS_RADIUS_M)).sum(1).mean()),
+            "top1": float((rank < 1).mean()), "top3": float((rank < 3).mean()), "top5": float((rank < 5).mean()),
             "nll": float(-np.log(np.clip(probs[np.arange(n), cell], 1e-9, None)).mean()),
             "rps_x": rps_1d(p3.sum(1), col), "rps_y": rps_1d(p3.sum(2), row),
             "dist_m": float((probs * dist).sum(1).mean())}
@@ -127,20 +129,20 @@ def action_report(logits: np.ndarray, y: np.ndarray) -> dict[str, Any]:
 def status(value: float | None, op: str, thr: float, n: int = MIN_N) -> str:
     if value is None or not np.isfinite(value) or n < MIN_N:
         return "NOT_EVALUATED"
-    ok = {">=": value >= thr, "<=": value <= thr, "<": value < thr}[op]
+    ok = {">=": value >= thr, "<=": value <= thr, "<": value < thr, ">": value > thr}[op]
     return "PASS" if ok else "FAIL"
 
 
 # ============================================================ predictions
 
 def predict_members(models: list, ds: Dataset10, idx: np.ndarray, device, masked: bool = False,
-                    unknown_teams: bool = False) -> list[dict[str, np.ndarray]]:
+                    unknown_teams: bool = False, view_cfg: ViewMaskConfig | None = None) -> list[dict[str, np.ndarray]]:
     from matchlens.tacticsml.train.fit10 import predict_critic
 
     outs = []
     for m in models:
         rng = np.random.default_rng(MASK_SEED) if masked else None
-        outs.append(predict_critic(m, ds, idx, device, view_rng=rng, view_cfg=ViewMaskConfig(p_apply=1.0),
+        outs.append(predict_critic(m, ds, idx, device, view_rng=rng, view_cfg=view_cfg or ViewMaskConfig(p_apply=1.0),
                                    team_ids=np.zeros((len(idx), 2), np.int64) if unknown_teams else None))
     return outs
 
@@ -277,8 +279,11 @@ def trajectory_section(traj, ds: Dataset10, idx: np.ndarray, device, sources: Se
     from matchlens.tacticsml.train.trajectory import evaluate_trajectory
 
     out: dict[str, Any] = {}
-    for masked in (False, True):
-        key = "masked" if masked else "clean"
+    variants = [("clean", None), ("masked", ViewMaskConfig(p_apply=1.0))]
+    if FOOTPRINT_BANK.exists():
+        variants.append(("video_masked", video_config()))
+    for key, vcfg in variants:
+        masked = vcfg is not None
         out[key] = {}
         for src in (*sources, "pooled"):
             sel = idx[(ds.a["fut_valid"][idx, -1, F.BALL]) & ds.a["open_play"][idx]
@@ -287,7 +292,146 @@ def trajectory_section(traj, ds: Dataset10, idx: np.ndarray, device, sources: Se
                 continue
             sel = sel[:: max(1, len(sel) // 6000)]
             rng = np.random.default_rng(MASK_SEED) if masked else None
-            out[key][src] = evaluate_trajectory(traj, ds, sel, device, rng, ViewMaskConfig(p_apply=1.0))
+            out[key][src] = evaluate_trajectory(traj, ds, sel, device, rng, vcfg)
+    return out
+
+
+# ============================================================ cluster bootstrap by match and per-seed spread
+
+N_BOOT = 1000
+
+
+def match_groups(ds: Dataset10, rows: np.ndarray) -> list[np.ndarray]:
+    """Positions (into ``rows``) grouped by match: the unit that is resampled."""
+    key = np.char.add(np.char.add(ds.a["source"][rows].astype(str), ":"), ds.a["match_id"][rows].astype(str))
+    return [np.flatnonzero(key == k) for k in np.unique(key)]
+
+
+def bootstrap(groups: list[np.ndarray], fn, n_boot: int = N_BOOT, seed: int = 0) -> dict[str, Any]:
+    """95% percentile interval of ``fn(positions)`` over matches resampled with replacement. With fewer than 3 matches
+    the interval is not reported (a bootstrap of one or two clusters says nothing)."""
+    full = fn(np.concatenate(groups)) if groups else float("nan")
+    out: dict[str, Any] = {"value": full, "matches": len(groups)}
+    if len(groups) < 3:
+        return {**out, "lo": None, "hi": None}
+    rng = np.random.default_rng(seed)
+    stats = []
+    for _ in range(n_boot):
+        pick = rng.integers(0, len(groups), len(groups))
+        v = fn(np.concatenate([groups[j] for j in pick]))
+        if np.isfinite(v):
+            stats.append(v)
+    lo, hi = np.percentile(stats, [2.5, 97.5]) if len(stats) > 20 else (None, None)
+    return {**out, "lo": None if lo is None else float(lo), "hi": None if hi is None else float(hi)}
+
+
+def sample_arrays(ds: Dataset10, idx: np.ndarray, pr: dict[str, np.ndarray], sel: np.ndarray, train: Dataset10
+                  ) -> dict[str, np.ndarray]:
+    """Per-sample quantities of the open-play samples ``idx[sel]`` for the additive metrics."""
+    a, i = ds.a, idx[sel]
+    out: dict[str, np.ndarray] = {"rows": i, "shot": a["shot10"][i], "p_shot": pr["shot"][sel], "poss": a["poss10"][i],
+                                  "p_poss": pr["poss10"][sel], "zcell": a["zone_cell"][i]}
+    ok = out["zcell"] >= 0
+    z = np.full((len(i), 3), np.nan)
+    if ok.any():
+        txy = a["fut_pos"][i][ok][:, -1, F.BALL].astype(np.float32)
+        probs = pr["zone"][sel][ok]
+        dist = np.linalg.norm(C.CELL_CENTRES[None] - txy[:, None], axis=-1)
+        rank = (np.argsort(-probs, 1) == out["zcell"][ok][:, None]).argmax(1)
+        cur = a["pos"][i][ok][:, -1, F.BALL].astype(np.float32)
+        pers = [v for k, v in zone_baselines(train, cur).items() if k.startswith("persistence")][0]
+        z[ok, 0] = (probs * (dist <= MASS_RADIUS_M)).sum(1)
+        z[ok, 1] = rank < 5
+        z[ok, 2] = (pers * (dist <= MASS_RADIUS_M)).sum(1)
+    out["zone"] = z
+    return out
+
+
+def ci_for_scope(arr: dict[str, np.ndarray], ds: Dataset10, seed: int = 0) -> dict[str, Any]:
+    groups = match_groups(ds, arr["rows"])
+    y, p = arr["shot"], arr["p_shot"]
+    yp, pp = arr["poss"], arr["p_poss"]
+    z = arr["zone"]
+
+    def shot_stat(f):
+        def fn(pos):
+            ok = y[pos] >= 0
+            return f(y[pos][ok], p[pos][ok]) if ok.sum() >= MIN_N and 0 < y[pos][ok].sum() < ok.sum() else float("nan")
+        return fn
+
+    def brier_skill(pos):
+        ok = y[pos] >= 0
+        yy, qq = y[pos][ok], p[pos][ok]
+        ref = yy.mean() * (1 - yy.mean())
+        return 1.0 - E.brier(yy, qq) / ref if ref > 0 else float("nan")
+
+    def poss_skill(pos):
+        ok = yp[pos] >= 0
+        yy, qq = yp[pos][ok], pp[pos][ok]
+        if ok.sum() < MIN_N:
+            return float("nan")
+        ref = yy.mean() * (1 - yy.mean())
+        return 1.0 - E.brier(yy, qq) / ref if ref > 0 else float("nan")
+
+    def zmean(col):
+        return lambda pos: float(np.nanmean(z[pos, col])) if np.isfinite(z[pos, col]).sum() >= MIN_N else float("nan")
+
+    def zgain(pos):
+        a_, b_ = z[pos, 0], z[pos, 2]
+        ok = np.isfinite(a_)
+        return float(a_[ok].mean() - b_[ok].mean()) if ok.sum() >= MIN_N else float("nan")
+
+    return {"shot10_auc": bootstrap(groups, shot_stat(E.auc), seed=seed), "shot10_ece": bootstrap(groups, shot_stat(E.ece), seed=seed),
+            "shot10_brier_skill": bootstrap(groups, brier_skill, seed=seed),
+            "poss10_brier_skill": bootstrap(groups, poss_skill, seed=seed),
+            "zone_mass10m": bootstrap(groups, zmean(0), seed=seed), "zone_top5": bootstrap(groups, zmean(1), seed=seed),
+            "zone_mass10m_gain_vs_persistence": bootstrap(groups, zgain, seed=seed)}
+
+
+def traj_samples(traj, ds: Dataset10, rows: np.ndarray, device) -> dict[str, np.ndarray]:
+    """Per-sample sums of final-horizon errors (players only) for bootstrapping the pooled ratios."""
+    from matchlens.tacticsml.train.trajectory import N_AGENTS, predict_numpy
+
+    mu, pi, last = predict_numpy(traj, ds, rows, device)
+    fut = ds.a["fut_pos"][rows].astype(np.float32)
+    ok = ds.a["fut_valid"][rows][:, -1, :F.BALL] & (ds.a["node_mask"][rows][:, :F.BALL] > 0)  # (n, 22) players with a 10 s future
+    tgt = fut[:, -1, :F.BALL]
+    err = np.linalg.norm(mu[:, :, :F.BALL, -1] - tgt[:, None], axis=-1)  # (n, K, 22)
+    top = pi.argmax(1)
+    still = np.linalg.norm(last[:, :F.BALL, :2] - tgt, axis=-1)
+    cv = np.linalg.norm(last[:, :F.BALL, :2] + last[:, :F.BALL, 2:] * 10.0 - tgt, axis=-1)
+    w = ok.astype(float)
+    return {"n": w.sum(1), "min": (err.min(1) * w).sum(1), "top1": (err[np.arange(len(top)), top] * w).sum(1),
+            "still": (still * w).sum(1), "cv": (cv * w).sum(1), "rows": rows}
+
+
+def traj_ci(t: dict[str, np.ndarray], ds: Dataset10, seed: int = 0) -> dict[str, Any]:
+    groups = match_groups(ds, t["rows"])
+
+    def ratio(a, b):
+        return lambda pos: 1.0 - t[a][pos].sum() / max(t[b][pos].sum(), 1e-9) if t["n"][pos].sum() >= MIN_N else float("nan")
+    return {"minfde_vs_still": bootstrap(groups, ratio("min", "still"), seed=seed),
+            "top1_vs_still": bootstrap(groups, ratio("top1", "still"), seed=seed),
+            "minfde_vs_cv": bootstrap(groups, ratio("min", "cv"), seed=seed)}
+
+
+def seed_spread(outs: list[dict[str, np.ndarray]], ds: Dataset10, idx: np.ndarray, sel: np.ndarray, shot_mode: str,
+                train: Dataset10) -> dict[str, Any]:
+    """Headline numbers of every ensemble member alone: the seed-to-seed spread."""
+    rows: list[dict[str, float]] = []
+    for o in outs:
+        pr = ensemble([o], shot_mode)
+        r = head_report(ds, idx, pr, sel)
+        a = sample_arrays(ds, idx, pr, sel, train)
+        rows.append({"shot10_auc": r["shot10"].get("auc"), "shot10_ece": r["shot10"].get("ece"),
+                     "shot10_brier_skill": r["shot10"].get("brier_skill"),
+                     "zone_mass10m": float(np.nanmean(a["zone"][:, 0])), "zone_top5": float(np.nanmean(a["zone"][:, 1])),
+                     "poss10_auc": r.get("poss10", {}).get("auc")})
+    out: dict[str, Any] = {"members": rows}
+    for k in rows[0]:
+        v = np.array([r[k] for r in rows], dtype=float)
+        out[k] = {"mean": float(np.nanmean(v)), "sd": float(np.nanstd(v, ddof=1)) if len(v) > 1 else None,
+                  "min": float(np.nanmin(v)), "max": float(np.nanmax(v))}
     return out
 
 
@@ -383,10 +527,14 @@ def run(ckpt_dir: Path | None = None, shards: Path | None = None, legacy_shards:
                                                            for k, v in pr.items()})}
     log("ablation: main ensemble, view-masked test")
     ablations["main_masked"] = abl_report(ensemble(predict_members(models, test, abl_idx, dev, masked=True), shot_mode))
+    if FOOTPRINT_BANK.exists():
+        log("ablation: main ensemble, video-masked test (footprint replay, absent players, seen-player noise)")
+        ablations["main_video_masked"] = abl_report(ensemble(predict_members(models, test, abl_idx, dev, masked=True,
+                                                                             view_cfg=video_config()), shot_mode))
     log("ablation: FiLM teams set to unknown")
     ablations["main_unknown_teams"] = abl_report(ensemble(predict_members(models, test, abl_idx, dev, unknown_teams=True),
                                                          shot_mode))
-    for tag, label in (("_nofilm", "film_off"), ("_noaug", "viewmask_aug_off")):
+    for tag, label in (("_nofilm", "film_off"), ("_noaug", "viewmask_aug_off"), ("_cone", "viewmask_cone_aug")):
         fs = sorted(ckpt_dir.glob(f"next10{tag}_seed*.pt"))
         if not fs:
             ablations[label] = "NOT_EVALUATED: no checkpoint"
@@ -396,6 +544,9 @@ def run(ckpt_dir: Path | None = None, shards: Path | None = None, legacy_shards:
         ablations[label] = {"members": [p.name for p in fs],
                             "clean": abl_report(ensemble(predict_members(ms, test, abl_idx, dev), shot_mode)),
                             "masked": abl_report(ensemble(predict_members(ms, test, abl_idx, dev, masked=True), shot_mode))}
+        if FOOTPRINT_BANK.exists():
+            ablations[label]["video_masked"] = abl_report(ensemble(predict_members(ms, test, abl_idx, dev, masked=True,
+                                                                                   view_cfg=video_config()), shot_mode))
         if label == "film_off":  # like with like: the main model's first member alone
             single = ensemble(predict_members(models[:1], test, abl_idx, dev), shot_mode)
             ablations["film_on_single_member"] = abl_report(single)
@@ -404,6 +555,9 @@ def run(ckpt_dir: Path | None = None, shards: Path | None = None, legacy_shards:
             ablations["viewmask_aug_on_single_member_masked"] = abl_report(single)
             ablations["viewmask_aug_on_single_member_clean"] = abl_report(ensemble(predict_members(models[:1], test, abl_idx, dev),
                                                                                   shot_mode))
+            if FOOTPRINT_BANK.exists():
+                ablations["viewmask_aug_on_single_member_video"] = abl_report(ensemble(
+                    predict_members(models[:1], test, abl_idx, dev, masked=True, view_cfg=video_config()), shot_mode))
     report["ablations"] = ablations
     # ---- trajectories
     tp = ckpt_dir / "trajectory_seed0.pt"
@@ -413,6 +567,28 @@ def run(ckpt_dir: Path | None = None, shards: Path | None = None, legacy_shards:
         report["trajectory"] = trajectory_section(traj, test, idx, dev, ("sportec", "skillcorner"))
     else:
         report["trajectory"] = "NOT_EVALUATED: no trajectory checkpoint"
+    # ---- confidence intervals by match and seed spread
+    log("bootstrap by match")
+    ci: dict[str, Any] = {}
+    for name in ("pooled/open_play", "sportec/open_play", "skillcorner/open_play", "statsbomb360/open_play"):
+        sel = subsets[name]
+        if sel.sum() < MIN_N:
+            continue
+        ci[name] = ci_for_scope(sample_arrays(test, idx, pr, sel, train), test)
+    report["ci"] = ci
+    report["seeds"] = {name: seed_spread(outs, test, idx, subsets[name], shot_mode, train)
+                       for name in ("pooled/open_play", "sportec/open_play", "skillcorner/open_play")
+                       if subsets[name].sum() >= MIN_N}
+    if traj is not None:
+        tci: dict[str, Any] = {}
+        for name, srcs in (("pooled/open_play", ("sportec", "skillcorner")), ("sportec/open_play", ("sportec",)),
+                           ("skillcorner/open_play", ("skillcorner",))):
+            rows = idx[subsets[name] & test.a["fut_valid"][idx, -1, F.BALL] & np.isin(test.a["source"][idx], srcs)]
+            if len(rows) < MIN_N:
+                continue
+            rows = rows[:: max(1, len(rows) // 6000)]
+            tci[name] = traj_ci(traj_samples(traj, test, rows, dev), test)
+        report["trajectory_ci"] = tci
     # ---- D2
     log("D2 checks")
     d2 = d2_check(models, traj, test, idx[subsets["pooled/open_play"]], device="cpu")
@@ -440,18 +616,31 @@ def targets(r: dict[str, Any]) -> list[dict[str, Any]]:
     def add(tid: str, desc: str, scope: str, value, n, op: str, thr: float) -> None:
         rows.append({"id": tid, "target": desc, "scope": scope, "value": value, "n": n, "status": status(value, op, thr, n or 0)})
 
+    def add_info(tid: str, desc: str, scope: str, value, n) -> None:
+        rows.append({"id": tid, "target": desc, "scope": scope, "value": value, "n": n,
+                     "status": "INFO" if value is not None and (n or 0) >= MIN_N else "NOT_EVALUATED"})
+
     for scope in ("pooled/open_play", "sportec/open_play", "skillcorner/open_play", "statsbomb360/open_play"):
         h = r["heads"].get(scope, {})
         add("shot10_auc", "open-play shot10 AUC >= 0.85", scope, _get(h, "shot10", "auc"), _get(h, "shot10", "n"), ">=", 0.85)
         add("shot10_ece", "open-play shot10 ECE <= 0.03", scope, _get(h, "shot10", "ece"), _get(h, "shot10", "n"), "<=", 0.03)
     for scope in ("pooled/open_play", "sportec/open_play", "skillcorner/open_play"):
         h = r["heads"].get(scope, {})
-        add("zone_top5", "ball_zone10 top-5 cell accuracy >= 0.6", scope, _get(h, "zone", "top5"), _get(h, "zone", "n"), ">=", 0.6)
+        zb = r.get("zone_baselines", {}).get(scope, {})
+        base = [v.get("mass10m") for k, v in zb.items() if k != "model" and v.get("mass10m") is not None]
+        gain = None if not base or _get(zb, "model", "mass10m") is None else zb["model"]["mass10m"] - max(base)
+        add("zone_mass10", "ball_zone10 probability mass within 10 m of the true ball position beats the best baseline (model minus best baseline > 0)",
+            scope, gain, _get(h, "zone", "n"), ">", 0.0)
+        add_info("zone_top5", "ball_zone10 top-5 cell accuracy (secondary; round-1 target was 0.6)", scope, _get(h, "zone", "top5"), _get(h, "zone", "n"))
     tr = r.get("trajectory")
     if isinstance(tr, dict):
         for src, m in tr.get("clean", {}).items():
-            add("minfde_vs_cv", "player minFDE@10s >= 25% better than constant velocity (K=6 best-of vs 1 CV)", f"{src}/open_play",
-                m.get("player_minFDE_vs_cv"), m.get("n_samples"), ">=", 0.25)
+            add("minfde_vs_still", "player minFDE@10s >= 25% better than standing still (K=6 best-of vs the last position)", f"{src}/open_play",
+                m.get("player_minFDE_vs_still"), m.get("n_samples"), ">=", 0.25)
+            add_info("minfde_vs_cv", "player minFDE@10s vs constant velocity (secondary)", f"{src}/open_play",
+                     m.get("player_minFDE_vs_cv"), m.get("n_samples"))
+            add_info("top1_vs_still", "player most-probable-mode FDE@10s vs standing still (like-for-like single guess)", f"{src}/open_play",
+                     m.get("player_top1_FDE_vs_still"), m.get("n_samples"))
     d2 = r.get("d2", {})
     for dt in ("float32", "float64"):
         add("d2", f"D2 error < 1e-5 ({dt}, critic probabilities)", "test open play", _get(d2, dt, "critic_max_abs_prob_change"), d2.get("n"), "<", 1e-5)
@@ -477,7 +666,7 @@ def _vs(t: dict[str, Any], a: str, b: str) -> float | None:
 
 def to_markdown(r: dict[str, Any]) -> str:
     m = r["meta"]
-    L = ["# Next10 report (round 1)", "",
+    L = ["# Next10 report", "",
          f"Generated {m['created']} by `train/evaluate10.py` ({m['seconds']} s, device {m['device']}). Checkpoints: "
          f"{', '.join(m['members'])}. Test samples {m['test_samples']:,}; train samples {m['train_samples']:,}. Shot probability "
          f"served as `{m['shot_mode']}`. Teams in the FiLM table: {len(m['team_table'])}; test samples with a known "
@@ -488,8 +677,8 @@ def to_markdown(r: dict[str, Any]) -> str:
     for t in r["targets"]:
         L.append(f"| {t['target']} | {t['scope']} | {_f(t['value'], 6 if t['id'].startswith('d2') else 3)} | {_f(t['n'])} | **{t['status']}** |")
     L += ["", "## Heads per source (test split)", "",
-          "| scope | n | shot10 AUC | Brier (base) | ECE | direct AUC | decomposed AUC | goal10 AUC | turn5 AUC | poss10 AUC | poss10 Brier (base) | recv top1 / top3 | zone top1 / 3 / 5 | zone NLL | RPS x / y | dist m |",
-          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+          "| scope | n | shot10 AUC | Brier (base) | ECE | direct AUC | decomposed AUC | goal10 AUC | turn5 AUC | poss10 AUC | poss10 Brier (base) | recv top1 / top3 | zone top1 / 3 / 5 | zone mass within 10 m | zone NLL | RPS x / y | dist m |",
+          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for name, h in r["heads"].items():
         s, d, dc, p = h.get("shot10", {}), h.get("shot10_direct", {}), h.get("shot10_decomposed", {}), h.get("poss10", {})
         z, rc = h.get("zone", {}), h.get("receiver", {})
@@ -497,12 +686,12 @@ def to_markdown(r: dict[str, Any]) -> str:
                  f"{_f(d.get('auc'))} | {_f(dc.get('auc'))} | {_f(h.get('goal10', {}).get('auc'))} | {_f(h.get('turn5', {}).get('auc'))} | "
                  f"{_f(p.get('auc'))} | {_f(p.get('brier'), 4)} ({_f(p.get('brier_base_rate'), 4)}) | "
                  f"{_f(rc.get('top1'))} / {_f(rc.get('top3'))} | {_f(z.get('top1'))} / {_f(z.get('top3'))} / {_f(z.get('top5'))} | "
-                 f"{_f(z.get('nll'))} | {_f(z.get('rps_x'), 4)} / {_f(z.get('rps_y'), 4)} | {_f(z.get('dist_m'), 2)} |")
+                 f"{_f(z.get('mass10m'))} | {_f(z.get('nll'))} | {_f(z.get('rps_x'), 4)} / {_f(z.get('rps_y'), 4)} | {_f(z.get('dist_m'), 2)} |")
     L += ["", "## ball_zone10 against baselines (open play, samples with a 10 s ball position)", "",
-          "| scope | model / baseline | n | top1 | top3 | top5 | NLL | RPS x | RPS y | dist m |", "|---|---|---|---|---|---|---|---|---|---|"]
+          "| scope | model / baseline | n | mass within 10 m | top1 | top3 | top5 | NLL | RPS x | RPS y | dist m |", "|---|---|---|---|---|---|---|---|---|---|---|"]
     for scope, d in r["zone_baselines"].items():
         for bn, z in d.items():
-            L.append(f"| {scope} | {bn} | {_f(z.get('n'))} | {_f(z.get('top1'))} | {_f(z.get('top3'))} | {_f(z.get('top5'))} | {_f(z.get('nll'))} | "
+            L.append(f"| {scope} | {bn} | {_f(z.get('n'))} | {_f(z.get('mass10m'))} | {_f(z.get('top1'))} | {_f(z.get('top3'))} | {_f(z.get('top5'))} | {_f(z.get('nll'))} | "
                      f"{_f(z.get('rps_x'), 4)} | {_f(z.get('rps_y'), 4)} | {_f(z.get('dist_m'), 2)} |")
     L += ["", "## shot10 against the pitch-control + xT baseline and the base rate (open play, even subsample)", "",
           "| scope | n | model AUC | baseline AUC | model Brier | baseline Brier | base-rate Brier |", "|---|---|---|---|---|---|---|"]
@@ -521,6 +710,8 @@ def to_markdown(r: dict[str, Any]) -> str:
           "| variant | input | scope | shot10 AUC | Brier | ECE | zone top5 | zone NLL | poss10 AUC | recv top3 |", "|---|---|---|---|---|---|---|---|---|---|"]
 
     def abl_rows(label: str, inp: str, d: Any) -> None:
+        if d is None:
+            return
         if not isinstance(d, dict):
             L.append(f"| {label} | {inp} | | {d} | | | | | | |")
             return
@@ -533,7 +724,9 @@ def to_markdown(r: dict[str, Any]) -> str:
                      f"{_f(_get(h, 'zone', 'top5'))} | {_f(_get(h, 'zone', 'nll'))} | {_f(_get(h, 'poss10', 'auc'))} | {_f(_get(h, 'receiver', 'top3'))} |")
 
     abl_rows("main ensemble", "clean", ab.get("main_clean"))
-    abl_rows("main ensemble", "view-masked", ab.get("main_masked"))
+    abl_rows("main ensemble", "view-masked (round-1 cone)", ab.get("main_masked"))
+    if ab.get("main_video_masked"):
+        abl_rows("main ensemble", "video-masked (footprint replay)", ab.get("main_video_masked"))
     abl_rows("main ensemble, teams -> unknown", "clean", ab.get("main_unknown_teams"))
     abl_rows("FiLM on (member 0)", "clean", ab.get("film_on_single_member"))
     fo = ab.get("film_off")
@@ -543,6 +736,12 @@ def to_markdown(r: dict[str, Any]) -> str:
     na = ab.get("viewmask_aug_off")
     abl_rows("view-mask aug off", "clean", na.get("clean") if isinstance(na, dict) else na)
     abl_rows("view-mask aug off", "view-masked", na.get("masked") if isinstance(na, dict) else na)
+    abl_rows("video-mask aug (member 0)", "video-masked", ab.get("viewmask_aug_on_single_member_video"))
+    abl_rows("view-mask aug off", "video-masked", na.get("video_masked") if isinstance(na, dict) else None)
+    co = ab.get("viewmask_cone_aug")
+    abl_rows("round-1 cone aug", "clean", co.get("clean") if isinstance(co, dict) else co)
+    abl_rows("round-1 cone aug", "view-masked (round-1 cone)", co.get("masked") if isinstance(co, dict) else co)
+    abl_rows("round-1 cone aug", "video-masked", co.get("video_masked") if isinstance(co, dict) else None)
     L += ["", "Receiver decomposition on / off is the `direct AUC` and `decomposed AUC` columns of the table above: the "
           "same model scored with its direct shot10 head and with `sum_i P(shot | recv i) P(recv i)`.", ""]
     tr = r["trajectory"]
@@ -552,7 +751,7 @@ def to_markdown(r: dict[str, Any]) -> str:
     else:
         L += ["| input | source | n | player minADE | minFDE | top-1 FDE | CV FDE | still FDE | minFDE vs CV | minFDE vs still | top-1 vs still | ball minFDE | ball CV FDE | minJADE | minJFDE | CV JFDE |",
               "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
-        for key in ("clean", "masked"):
+        for key in ("clean", "masked", "video_masked"):
             for src, t in tr.get(key, {}).items():
                 L.append(f"| {key} | {src} | {_f(t.get('n_samples'))} | {_f(t.get('player_minADE'), 2)} | {_f(t.get('player_minFDE'), 2)} | "
                          f"{_f(t.get('player_top1_FDE'), 2)} | {_f(t.get('player_cv_FDE'), 2)} | {_f(t.get('player_static_FDE'), 2)} | "
@@ -563,6 +762,34 @@ def to_markdown(r: dict[str, Any]) -> str:
               "guess, so the comparison favours the model; `top-1 FDE` (most probable mode) is the like-for-like single guess. "
               "`still FDE` is the error of standing at the last position: at 10 s constant velocity is worse than standing still "
               "(players change direction), so \"vs CV\" is the weaker yardstick and \"vs still\" the honest one."]
+    ci = r.get("ci", {})
+    if ci:
+        L += ["", "## 95% intervals by match (cluster bootstrap, matches resampled with replacement, "
+              f"{N_BOOT} draws; no interval below 3 matches)", "",
+              "| scope | matches | metric | value | 95% CI |", "|---|---|---|---|---|"]
+        for scope, d in ci.items():
+            for k, v in d.items():
+                lo, hi = v.get("lo"), v.get("hi")
+                L.append(f"| {scope} | {v.get('matches')} | {k} | {_f(v.get('value'), 4)} | "
+                         f"{'n/a' if lo is None else f'[{lo:.4f}, {hi:.4f}]'} |")
+    tci = r.get("trajectory_ci", {})
+    if tci:
+        L += ["", "## Trajectory 95% intervals by match (K = 6 best-of vs standing still; 1 - ratio of pooled FDE sums)", "",
+              "| scope | matches | metric | value | 95% CI |", "|---|---|---|---|---|"]
+        for scope, d in tci.items():
+            for k, v in d.items():
+                lo, hi = v.get("lo"), v.get("hi")
+                L.append(f"| {scope} | {v.get('matches')} | {k} | {_f(v.get('value'), 4)} | "
+                         f"{'n/a' if lo is None else f'[{lo:.4f}, {hi:.4f}]'} |")
+    sd = r.get("seeds", {})
+    if sd:
+        L += ["", "## Seed spread (each ensemble member alone, same test samples)", "",
+              "| scope | metric | mean | sd | min | max |", "|---|---|---|---|---|---|"]
+        for scope, d in sd.items():
+            for k, v in d.items():
+                if k == "members":
+                    continue
+                L.append(f"| {scope} | {k} | {_f(v['mean'], 4)} | {_f(v['sd'], 4)} | {_f(v['min'], 4)} | {_f(v['max'], 4)} |")
     d2 = r["d2"]
     L += ["", "## D2 invariance", "", f"{d2['n']} test samples, every output compared across the four reflections.", "",
           "| dtype | critic max abs probability change | trajectory max abs change (m / logits) |", "|---|---|---|"]
