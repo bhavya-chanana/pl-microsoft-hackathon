@@ -338,7 +338,7 @@ def fotmob_state(details: dict[str, Any], strength_home: float | None) -> MatchS
     shots = [Shot(side[s["teamId"]], fotmob_minute(s.get("min"), s.get("minAdded")),
                   float(s.get("expectedGoals") or 0.0), s.get("eventType") == "Goal")
              for s in ((details.get("content") or {}).get("shotmap") or {}).get("shots") or []
-             if s.get("teamId") in side and not s.get("isOwnGoal")]
+             if s.get("teamId") in side and not s.get("isOwnGoal") and s.get("period") != "PenaltyShootout"]
     events = ((details.get("content") or {}).get("matchFacts") or {}).get("events") or {}
     reds = [("home" if e.get("isHome") else "away", fotmob_minute(e.get("time"), e.get("overloadTime")))
             for e in events.get("events") or [] if e.get("type") == "Card" and e.get("card") in ("Red", "YellowRed")]

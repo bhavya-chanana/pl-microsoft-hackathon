@@ -105,6 +105,8 @@ def details(finished: bool = False, live: str | None = "31'") -> dict:
                 {"teamId": 2, "min": 18, "minAdded": None, "expectedGoals": 0.1, "eventType": "AttemptSaved"},
                 {"teamId": 1, "min": 45, "minAdded": 2, "expectedGoals": 0.5, "eventType": "Goal"},
                 {"teamId": 2, "min": 50, "minAdded": None, "expectedGoals": 0.0, "eventType": "Goal", "isOwnGoal": True},
+                {"teamId": 1, "min": 90, "minAdded": None, "expectedGoals": 0.79, "eventType": "Goal",
+                 "period": "PenaltyShootout"},
             ]},
             "matchFacts": {"events": {"events": [
                 {"type": "Card", "card": "Yellow", "time": 10, "isHome": True},
