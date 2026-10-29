@@ -11,9 +11,18 @@ holds ``chunks_done``, so a stopped run resumes where it left off, and a finishe
 The match is named, in order, by ``--match-id``, a sidecar ``<file>.json`` with ``{"match_id": ...}``, a file name
 containing ``fotmob-<id>`` (or ``fotmob_<id>``), or ``video:<fingerprint>``.
 
-Calibration: when ``matchlens.vision.bundle.solve_video`` exists (whole-match camera solution, ``--calibration
-bundle|auto``) every frame uses it; otherwise, or with ``--calibration frame``, the per-frame tracker in
-``vision/camera.py`` runs, started from the clip's ``labels.json`` keyframes or a ``--venue`` prior.
+Calibration: ``--calibration auto|bundle`` (the default) solves the whole video once with
+``matchlens.vision.bundle.solve_video`` (not once per chunk) and uses that for every frame; a frame the solution
+left out ("none") falls back to the per-frame tracker in ``vision/camera.py``, started from the clip's
+``labels.json`` keyframes or a ``--venue`` prior. ``--calibration frame`` uses the tracker alone. The solution is
+kept in ``data/local/video/jobs/<job_id>/calibration.json`` so a resumed job does not solve again. Frame docs say
+which one they got in ``calib_status`` (fitted | interpolated | none | frame).
+
+Match clock: ``--anchors anchors.json`` (or ``<clip workdir>/anchors.json``) pairs video seconds with the broadcast
+clock, ``[{"video_s": 14.0, "clock": "00:03", "period": 1}, ...]`` (or ``match_s``). ``vision.align`` turns them into
+a ClockMap (kept next to the calibration as ``clockmap.json``) which fills ``match_clock_s`` (null in the half-time
+break) and turns the second half round so home keeps attacking +x. Anchors that arrive after the run are applied
+with ``python -m matchlens.next10.clock <match_id> --anchors anchors.json`` (no re-detection).
 """
 
 from __future__ import annotations
@@ -29,6 +38,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from matchlens.next10.clock import build_clock, clock_function, finite, load_anchors
 from matchlens.next10.frames import Counts, utc_now
 from matchlens.next10.media import FrameReader, MediaError, build_command, classify, source_size
 from matchlens.store.next10 import Next10Settings, Next10Store
@@ -38,6 +48,7 @@ log = logging.getLogger("matchlens.vision.jobs")
 
 DATA = Path(__file__).resolve().parents[3] / "data" / "local" / "video"
 INBOX = DATA / "inbox"
+JOBS = DATA / "jobs"
 CHUNK_S = 30
 FINGERPRINT_BYTES = 1 << 20
 POLL_S = 5.0
@@ -88,9 +99,16 @@ def whole_match_solver():
     return getattr(bundle, "solve_video", None)
 
 
+def job_dir(job_id: str) -> Path:
+    return JOBS / job_id
+
+
 def make_calibrator(original: Path, video: Path, *, mode: str, fps: float, venue: str | None,
-                    labels: Path | None) -> tuple[Any, dict[str, Any]]:
-    """The calibrator for a file and what to record about it in the job document."""
+                    labels: Path | None, cache: Path | None = None) -> tuple[Any, dict[str, Any]]:
+    """The calibrator for a file and what to record about it in the job document.
+
+    Bundle modes solve the whole video once (``cache`` is where the solution is kept, and read back on a resume);
+    frames the solution has nothing for are calibrated one by one."""
     from matchlens.next10.chain import BundleCalibrator, TrackerCalibrator, anchors_from_labels
 
     labels = labels or workdir(original) / "labels.json"
@@ -98,22 +116,44 @@ def make_calibrator(original: Path, video: Path, *, mode: str, fps: float, venue
     solver = whole_match_solver() if mode in ("auto", "bundle") else None
     if mode == "bundle" and solver is None:
         raise MediaError("--calibration bundle: matchlens.vision.bundle.solve_video is not available")
-    if solver is not None:
+    if solver is None:
+        return TrackerCalibrator(anchors, venue=venue), {"mode": "frame", "venue": venue, "anchors": len(anchors)}
+    solution, reused, took = None, False, 0.0
+    if cache is not None and cache.exists():
+        try:
+            from matchlens.vision.bundle import MatchCalibration
+
+            solution = MatchCalibration.from_dict(json.loads(cache.read_text()))
+            reused = True
+        except (OSError, ValueError, KeyError, ImportError):
+            log.warning("unreadable calibration %s; solving again", cache)
+    if solution is None:
+        t0 = time.monotonic()
         solution = solver(video, fps=fps, anchors=anchors or None, venue=venue)
-        summary = solution.summary() if hasattr(solution, "summary") else {}
-        return BundleCalibrator(solution), {"mode": "bundle", "venue": venue, "anchors": len(anchors), "bundle": summary}
-    return TrackerCalibrator(anchors, venue=venue), {"mode": "frame", "venue": venue, "anchors": len(anchors)}
+        took = time.monotonic() - t0
+        if cache is not None:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            tmp = cache.with_suffix(".tmp")
+            tmp.write_text(json.dumps(solution.to_dict()))
+            tmp.replace(cache)
+    summary = solution.summary() if hasattr(solution, "summary") else {}
+    fallback = TrackerCalibrator(anchors, venue=venue)
+    return BundleCalibrator(solution, fallback), {
+        "mode": "bundle", "venue": venue, "anchors": len(anchors), "bundle": summary, "reused": reused,
+        "solve_s": round(took, 1), "file": None if cache is None else str(cache)}
 
 
 class VideoJob:
     def __init__(self, path: Path, *, store: Next10Store | None, match_id: str | None = None, fps: float = 5.0,
                  chunk_s: int = CHUNK_S, calibration: str = "auto", venue: str | None = None,
                  labels: Path | None = None, swap_teams: bool = False, width: int = 1920, detector: Any = None,
-                 force: bool = False) -> None:
+                 home_kit: str | None = None, force: bool = False, anchors: Path | None = None, jobs_dir: Path | None = None) -> None:
         self.path, self.store, self.fps, self.chunk_s = path.resolve(), store, fps, chunk_s
         self.calibration, self.venue, self.labels, self.swap_teams = calibration, venue, labels, swap_teams
+        self.home_kit = home_kit
         self.width, self.detector, self.force = width, detector, force
         self.given_match_id = match_id
+        self.anchors_path, self.jobs_dir = anchors, jobs_dir or JOBS
 
     async def _load(self, job_id: str) -> dict[str, Any] | None:
         return None if self.store is None else await self.store.read("video_jobs", job_id, job_id)
@@ -141,17 +181,22 @@ class VideoJob:
         prior = (job or {}).get("stats_total", {}) if done else {}
         job = {**(job or {}), "id": job_id, "job_id": job_id, "kind": "file", "path": self.path.name,
                "fingerprint": fp, "match_id": match_id, "status": "running", "chunk_s": self.chunk_s,
-               "chunks_done": done, "total_chunks": chunks, "duration_s": round(total_s, 1), "fps": self.fps,
+               "chunks_done": done, "total_chunks": chunks, "swap_teams": self.swap_teams, "home_kit": self.home_kit, "duration_s": round(total_s, 1), "fps": self.fps,
                "started_at": (job or {}).get("started_at") or utc_now(), "error": None}
         await self._save(job)
         log.info("%s -> %s: %d chunks of %ds, resuming at chunk %d", self.path.name, match_id, chunks, self.chunk_s, done)
 
+        out = self.jobs_dir / job_id
         calibrator, cal_info = await asyncio.to_thread(make_calibrator, self.path, video, mode=self.calibration,
-                                                       fps=self.fps, venue=self.venue, labels=self.labels)
+                                                       fps=self.fps, venue=self.venue, labels=self.labels,
+                                                       cache=out / "calibration.json")
         job["calibration"] = {**job.get("calibration", {}), **cal_info}
+        clock_map, clock_info = self._clock(out)
+        job["clock"] = clock_info
+        await self._save(job)
         centres = job["calibration"].get("team_centres")
         chain = FrameChain(match_id, calibrator, detector=self.detector or _detector(self.width), fps=self.fps,
-                           video_id=self.path.stem, swap_teams=self.swap_teams,
+                           video_id=self.path.stem, swap_teams=self.swap_teams, home_kit=self.home_kit, clock=clock_function(clock_map),
                            team_centres=None if centres is None else _array(centres))
         src = classify(str(video))
         size = source_size(src, self.width)
@@ -188,6 +233,21 @@ class VideoJob:
         job["elapsed_s"] = round(time.monotonic() - started, 1)
         await self._save(job)
         return job
+
+    def _clock(self, out: Path) -> tuple[Any, dict[str, Any]]:
+        """The ClockMap from the anchors file (saved as ``clockmap.json`` beside the calibration), if there is one."""
+        path = self.anchors_path or workdir(self.path) / "anchors.json"
+        if not path.exists():
+            return None, {"anchors": 0, "map": None}
+        anchors = load_anchors(path)
+        clock_map = build_clock(anchors)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "anchors.json").write_text(path.read_text())
+        if clock_map is not None:
+            (out / "clockmap.json").write_text(json.dumps(clock_map.to_dict()))
+        report = None if clock_map is None else finite({k: v for k, v in clock_map.report.to_dict().items() if k != "anchors"})
+        return clock_map, {"anchors": len(anchors), "map": None if clock_map is None else str(out / "clockmap.json"),
+                           "report": report}
 
     def _chunk(self, chain: Any, src: Any, size: tuple[int, int], k: int) -> list[dict[str, Any]]:
         start = k * self.chunk_s
@@ -252,7 +312,7 @@ async def _main(args: argparse.Namespace) -> None:
     if not args.no_store:
         store = await Next10Store(Next10Settings.from_env()).open()
     options = dict(fps=args.fps, chunk_s=args.chunk_s, calibration=args.calibration, venue=args.venue,
-                   labels=args.labels, swap_teams=args.swap_teams, width=args.width)
+                   labels=args.labels, swap_teams=args.swap_teams, width=args.width, anchors=args.anchors, home_kit=args.home_kit)
     try:
         if args.cmd == "run":
             job = await VideoJob(args.file, store=store, match_id=args.match_id, force=args.force, **options).run()
@@ -283,7 +343,10 @@ def main() -> None:
         p.add_argument("--calibration", choices=["auto", "bundle", "frame"], default="auto")
         p.add_argument("--venue", help="stadium prior key (vision/venues.json)")
         p.add_argument("--labels", type=Path, help="labels.json to start the per-frame calibration from")
-        p.add_argument("--swap-teams", action="store_true", help="the team on the right of the pitch is home")
+        p.add_argument("--anchors", type=Path, help="video-time / broadcast-clock pairs (default: <clip workdir>/anchors.json)")
+        p.add_argument("--swap-teams", action="store_true",
+                       help="home attacks towards -x in the first half (frames are turned so home attacks +x)")
+        p.add_argument("--home-kit", help="home shirt colour, e.g. '#a03040': names the teams by kit, not by side")
         p.add_argument("--width", type=int, default=1920)
         p.add_argument("--no-store", action="store_true", help="do not write to the next10 database (no resume)")
     args = parser.parse_args()

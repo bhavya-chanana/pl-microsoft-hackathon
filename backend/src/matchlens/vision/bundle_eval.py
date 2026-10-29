@@ -82,6 +82,16 @@ def paint_for(work: Path, source: Path, main: list[int], total: int, workers: in
     return {k: found[k].astype(np.float64) for k in keys}
 
 
+def frame_times(source: Path) -> np.ndarray:
+    """Presentation time of every frame (ffprobe). These clips are variable frame rate: index / average fps is off
+    by seconds, the on-screen clock and ffmpeg follow the timestamps."""
+    import subprocess
+
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "frame=pts_time",
+                          "-of", "csv=p=0", str(source)], capture_output=True, text=True, check=True).stdout
+    return np.array([float(x.strip(",")) for x in out.split("\n") if x.strip(",")])
+
+
 # --- helpers -------------------------------------------------------------------------------------------------
 
 
@@ -156,7 +166,7 @@ def _agg(rs: list, ms: list, total: int) -> dict:
 # --- the run -------------------------------------------------------------------------------------------------
 
 
-def solve_rounds(paint_train: dict[int, np.ndarray], h960: dict[int, np.ndarray], cuts: np.ndarray, fps: float,
+def solve_rounds(paint_train: dict[int, np.ndarray], h960: dict[int, np.ndarray], cuts: np.ndarray, times: np.ndarray,
                  length: float, options: B.SolveOptions):
     model = B.PitchModel(length, 68.0)
     prior0 = B.CameraPrior(pitch_length=length, pitch_width=68.0)
@@ -165,10 +175,10 @@ def solve_rounds(paint_train: dict[int, np.ndarray], h960: dict[int, np.ndarray]
         return int(np.searchsorted(cuts, f, side="right"))
 
     def empty(f: int) -> B.FrameObs:
-        return B.FrameObs(frame=f, t=f / fps, image_pts=np.zeros((0, 2)), pitch_pts=np.zeros((0, 2)), size=SIZE,
+        return B.FrameObs(frame=f, t=float(times[f]), image_pts=np.zeros((0, 2)), pitch_pts=np.zeros((0, 2)), size=SIZE,
                           shot=shot(f))
 
-    obs0 = [B.observations_from_paint(paint_train[f], h960[f], size=SIZE, frame=f, t=f / fps, shot=shot(f),
+    obs0 = [B.observations_from_paint(paint_train[f], h960[f], size=SIZE, frame=f, t=float(times[f]), shot=shot(f),
                                       model=model, tol_px=8.0) if f in h960 else empty(f) for f in sorted(paint_train)]
     r0 = B.solve_match(obs0, prior0, options)
     cams = {c.frame: c for c in r0.frames if c.usable}
@@ -188,19 +198,84 @@ def solve_rounds(paint_train: dict[int, np.ndarray], h960: dict[int, np.ndarray]
     for f in sorted(paint_train):
         c = camera_near(f)
         obs1.append(empty(f) if c is None else B.observations_from_paint(
-            paint_train[f], c.pitch_to_image, size=SIZE, frame=f, t=f / fps, shot=shot(f), model=model, tol_px=5.0,
+            paint_train[f], c.pitch_to_image, size=SIZE, frame=f, t=float(times[f]), shot=shot(f), model=model, tol_px=5.0,
             init_h=c.homography))
     r1 = B.solve_match(obs1, r0.prior, options)
     return r0, r1
 
 
+def interpolation_curve(prior: B.CameraPrior, paint: dict[int, np.ndarray], cams: dict[int, B.FrameCalibration],
+                        times: np.ndarray, cuts: np.ndarray, length: float, log=print) -> dict:
+    """How wrong is a frame the smoother fills in? Take a stretch of fitted frames with the shared camera held
+    fixed, blank runs of consecutive frames of 0.4 to 2 s, solve again and score the filled frames against their
+    own paint (lines are matched with the fixed-in-place camera the other frames have)."""
+    model = B.PitchModel(length, 68.0)
+    frames = [f for f in sorted(cams) if cams[f].status == "fitted" and f in paint]
+    if len(frames) < 600:
+        return {}
+    start = len(frames) // 3
+    stretch = frames[start:start + 1500]
+
+    def shot(f: int) -> int:
+        return int(np.searchsorted(cuts, f, side="right"))
+
+    obs_full = [B.observations_from_paint(paint[f], cams[f].pitch_to_image, size=SIZE, frame=f, t=float(times[f]),
+                                          shot=shot(f), model=model, tol_px=5.0, init_h=cams[f].homography)
+                for f in stretch]
+    rng = np.random.default_rng(1)
+    gaps = (0.4, 0.8, 1.2, 1.6, 2.0)
+    out: dict[str, dict] = {}
+    blank: dict[int, float] = {}
+    i = 40
+    spans = []
+    while i < len(stretch) - 120:
+        g = gaps[int(rng.integers(len(gaps)))]
+        n = max(1, int(round(g * 27.9)))
+        spans.append((i, n, g))
+        i += n + int(rng.integers(60, 110))
+    obs = list(obs_full)
+    for a, n, g in spans:
+        for k in range(a, min(a + n, len(obs))):
+            o = obs[k]
+            obs[k] = B.FrameObs(frame=o.frame, t=o.t, image_pts=np.zeros((0, 2)), pitch_pts=np.zeros((0, 2)),
+                                size=o.size, shot=o.shot)
+            blank[k] = g
+    res = B.solve_match(obs, prior, B.SolveOptions(refit_shared=False, max_interp_s=3.0))
+    got = {c.frame: c for c in res.frames}
+    errs: dict[float, tuple[list, list]] = {g: ([], []) for g in gaps}
+    for a, n, g in spans:
+        for k in range(a, min(a + n, len(stretch))):
+            f = stretch[k]
+            c = got.get(f)
+            if c is None or not c.usable:
+                continue
+            r, m = line_error(c.pitch_to_image, paint[f], model, 6.0)
+            errs[g][0].append(r), errs[g][1].append(m)
+    for g, (r, m) in errs.items():
+        if r:
+            rr, mm = np.concatenate(r), np.concatenate(m)
+            out[f"{g:.1f}s"] = {"frames": len(r), "px_median": _quant(rr, 50), "px_p90": _quant(rr, 90),
+                                "m_median": _quant(mm, 50), "m_p90": _quant(mm, 90)}
+    # reference: the same frames when they are measured
+    ref_r, ref_m = [], []
+    for a, n, g in spans:
+        for k in range(a, min(a + n, len(stretch))):
+            r, m = line_error(cams[stretch[k]].pitch_to_image, paint[stretch[k]], model, 6.0)
+            ref_r.append(r), ref_m.append(m)
+    if ref_r:
+        out["measured_reference"] = {"px_median": _quant(np.concatenate(ref_r), 50),
+                                     "m_median": _quant(np.concatenate(ref_m), 50)}
+    log(f"interpolation curve over {len(spans)} gaps")
+    return out
+
+
 def evaluate(clip: str, length: float = 105.0, stride: int = 5, workers: int = 8, out: str = "bundle_report",
-             log=print) -> dict:
+             holdout: str = "block", k1: float | None = None, gap_curve: bool = True, log=print) -> dict:
     work = DATA / clip
     cal = json.loads((work / "calibration.json").read_text())
     source = work / cal["source"] if (work / cal["source"]).exists() else DATA / "clips" / cal["clip"]
     half = np.diag([SIZE[0] / cal["size"][0]] * 2 + [1.0])
-    fps = cal["fps"]
+    times = frame_times(source)
     cuts = np.array(cal["cuts"])
     h960 = {f["frame"]: half @ np.array(f["homography"]) for f in cal["frames"] if "homography" in f}
     for k, v in cal["left_out"].items():  # an anchor frame's own label was in its calibration: use the left-out one
@@ -212,13 +287,19 @@ def evaluate(clip: str, length: float = 105.0, stride: int = 5, workers: int = 8
     rng = np.random.default_rng(0)
     train, held = {}, {}
     for f in sorted(paint):
-        mask = rng.random(len(paint[f])) < HELD_OUT
+        if holdout == "block":  # a vertical strip of the image: whole line segments are unseen, not single pixels
+            x0 = rng.random() * SIZE[0] * (1 - HELD_OUT)
+            mask = (paint[f][:, 0] >= x0) & (paint[f][:, 0] < x0 + HELD_OUT * SIZE[0])
+        else:
+            mask = rng.random(len(paint[f])) < HELD_OUT
         held[f], train[f] = paint[f][mask], paint[f][~mask]
     t0 = time.time()
     log("solving (two rounds) ...")
-    r0, r1 = solve_rounds(train, h960, cuts, fps, length, B.SolveOptions(max_joint_frames=800))
+    options = B.SolveOptions(max_joint_frames=800, keep_unsmoothed=True, fix_k1=k1)
+    r0, r1 = solve_rounds(train, h960, cuts, times, length, options)
     log(f"solved in {time.time() - t0:.0f} s")
     cams = {c.frame: c for c in r1.frames}
+    raw = {c.frame: c for c in (r1.unsmoothed or [])}
     model = B.PitchModel(length, 68.0)
     model105 = B.PitchModel(105.0, 68.0)
 
@@ -227,6 +308,7 @@ def evaluate(clip: str, length: float = 105.0, stride: int = 5, workers: int = 8
 
     report: dict = {"clip": clip, "pitch_length_m": length, "frame_width_px": SIZE[0],
                     "camera": r1.prior.to_dict(), "summary": r1.summary(),
+                    "holdout": holdout, "fixed_k1": k1,
                     "method": "round 0 + round 1 of solve_match on 90% of paint; 10% held out"}
     # (a) share
     nm = len(main)
@@ -237,14 +319,17 @@ def evaluate(clip: str, length: float = 105.0, stride: int = 5, workers: int = 8
                        "bundle_fitted": fitted, "bundle_interpolated": interp, "bundle_fitted_share": fitted / nm,
                        "bundle_fitted_plus_interpolated_share": (fitted + interp) / nm}
     # (b) held-out
-    groups = {k: ([], [], [0]) for k in ("bundle", "per_frame_existing", "per_frame_refit_8dof")}
+    groups = {k: ([], [], [0]) for k in ("bundle", "bundle_unsmoothed", "per_frame_existing", "per_frame_refit_8dof")}
     used = 0
     for f in [f for f in sorted(held) if f % stride == 0]:
         if f not in h960 or f not in cams or cams[f].status != "fitted" or len(held[f]) < 20:
             continue
         used += 1
         tot = len(held[f])
-        for name, proj, mdl in (("bundle", cams[f].pitch_to_image, model), ("per_frame_existing", proj_h(h960[f]), model105)):
+        variants = [("bundle", cams[f].pitch_to_image, model), ("per_frame_existing", proj_h(h960[f]), model105)]
+        if f in raw and raw[f].usable:
+            variants.append(("bundle_unsmoothed", raw[f].pitch_to_image, model))
+        for name, proj, mdl in variants:
             r, m = line_error(proj, held[f], mdl, 6.0)
             groups[name][0].append(r), groups[name][1].append(m)
             groups[name][2][0] += tot
@@ -257,7 +342,7 @@ def evaluate(clip: str, length: float = 105.0, stride: int = 5, workers: int = 8
                           **{k: _agg(v[0], v[1], v[2][0]) for k, v in groups.items()}}
     # (b2) hand labels
     labels_path = work / "labels.json"
-    rows, acc = [], {"bundle": ([], []), "per_frame": ([], [])}
+    rows, acc = [], {"bundle": ([], []), "bundle_unsmoothed": ([], []), "per_frame": ([], [])}
     if labels_path.exists():
         lm_new, lm_105 = model.landmarks(), model105.landmarks()
         for k, v in json.loads(labels_path.read_text())["frames"].items():
@@ -274,6 +359,13 @@ def evaluate(clip: str, length: float = 105.0, stride: int = 5, workers: int = 8
                 p = np.linalg.norm(c.pitch_to_image(xy) - px, axis=1)
                 row["bundle"] = {"status": c.status, "m_median": float(np.median(m)), "px_median": float(np.median(p))}
                 acc["bundle"][0].append(m), acc["bundle"][1].append(p)
+            c = raw.get(f)
+            if c is not None and c.usable and c.status == "fitted":
+                xy = np.array([lm_new[n] for n in names])
+                m = np.linalg.norm(c.image_to_pitch(px) - xy, axis=1)
+                p = np.linalg.norm(c.pitch_to_image(xy) - px, axis=1)
+                row["bundle_unsmoothed"] = {"m_median": float(np.median(m)), "px_median": float(np.median(p))}
+                acc["bundle_unsmoothed"][0].append(m), acc["bundle_unsmoothed"][1].append(p)
             if f in h960:
                 xy = np.array([lm_105[n] for n in names])
                 inv = np.linalg.inv(h960[f])
@@ -289,17 +381,18 @@ def evaluate(clip: str, length: float = 105.0, stride: int = 5, workers: int = 8
             p = np.concatenate(ps) if ps else np.zeros(0)
             return {"points": int(m.size), "m_median": _quant(m, 50), "m_p90": _quant(m, 90),
                     "px_median": _quant(p, 50), "px_p90": _quant(p, 90)}
-        report["labels"] = {"bundle": lab(*acc["bundle"]), "per_frame_left_out": lab(*acc["per_frame"]), "frames": rows}
+        report["labels"] = {"bundle": lab(*acc["bundle"]), "bundle_unsmoothed": lab(*acc["bundle_unsmoothed"]),
+                            "per_frame_left_out": lab(*acc["per_frame"]), "frames": rows}
     # (c) jitter
     corners = np.array([[0, 0], [length, 0], [length, 68], [0, 68.0]])
     corners105 = np.array([[0, 0], [105, 0], [105, 68], [0, 68.0]])
     centre = np.array([[SIZE[0] / 2, SIZE[1] / 2]])
 
     def camera(kind: str, f: int):
-        c = cams.get(f)
+        c = (raw if kind == "bundle_unsmoothed" else cams).get(f)
         if c is None or c.status != "fitted" or (kind == "per_frame" and f not in h960):
             return None
-        if kind == "bundle":
+        if kind.startswith("bundle"):
             return c.pitch_to_image, corners, lambda: c.image_to_pitch(centre)[0]
         inv = np.linalg.inv(h960[f])
         return proj_h(h960[f]), corners105, lambda: (lambda p: p[:2] / p[2])(inv @ np.r_[centre[0], 1.0])
@@ -320,7 +413,10 @@ def evaluate(clip: str, length: float = 105.0, stride: int = 5, workers: int = 8
         a, b = np.array(px), np.array(mm)
         return {"corner_px_median": _quant(a, 50), "corner_px_p90": _quant(a, 90), "samples": int(a.size),
                 "centre_footprint_m_median": _quant(b, 50), "centre_footprint_m_p90": _quant(b, 90)}
-    report["jitter_second_difference"] = {"bundle": jitter("bundle"), "per_frame": jitter("per_frame")}
+    report["jitter_second_difference"] = {"bundle": jitter("bundle"), "bundle_unsmoothed": jitter("bundle_unsmoothed"),
+                                          "per_frame": jitter("per_frame")}
+    if gap_curve:
+        report["interpolation_vs_gap"] = interpolation_curve(r1.prior, paint, cams, times, cuts, length, log)
     (work / f"{out}.json").write_text(json.dumps(report, indent=1, default=lambda o: None if o is None else str(o)))
     (work / f"{out}_calibration.json").write_text(json.dumps(r1.to_dict()))
     log(f"-> {work / (out + '.json')}")
@@ -334,9 +430,15 @@ def main() -> None:
     parser.add_argument("--stride", type=int, default=5, help="score every n-th frame held out")
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--out", default="bundle_report", help="output name stem under the clip folder")
+    parser.add_argument("--holdout", choices=["block", "random"], default="block",
+                        help="hold out a vertical strip (whole segments) or random pixels of each frame")
+    parser.add_argument("--k1", type=float, default=None, help="hold the lens term at this value (sensitivity test)")
+    parser.add_argument("--no-gap-curve", action="store_true")
     args = parser.parse_args()
-    report = evaluate(args.clip, args.length, args.stride, args.workers, args.out)
-    print(json.dumps({k: report[k] for k in ("share", "held_out", "labels", "jitter_second_difference")
+    report = evaluate(args.clip, args.length, args.stride, args.workers, args.out, args.holdout, args.k1,
+                      not args.no_gap_curve)
+    print(json.dumps({k: report[k] for k in ("share", "held_out", "labels", "jitter_second_difference",
+                                              "interpolation_vs_gap")
                       if k in report}, indent=1))
 
 

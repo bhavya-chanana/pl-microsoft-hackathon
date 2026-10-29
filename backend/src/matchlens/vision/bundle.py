@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -224,6 +225,7 @@ class MatchCalibration:
     frames: list[FrameCalibration]
     prior: CameraPrior
     info: dict = field(default_factory=dict)
+    unsmoothed: list[FrameCalibration] | None = None
 
     def __post_init__(self) -> None:
         self._times = np.array([f.t for f in self.frames], np.float64)
@@ -246,6 +248,19 @@ class MatchCalibration:
 
     def main_at(self, t_s: float) -> bool:
         return self.frame_at(t_s) is not None
+
+    def quality_at(self, t_s: float) -> dict | None:
+        """What a frame record needs from the calibration at video time ``t_s``: ``calib_status`` ("fitted",
+        "interpolated" or "none"), reprojection error in px and metres (None unless fitted), points used and the
+        inlier fraction. None where the frame is not main camera."""
+        f = self.frame_at(t_s)
+        if f is None:
+            return None
+        fitted = f.status == "fitted"
+        return {"calib_status": f.status, "frame": f.frame,
+                "rmse_px": float(f.rmse_px) if fitted and np.isfinite(f.rmse_px) else None,
+                "rmse_m": float(f.rmse_m) if fitted and np.isfinite(f.rmse_m) else None,
+                "n_points": int(f.n_points), "inlier_frac": float(f.inlier_frac) if fitted else None}
 
     def image_to_pitch_at(self, t_s: float, pixels: np.ndarray) -> np.ndarray | None:
         f = self.frame_at(t_s)
@@ -280,6 +295,7 @@ class MatchCalibration:
 class SolveOptions:
     fit_k2: bool = False
     fit_roll: bool = True
+    fix_k1: float | None = None  # hold the lens term at this value instead of fitting it (a sensitivity test)
     refit_shared: bool = True
     min_points: int = 30  # points a frame needs to count as a measurement
     loss_px: float = 2.0  # soft-L1 scale, pixels at 960 wide
@@ -291,11 +307,15 @@ class SolveOptions:
     seg_gap_s: float = 1.0  # a longer hole between frames starts a new smoothing segment
     gate_rms_px: float = 3.5  # a frame fitting worse than this (inlier rms) is not a measurement
     gate_inliers: float = 0.5
-    accel_sigma: tuple[float, float, float] = (0.5, 0.5, 0.5)  # rad/s^2, rad/s^2, 1/s^2: smoothness in the joint solve
+    accel_sigma: tuple[float, float, float] = (0.5, 0.5, 0.5)  # rad/s^2, rad/s^2, 1/s^2 (joint_smooth only)
     process_q: tuple[float, float, float] = (0.5, 0.5, 0.3)  # acceleration noise density of the smoother
     meas_inflate: float = 4.0  # neighbouring paint pixels are not independent: inflate the fit's variance
     meas_floor: tuple[float, float, float] = (1e-3, 1e-3, 3e-3)  # std floor on (pan, tilt, log focal)
     info_std: tuple[float, float, float] = (0.01, 0.01, 0.05)  # measurement counts as fitted below these stds
+    centre_sigma_floor: tuple[float, float, float] = (0.5, 0.5, 0.25)  # metres, added in quadrature to the fit's
+    rts: str = "all"  # "all": every frame takes the smoothed value; "gaps": measured frames keep their own fit
+    keep_unsmoothed: bool = False  # also return each frame's own fit as ``MatchCalibration.unsmoothed`` (evaluation)
+    joint_smooth: bool = False  # smoothness rows in the joint solve (at the defaults they carry no weight)
     progress: Callable[[float], None] | None = None
 
 
@@ -739,7 +759,7 @@ def _initial_shared(frames: Sequence[FrameObs], sizes, prior: CameraPrior, opt: 
 
 
 def _bounds(opt: SolveOptions):
-    free = [0, 1, 2] + ([3] if opt.fit_roll else []) + [4] + ([5] if opt.fit_k2 else [])
+    free = [0, 1, 2] + ([3] if opt.fit_roll else []) + ([4] if opt.fix_k1 is None else []) + ([5] if opt.fit_k2 else [])
     lo = np.array([-100.0, -150.0, 3.0, -0.3, -0.5, -0.5])
     hi = np.array([200.0, 250.0, 80.0, 0.3, 0.5, 0.5])
     return free, lo, hi
@@ -760,7 +780,7 @@ def _joint(frames, sizes, poses, shared, prior: CameraPrior, opt: SolveOptions, 
 
     # Smoothness: acceleration of each channel between consecutive frames of a segment.
     triples = [(i - 1, i, i + 1) for i in range(1, f - 1)
-               if smooth and shots[sel[i - 1]] == shots[sel[i]] == shots[sel[i + 1]]
+               if smooth and opt.joint_smooth and shots[sel[i - 1]] == shots[sel[i]] == shots[sel[i + 1]]
                and times[sel[i + 1]] - times[sel[i - 1]] < 2 * opt.seg_gap_s]
     prior_rows = []
     if prior.centre_sigma is not None and prior.centre is not None:
@@ -858,6 +878,8 @@ def solve_match(frames: Sequence[FrameObs], prior: CameraPrior | None = None,
     report = opt.progress or (lambda _: None)
 
     shared = _initial_shared(obs, sizes, prior, opt)
+    if opt.fix_k1 is not None:
+        shared[4] = opt.fix_k1
     single = [_Points([o], [s]) for o, s in zip(obs, sizes, strict=True)]
     rows = [np.arange(p.n_rows) for p in single]
     poses = np.full((n, 3), np.nan)
@@ -920,7 +942,7 @@ def solve_match(frames: Sequence[FrameObs], prior: CameraPrior | None = None,
         pick = good
         if len(pick) > opt.max_joint_frames:
             pick = [good[i] for i in np.linspace(0, len(good) - 1, opt.max_joint_frames).astype(int)]
-        if not prior.has_camera:
+        if not prior.has_camera and opt.fix_k1 is None:
             # The lens term has false valleys: try a few starting values on a thin spread of frames first.
             thin = [good[i] for i in np.linspace(0, len(good) - 1, min(len(good), 120)).astype(int)]
             best_cost = math.inf
@@ -973,34 +995,44 @@ def solve_match(frames: Sequence[FrameObs], prior: CameraPrior | None = None,
         sstd[idx] = np.sqrt(np.maximum(v, 0))
     report(0.93)
 
-    cams: list[FrameCalibration] = []
     since = _distance_to_valid(times, segs, meas)
     centre = (float(shared[0]), float(shared[1]), float(shared[2]))
     all_pts = _Points(obs, sizes)
-    pan, tilt, logf = smooth[:, 0], smooth[:, 1], smooth[:, 2]
-    metres = all_pts.metres(np.nan_to_num(pan), np.nan_to_num(tilt), np.nan_to_num(logf, nan=7.0), shared)
-    resid = all_pts.residuals(np.nan_to_num(pan), np.nan_to_num(tilt), np.nan_to_num(logf, nan=7.0), shared)
-    # The residual and metre vectors are ordered point rows then line rows; map them back to frames.
-    rpx = _per_frame_stats(all_pts, resid, metres, opt)
     informative = np.array([ft is not None and ft.ok and bool(np.all(np.sqrt(np.diag(ft.cov)) < opt.info_std))
                             for ft in fits])
-    for i, o in enumerate(obs):
-        have = not np.isnan(smooth[i]).any()
-        if have and informative[i]:
-            status = "fitted"
-        elif have and since[i] <= opt.max_interp_s:
-            status = "interpolated"
-        else:
-            status = "none"
-        rms_px, rms_m, inl = rpx[i]
-        cams.append(FrameCalibration(
-            frame=o.frame, t=o.t, status=status, size=sizes[i],
-            pan=float(pan[i]) if have else math.nan, tilt=float(tilt[i]) if have else math.nan,
-            focal=float(math.exp(logf[i])) if have else math.nan, centre=centre, roll=float(shared[3]),
-            k1=float(shared[4]), k2=float(shared[5]), n_points=int(counts[i]),
-            rmse_px=rms_px if have else math.nan, rmse_m=rms_m if have else math.nan,
-            inlier_frac=inl if have else math.nan,
-            std=tuple(float(s) for s in sstd[i]) if have else None, shot=o.shot))
+
+    def assemble(track: np.ndarray, spread: np.ndarray) -> list[FrameCalibration]:
+        pan, tilt, logf = track[:, 0], track[:, 1], track[:, 2]
+        metres = all_pts.metres(np.nan_to_num(pan), np.nan_to_num(tilt), np.nan_to_num(logf, nan=7.0), shared)
+        resid = all_pts.residuals(np.nan_to_num(pan), np.nan_to_num(tilt), np.nan_to_num(logf, nan=7.0), shared)
+        # The residual and metre vectors are ordered point rows then line rows; map them back to frames.
+        rpx = _per_frame_stats(all_pts, resid, metres, opt)
+        out: list[FrameCalibration] = []
+        for i, o in enumerate(obs):
+            have = not np.isnan(track[i]).any()
+            if have and informative[i]:
+                status = "fitted"
+            elif have and since[i] <= opt.max_interp_s:
+                status = "interpolated"
+            else:
+                status = "none"
+            rms_px, rms_m, inl = rpx[i]
+            out.append(FrameCalibration(
+                frame=o.frame, t=o.t, status=status, size=sizes[i],
+                pan=float(pan[i]) if have else math.nan, tilt=float(tilt[i]) if have else math.nan,
+                focal=float(math.exp(logf[i])) if have else math.nan, centre=centre, roll=float(shared[3]),
+                k1=float(shared[4]), k2=float(shared[5]), n_points=int(counts[i]),
+                rmse_px=rms_px if have else math.nan, rmse_m=rms_m if have else math.nan,
+                inlier_frac=inl if have else math.nan,
+                std=tuple(float(s) for s in spread[i]) if have else None, shot=o.shot))
+        return out
+
+    # ``rts="all"``: every frame takes the smoothed value. ``"gaps"``: frames with a good measurement keep their own
+    # fit and the smoother only fills the rest (the shared camera still ties them together).
+    raw = np.where(informative[:, None] & ~np.isnan(meas), meas, smooth)
+    raw_std = np.where(informative[:, None] & ~np.isnan(meas), np.sqrt(var), sstd)
+    cams = assemble(raw, raw_std) if opt.rts == "gaps" else assemble(smooth, sstd)
+    unsmoothed = assemble(raw, raw_std) if opt.keep_unsmoothed and opt.rts != "gaps" else None
     report(1.0)
 
     fitted = [c for c in cams if c.status == "fitted"]
@@ -1008,7 +1040,10 @@ def solve_match(frames: Sequence[FrameObs], prior: CameraPrior | None = None,
     width = np.median([s[0] for s in sizes])
     fitted_prior = replace(prior)
     fitted_prior.centre = centre
-    fitted_prior.centre_sigma = None if np.isnan(std[:3]).any() else tuple(float(s) for s in std[:3])
+    # The formal sigma is conditional on the markings model being right; moving the pitch length by a few metres
+    # moves C by about half a metre. Carry that as a floor so the prior is not overconfident.
+    fitted_prior.centre_sigma = None if np.isnan(std[:3]).any() else tuple(
+        float(math.hypot(s, f)) for s, f in zip(std[:3], opt.centre_sigma_floor, strict=True))
     fitted_prior.roll, fitted_prior.k1, fitted_prior.k2 = float(shared[3]), float(shared[4]), float(shared[5])
     if fused:
         f_rel = np.array([c.focal / c.size[0] for c in fused])
@@ -1019,7 +1054,9 @@ def solve_match(frames: Sequence[FrameObs], prior: CameraPrior | None = None,
                              float(np.percentile([c.tilt for c in fused], 99)))
     fitted_prior.image_size = (int(width), int(np.median([s[1] for s in sizes])))
     fitted_prior.history = prior.history + 1
-    return MatchCalibration(cams, fitted_prior, {"shared_std": [None if math.isnan(s) else float(s) for s in std]})
+    result = MatchCalibration(cams, fitted_prior, {"shared_std": [None if math.isnan(s) else float(s) for s in std]})
+    result.unsmoothed = unsmoothed
+    return result
 
 
 def _distance_to_valid(times: np.ndarray, segs: list[range], meas: np.ndarray) -> np.ndarray:
@@ -1368,56 +1405,59 @@ def observations_from_paint(paint: np.ndarray, guess, *, size: tuple[int, int], 
 
 
 def _sampled_frames(video: Path, fps: float, width: int, max_seconds: float | None = None):
-    """(index, seconds, bgr at ``width``) for about ``fps`` frames a second, from the start up to ``max_seconds``."""
+    """(decode index, presentation seconds, bgr at ``width``) at about ``fps`` frames a second of video time.
+
+    Times are the container's presentation timestamps, not index / average fps: these recordings are variable
+    frame rate, so the two differ by seconds over ten minutes, and ffmpeg (which cuts the chunks the rest of the
+    pipeline reads) and the on-screen clock both follow the timestamps."""
     import cv2
 
     cap = cv2.VideoCapture(str(video))
     try:
-        src_fps = float(cap.get(cv2.CAP_PROP_FPS)) or 25.0
-        stride = max(1, round(src_fps / fps))
         i = 0
+        next_t = 0.0
+        step = 1.0 / fps
         while cap.grab():
-            if max_seconds is not None and i / src_fps > max_seconds:
+            t = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+            if max_seconds is not None and t > max_seconds:
                 break
-            if i % stride == 0:
+            if t + 1e-6 >= next_t:
                 ok, frame = cap.retrieve()
                 if not ok:
                     break
                 h, w = frame.shape[:2]
                 if w != width:
                     frame = cv2.resize(frame, (width, round(h * width / w)), interpolation=cv2.INTER_AREA)
-                yield i, i / src_fps, frame
+                yield i, t, frame
+                next_t = max(next_t + step, t - step / 2)
             i += 1
     finally:
         cap.release()
 
 
-def solve_video(video: Path, *, fps: float = 5.0, anchors: list[tuple[np.ndarray, np.ndarray]] | None = None,
-                venue: str | None = None, progress: Callable[[float], None] | None = None,
-                rounds: int = 2, options: SolveOptions | None = None,
-                max_seconds: float | None = None) -> MatchCalibration:
-    """Calibrate a whole video: view filter, per-frame tracking (``camera.CameraTracker``), then ``solve_match``.
+@dataclass
+class _Tracked:
+    """What the pass over the video leaves for the solve: which sampled frames are main camera, their painted-line
+    pixels and the per-frame tracker's homography where it had one."""
 
-    ``anchors`` are (bgr image at 960 px wide, pitch-to-pixel homography) pairs, kept as keyframes so a cut back to
-    their part of the pitch can be found. ``venue`` starts the solve from that ground's fitted camera.
-    The first round uses the tracker's per-frame homographies to match painted lines to markings; each further
-    round matches them again under the previous round's cameras, which also reaches frames the tracker lost.
-    Times are video seconds at ``fps`` samples a second; images are 960 px wide. ``max_seconds`` stops after that
-    much video (a trial run).
-    """
+    stamps: list[tuple[int, float]]  # (decode index, seconds) of every sampled frame
+    main: np.ndarray
+    shot_of: np.ndarray
+    paint: dict[int, np.ndarray]  # sample number -> painted-line pixels
+    guess: dict[int, np.ndarray]  # sample number -> tracker homography (pitch metres to pixels)
+    size: tuple[int, int]
+    seconds: dict[str, float]
+
+
+def _track_video(video: Path, fps: float, anchors, max_seconds: float | None, report) -> _Tracked:
     from .broadcast import WORK_WIDTH
     from .camera import CameraTracker, FrameLines
     from .footage import prepare
     from .views import cuts as view_cuts
     from .views import look
 
-    report = progress or (lambda _: None)
+    t0 = time.perf_counter()
     source = prepare(Path(video))
-    prior = venue_prior(venue) if venue else CameraPrior()
-    model = PitchModel(prior.pitch_length, prior.pitch_width)
-    opt = options or SolveOptions()
-
-    # Pass 1: which frames are the main camera.
     looks, stamps = [], []
     for idx, t, frame in _sampled_frames(source, fps, WORK_WIDTH, max_seconds):
         looks.append(look(frame))
@@ -1430,11 +1470,13 @@ def solve_video(video: Path, *, fps: float = 5.0, anchors: list[tuple[np.ndarray
     shot_of = np.zeros(len(looks), int)
     for k, (a, b) in enumerate(zip(edges[:-1], edges[1:], strict=True)):
         main[a:b] = sum(lk.main for lk in looks[a:b]) * 2 > (b - a)
+        for i in range(a, b):
+            main[i] &= not looks[i].overlay
         shot_of[a:b] = k
     cutset = set(cut_idx)
+    t1 = time.perf_counter()
     report(0.15)
 
-    # Pass 2: track, and keep the painted lines of every main frame.
     tracker = CameraTracker()
     for image, h in anchors or []:
         tracker.seed(image, np.asarray(h, np.float64))
@@ -1454,6 +1496,16 @@ def solve_video(video: Path, *, fps: float = 5.0, anchors: list[tuple[np.ndarray
         if n % 100 == 0:
             report(0.15 + 0.45 * n / len(looks))
     assert size is not None
+    t2 = time.perf_counter()
+    return _Tracked(stamps, main, shot_of, paint, guess, size,
+                    {"prepare_and_views": round(t1 - t0, 1), "tracking": round(t2 - t1, 1)})
+
+
+def _solve_tracked(tr: _Tracked, prior: CameraPrior, opt: SolveOptions, rounds: int, reach_s: float, report) -> tuple:
+    """Round 0 matches paint to markings under the tracker's homographies; each further round matches it again
+    under the previous round's cameras (the nearest calibrated frame of the same shot within ``reach_s``)."""
+    model = PitchModel(prior.pitch_length, prior.pitch_width)
+    stamps, shot_of, paint, size = tr.stamps, tr.shot_of, tr.paint, tr.size
 
     def build(project_for: Callable[[int], Callable | np.ndarray | None], tol: float) -> list[FrameObs]:
         out = []
@@ -1468,15 +1520,16 @@ def solve_video(video: Path, *, fps: float = 5.0, anchors: list[tuple[np.ndarray
                                                    model=model, tol_px=tol))
         return out
 
-    obs = build(lambda n: guess.get(n), 8.0)
-    result = solve_match(obs, prior, opt)
+    t0 = time.perf_counter()
+    result = solve_match(build(lambda n: tr.guess.get(n), 8.0), prior, opt)
+    t1 = time.perf_counter()
     report(0.8)
     for r in range(1, rounds):
         cams = {c.frame: c for c in result.frames if c.usable}
         keys = np.array(sorted(cams))
         by_index = {stamps[n][0]: n for n in paint}
 
-        def near(n: int) -> Callable | None:
+        def near(n: int, cams=cams, keys=keys, by_index=by_index) -> Callable | None:
             idx = stamps[n][0]
             if idx in cams:
                 return cams[idx].pitch_to_image
@@ -1485,13 +1538,39 @@ def solve_video(video: Path, *, fps: float = 5.0, anchors: list[tuple[np.ndarray
             j = int(np.searchsorted(keys, idx))
             cand = [keys[k] for k in (j - 1, j) if 0 <= k < len(keys)]
             best = min(cand, key=lambda k: abs(k - idx))
-            ok = abs(stamps[by_index[int(best)]][1] - stamps[n][1]) <= 1.0 and \
+            ok = abs(stamps[by_index[int(best)]][1] - stamps[n][1]) <= reach_s and \
                 shot_of[by_index[int(best)]] == shot_of[n]
             return cams[int(best)].pitch_to_image if ok else None
 
         result = solve_match(build(near, 5.0), result.prior, opt)
         report(0.8 + 0.2 * r / max(rounds - 1, 1))
-    result.info.update({"video": Path(video).name, "fps": fps, "venue": venue, "rounds": rounds,
-                        "main_frames": int(main.sum()), "sampled_frames": len(looks)})
+    result.prior.history = prior.history + 1  # however many rounds it took, this is one match
+    t2 = time.perf_counter()
+    return result, {"solve_round0": round(t1 - t0, 1), "later_rounds": round(t2 - t1, 1)}
+
+
+def solve_video(video: Path, *, fps: float = 5.0, anchors: list[tuple[np.ndarray, np.ndarray]] | None = None,
+                venue: str | None = None, progress: Callable[[float], None] | None = None,
+                rounds: int = 6, options: SolveOptions | None = None, max_seconds: float | None = None,
+                reach_s: float = 3.0) -> MatchCalibration:
+    """Calibrate a whole video: view filter, per-frame tracking (``camera.CameraTracker``), then ``solve_match``.
+
+    ``anchors`` are (bgr image at 960 px wide, pitch-to-pixel homography) pairs, kept as keyframes so a cut back to
+    their part of the pitch can be found. ``venue`` starts the solve from that ground's fitted camera.
+    The first round uses the tracker's per-frame homographies to match painted lines to markings; each further
+    round matches them again under the previous round's cameras (the nearest calibrated frame of the same shot within
+    ``reach_s`` seconds), which also reaches frames the tracker lost: on the Liverpool-Brighton clip the tracker alone
+    calibrates about half of the main-camera frames at 5 fps and six rounds reach about 84%. Times are the video's presentation seconds at about ``fps`` samples a second;
+    images are 960 px wide. ``max_seconds`` stops after that much video (a trial run). The result's
+    ``info["stage_s"]`` says where the time went; ``quality_at(t)`` gives the per-frame status and error.
+    """
+    report = progress or (lambda _: None)
+    prior = venue_prior(venue) if venue else CameraPrior()
+    opt = options or SolveOptions()
+    tr = _track_video(video, fps, anchors, max_seconds, report)
+    result, solve_s = _solve_tracked(tr, prior, opt, rounds, reach_s, report)
+    result.info.update({"video": Path(video).name, "stage_s": {**tr.seconds, **solve_s}, "fps": fps, "venue": venue,
+                        "rounds": rounds, "main_frames": int(tr.main.sum()), "sampled_frames": len(tr.stamps),
+                        "tracker_homographies": len(tr.guess), "main_with_paint": len(tr.paint)})
     report(1.0)
     return result

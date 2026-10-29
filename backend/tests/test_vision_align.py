@@ -96,3 +96,28 @@ def test_report_serialises():
     cm = align(make_anchors(wrong=(400.0,)))
     d = cm.to_dict()
     assert d["report"]["outliers"] == 1 and len(d["report"]["anchors"]) == 9
+
+
+def test_clock_readings_from_the_screen():
+    assert Anchor.from_clock(10.0, "14:41").match_s == 881.0
+    assert Anchor.from_clock(10.0, 90).match_s == 90.0
+    assert Anchor.from_clock(10.0, "45:30", period=2).half == 2
+
+
+def test_a_run_of_clock_readings_survives_misreads_and_a_variable_frame_rate_offset():
+    rng = np.random.default_rng(5)
+    video = np.arange(0.0, 580.0, 4.0)
+    anchors = [Anchor.from_clock(float(v), float(np.floor(v + 881.4 + rng.normal(0, 0.2))), 1) for v in video]
+    anchors += [Anchor.from_clock(float(rng.uniform(0, 580)), float(rng.uniform(800, 1500)), 1) for _ in range(8)]
+    cm = align(anchors)
+    assert len(cm.pieces) == 1 and cm.report.outliers == 8
+    assert abs(cm.to_match(300.0) - 1181.4) < 1.0
+    assert abs(cm.pieces[0].slope - 1.0) < 0.002
+    assert cm.report.rms_s < 1.0
+
+
+def test_goal_minutes_agree_with_the_clock_map():
+    clock = [Anchor.from_clock(float(v), float(v + 881.4), 1) for v in range(0, 580, 10)]
+    goals = [Anchor.from_minute(106.0, 17, kind="goal", period=1), Anchor.from_minute(376.0, 21, kind="goal", period=1)]
+    cm = align(clock + goals)
+    assert cm.report.outliers == 0 and len(cm.pieces) == 1

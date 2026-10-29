@@ -36,7 +36,7 @@ import numpy as np
 
 HALF_S = 2700.0  # the second half starts at 46:00 on the minute scale
 SLOPE_SIGMA = 0.005  # prior spread of the video-to-match slope around 1
-DEFAULT_SIGMA_S = {"kickoff_1": 1.5, "kickoff_2": 1.5, "whistle_1": 3.0, "whistle_2": 3.0, "goal": 20.0, "card": 30.0,
+DEFAULT_SIGMA_S = {"clock": 1.5, "kickoff_1": 1.5, "kickoff_2": 1.5, "whistle_1": 3.0, "whistle_2": 3.0, "goal": 20.0, "card": 30.0,
                    "substitution": 30.0, "event": 30.0}
 STOPPAGE_CAP_S = 480.0  # first-half stoppage is not believed beyond this when the half's end is not anchored
 PRE_ROLL_S = 900.0  # video before the first kick-off that still maps (negative match time)
@@ -79,6 +79,16 @@ class Anchor:
     @classmethod
     def kickoff(cls, half: int, video_s: float) -> Anchor:
         return cls(video_s, 0.0 if half == 1 else HALF_S, f"kickoff_{half}", half)
+
+    @classmethod
+    def from_clock(cls, video_s: float, clock: str | float, period: int | None = None, label: str = "") -> Anchor:
+        """An on-screen match clock reading, ``"14:41"`` or seconds, at ``video_s``. The broadcast clock runs on the
+        same scale as the minute scale (the second half starts at 45:00 = 2700 s), good to a second or two. Pass
+        ``period`` for readings in stoppage time (45:00 and over can belong to either half)."""
+        if isinstance(clock, str):
+            minutes, _, seconds = clock.strip().partition(":")
+            clock = int(minutes) * 60.0 + float(seconds or 0.0)
+        return cls(video_s, float(clock), "clock", period, None, label)
 
     @classmethod
     def from_minute(cls, video_s: float, minute: int, added: int | None = None, kind: str = "goal",

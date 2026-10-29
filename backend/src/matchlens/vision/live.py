@@ -64,11 +64,15 @@ class LiveRun:
     def __init__(self, *, source: str, match_id: str, fps: float = 5.0, venue: str | None = None,
                  max_seconds: float | None = None, labels: Path | None = None, record: bool = True,
                  persist: bool = True, swap_teams: bool = False, device_fps: int = 30, width: int = 1920,
-                 stats_every_s: float = STATS_EVERY_S, detector: Any = None, quiet: bool = False) -> None:
+                 stats_every_s: float = STATS_EVERY_S, detector: Any = None, quiet: bool = False,
+                 predict: bool = False, home: str | None = None, away: str | None = None,
+                 predictor: Any = None, home_kit: str | None = None) -> None:
         self.source, self.match_id, self.fps, self.venue = source, match_id, fps, venue
         self.max_seconds, self.labels, self.record, self.persist = max_seconds, labels, record, persist
         self.swap_teams, self.device_fps, self.width, self.stats_every_s = swap_teams, device_fps, width, stats_every_s
         self.detector, self.quiet = detector, quiet
+        self.predict, self.home, self.away, self.predictor = predict, home, away, predictor
+        self.home_kit = home_kit
         self.stop = threading.Event()
         self.history: list[dict[str, Any]] = []
         self.recording: Path | None = None
@@ -85,6 +89,18 @@ class LiveRun:
             log.info("calibration starts from %d labelled frames of %s", len(anchors), labels)
         return TrackerCalibrator(anchors, venue=self.venue)
 
+    def _live_predictor(self, sink: FrameSink):
+        if not (self.predict or self.predictor is not None):
+            return None
+        from matchlens.next10.predict import LivePredictor, Predictor
+
+        try:
+            predictor = self.predictor or Predictor(self.match_id, home=self.home, away=self.away, fps=self.fps)
+        except RuntimeError as exc:
+            log.warning("no predictions: %s", exc)
+            return None
+        return LivePredictor(predictor, sink)
+
     async def run(self) -> dict[str, Any]:
         from matchlens.next10.chain import FrameChain
         from matchlens.vision.footage import prepare
@@ -99,7 +115,8 @@ class LiveRun:
             self.recording = RECORDINGS / f"{datetime.now(UTC):%Y%m%dT%H%M%S}.mp4"
         chain = FrameChain(self.match_id, self._calibrator(original, video), detector=self.detector or _detector(size[0]),
                            fps=self.fps, video_id=self.recording.stem if self.recording else
-                           (original.stem if original else None), swap_teams=self.swap_teams)
+                           (original.stem if original else None), swap_teams=self.swap_teams,
+                           home_kit=self.home_kit)
         chain.stats = RollingStats(every_s=self.stats_every_s)
         store = None
         if self.persist:
@@ -108,6 +125,7 @@ class LiveRun:
             except Exception as exc:
                 log.warning("next10 store unavailable (%s): frames go to the live hub only", exc)
         sink = FrameSink(self.match_id, store).start()
+        live_predictor = self._live_predictor(sink)
         job_id = f"live:{self.match_id}:{datetime.now(UTC):%Y%m%dT%H%M%S}"
         job: dict[str, Any] = {"id": job_id, "job_id": job_id, "kind": "live", "match_id": self.match_id,
                                "path": redact(self.source), "status": "running", "fps": self.fps,
@@ -153,6 +171,8 @@ class LiveRun:
                 kind, doc = item
                 if kind == "frame":
                     sink.add(doc)
+                    if live_predictor is not None:
+                        await live_predictor.feed(doc)
                 elif kind == "stats":
                     doc = {**doc, "match_id": self.match_id, "job_id": job_id, "teams": chain.teams.kits}
                     self.history.append(doc)
@@ -173,7 +193,7 @@ class LiveRun:
             await sink.close()
             final = chain.stats.snapshot(0.0)
             summary = {**final["total"], "live_ready": final["total_live_ready"], "dropped_frames": reader.dropped,
-                       "frames_written": sink.written, "teams": chain.teams.kits,
+                       "frames_written": sink.written, "predictions": live_predictor.made if live_predictor else 0, "teams": chain.teams.kits,
                        "recording": str(self.recording) if self.recording else None}
             ffmpeg_failed = reader.returncode not in (0, None, -15) and not self.stop.is_set()
             job.update(status="failed" if error or ffmpeg_failed else "done", updated_at=utc_now(), summary=summary,
@@ -205,10 +225,15 @@ def main() -> None:
     parser.add_argument("--labels", type=Path, help="labels.json to start the calibration from (default: the clip's)")
     parser.add_argument("--no-record", action="store_true", help="do not keep the input as a recording")
     parser.add_argument("--no-store", action="store_true", help="do not write to the next10 database")
-    parser.add_argument("--swap-teams", action="store_true", help="the team on the right of the pitch is home")
+    parser.add_argument("--swap-teams", action="store_true",
+                        help="home attacks towards -x at the start (frames are turned so home attacks +x)")
+    parser.add_argument("--home-kit", help="home shirt colour, e.g. '#a03040': names the teams by kit, not by side")
     parser.add_argument("--device-fps", type=int, default=30, help="frame rate to request from a capture device")
     parser.add_argument("--stats-every", type=float, default=STATS_EVERY_S, help="seconds between statistics")
     parser.add_argument("--width", type=int, default=1920, help="width frames are decoded at")
+    parser.add_argument("--predict", action="store_true", help="run the Next10 model on every second of video")
+    parser.add_argument("--home", help="home team name (for the model)")
+    parser.add_argument("--away", help="away team name (for the model)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     for noisy in ("azure.core.pipeline.policies.http_logging_policy", "azure.cosmos", "azure.identity"):
@@ -216,7 +241,7 @@ def main() -> None:
     run = LiveRun(source=args.source, match_id=args.match_id, fps=args.fps, venue=args.venue,
                   max_seconds=args.max_seconds, labels=args.labels, record=not args.no_record,
                   persist=not args.no_store, swap_teams=args.swap_teams, device_fps=args.device_fps, width=args.width,
-                  stats_every_s=args.stats_every)
+                  stats_every_s=args.stats_every, predict=args.predict, home=args.home, away=args.away, home_kit=args.home_kit)
     try:
         asyncio.run(run.run())
     except MediaError as exc:

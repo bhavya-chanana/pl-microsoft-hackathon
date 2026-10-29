@@ -15,9 +15,9 @@
         16.432677537704155
       ],
       "centre_sigma": [
-        0.005391141926622527,
-        0.03321494627783819,
-        0.008581629790744486
+        0.5,
+        0.5,
+        0.25
       ],
       "roll": -0.008436692362914134,
       "k1": 0.3983290546325019,
@@ -41,7 +41,8 @@
     },
     "history": 1,
     "notes": [
-      "fitted on the Liverpool-Brighton broadcast clip (sdr.mov, 10561 main frames, round 2 of solve_match, 105 x 68 markings model); camera = gantry about 36 m behind the near touchline at 16.4 m; k1 is weakly identified (0.14 to 0.46 across pitch-length hypotheses)"
+      "fitted on the Liverpool-Brighton broadcast clip (sdr.mov, 10561 main frames, round 2 of solve_match, 105 x 68 markings model); camera = gantry about 36 m behind the near touchline at 16.4 m; k1 is weakly identified (0.14 to 0.46 across pitch-length hypotheses)",
+      "centre_sigma is inflated from the formal 0.005/0.03/0.009 m to the spread of C across 101/103/105 m pitch-length hypotheses (the formal value assumes the markings model is exact)"
     ]
   },
   "etihad": {

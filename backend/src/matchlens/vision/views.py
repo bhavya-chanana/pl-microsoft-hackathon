@@ -13,6 +13,11 @@ the frame, a crowd shot has no grass. A shot (the frames between two cuts)
 takes the majority verdict of its frames, so a passing graphic or a player
 running past the lens does not split it.
 
+A streaming player's controls and a broadcaster's lower-third banner are drawn
+over the picture: a dark, text-and-icon band along the bottom edge whose hard
+edges read as pitch lines. A frame that carries one is not main, whatever the
+shot around it votes, so that its lines never reach the calibration.
+
 Replays from the main camera's angle look like live play and are not caught
 here.
 """
@@ -34,6 +39,10 @@ CUT_DISTANCE = 0.45  # Bhattacharyya distance between consecutive frames' histog
 MIN_SHOT_FRAMES = 6  # a cut this soon after another is a flash or a wipe, not a new shot
 MIN_GRASS = 0.35  # share of the frame
 MAX_FIGURE = 0.025  # share of the frame the largest non-grass blob on the field may cover
+BAND_ROWS = (0.955, 0.995)  # bottom strip of the frame, as a share of its height, read for an overlay
+BAND_WIDTH = 960  # the strip is read at this width, so the gradient does not depend on the input size
+BAND_DARK = 50  # median brightness (0-255) of an overlay strip: a dark scrim
+BAND_BUSY = 5.0  # mean absolute brightness step per pixel, horizontal plus vertical: text and icons on the scrim
 
 
 @dataclass(frozen=True)
@@ -41,10 +50,11 @@ class FrameLook:
     grass: float  # share of the frame that is grass
     figure: float  # share of the frame covered by the largest non-grass blob on the field
     hist: np.ndarray
+    overlay: bool = False  # a dark band of text or controls is drawn along the bottom edge
 
     @property
     def main(self) -> bool:
-        return self.grass >= MIN_GRASS and self.figure <= MAX_FIGURE
+        return self.grass >= MIN_GRASS and self.figure <= MAX_FIGURE and not self.overlay
 
 
 @dataclass(frozen=True)
@@ -56,6 +66,19 @@ class Views:
     def shots(self) -> list[range]:
         edges = [0, *self.cuts, len(self.main)]
         return [range(a, b) for a, b in pairwise(edges) if b > a]
+
+
+def has_overlay(bgr: np.ndarray) -> bool:
+    """True when the bottom edge carries a dark band of text or controls (player scrub bar, banner)."""
+    h, w = bgr.shape[:2]
+    band = bgr[int(BAND_ROWS[0] * h):max(int(BAND_ROWS[1] * h), int(BAND_ROWS[0] * h) + 2)]
+    if w != BAND_WIDTH:
+        band = cv2.resize(band, (BAND_WIDTH, max(round(band.shape[0] * BAND_WIDTH / w), 2)), interpolation=cv2.INTER_AREA)
+    v = band.max(axis=2)
+    if float(np.median(v)) >= BAND_DARK:
+        return False
+    v = v.astype(np.float32)
+    return float(np.abs(np.diff(v, axis=1)).mean() + np.abs(np.diff(v, axis=0)).mean()) >= BAND_BUSY
 
 
 def look(bgr: np.ndarray) -> FrameLook:
@@ -70,7 +93,7 @@ def look(bgr: np.ndarray) -> FrameLook:
     hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)
     hist = cv2.calcHist([hsv], [0, 1], None, list(HIST_BINS), [0, 180, 0, 256])
     cv2.normalize(hist, hist, 1.0, 0.0, cv2.NORM_L1)
-    return FrameLook(grass=float(np.count_nonzero(grass)) / grass.size, figure=figure, hist=hist)
+    return FrameLook(grass=float(np.count_nonzero(grass)) / grass.size, figure=figure, hist=hist, overlay=has_overlay(bgr))
 
 
 def cuts(looks: list[FrameLook]) -> list[int]:
@@ -90,4 +113,6 @@ def classify(frames: Iterable[np.ndarray]) -> Views:
     for shot in views.shots():
         votes = [looks[i].main for i in shot]
         main[shot.start:shot.stop] = sum(votes) * 2 > len(votes)
+    for i, lk in enumerate(looks):
+        main[i] &= not lk.overlay  # a graphic over the picture vetoes the frame, not just its own vote
     return views

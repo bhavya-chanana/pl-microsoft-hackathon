@@ -264,3 +264,35 @@ def test_venue_prior_round_trip_and_merge(tmp_path, solved):
     again = update_venue_prior("somewhere", cal, path)
     assert again.history == 2 and np.allclose(again.centre, cal.prior.centre)
     assert venue_prior("somewhere", path).has_camera and venue_prior("somewhere", path).pitch_length == 101
+
+
+def test_quality_at_gives_status_and_error(solved):
+    frames, _, cal = solved
+    q = cal.quality_at(frames[10].t)
+    assert q["calib_status"] == "fitted" and q["rmse_px"] is not None and q["rmse_m"] is not None
+    assert 0.0 < q["inlier_frac"] <= 1.0 and q["n_points"] > 0
+    gap = cal.quality_at(frames[20].t)
+    assert gap["calib_status"] == "interpolated" and gap["rmse_px"] is None
+    assert cal.quality_at(frames[-1].t + 30.0) is None
+
+
+def test_unsmoothed_fits_are_kept_on_request_and_rts_modes_agree_on_the_camera():
+    frames, traj = make_frames(n=90, noise=0.4)
+    kept = solve_match(frames, options=SolveOptions(min_points=6, keep_unsmoothed=True))
+    assert kept.unsmoothed is not None and len(kept.unsmoothed) == len(kept.frames)
+    gaps = solve_match(frames, options=SolveOptions(min_points=6, rts="gaps"))
+    assert np.allclose(kept.prior.centre, gaps.prior.centre, atol=0.5)
+    # a measured frame keeps its own fit in "gaps" mode, so it equals the unsmoothed value
+    i = 40
+    assert gaps.frames[i].pan == pytest.approx(kept.unsmoothed[i].pan, abs=1e-3)
+
+
+def test_fixed_lens_term_is_held():
+    frames, _ = make_frames(n=60, noise=0.4)
+    cal = solve_match(frames, options=SolveOptions(min_points=6, fix_k1=0.0))
+    assert cal.prior.k1 == 0.0
+
+
+def test_centre_sigma_has_a_floor_for_model_error(solved):
+    _, _, cal = solved
+    assert all(s >= f for s, f in zip(cal.prior.centre_sigma, (0.5, 0.5, 0.25), strict=True))
