@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowLeft, FlaskConical } from "lucide-react";
+import { ArrowLeft, FlaskConical, TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -11,6 +11,7 @@ import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 import { MOCK } from "./config";
+import type { CalibStatus, LiveStats } from "./contract";
 import { n10 } from "./copy";
 
 /** Page frame for every Next-10s page: width, a way back, the title, and a mock-data flag in dev. */
@@ -102,6 +103,7 @@ export type LayerChip = { id: string; label: string; on: boolean; disabled?: boo
 
 /** Layer switches as pressed-state buttons. A disabled layer says why, in text, below the row. */
 export function LayerChips({ label, chips, onToggle }: { label: string; chips: LayerChip[]; onToggle: (id: string) => void }) {
+  const uid = useId();
   const reasons = chips.filter((c) => (c.on || c.disabled) && c.reason);
   return (
     <div className="flex flex-col gap-2">
@@ -111,6 +113,7 @@ export function LayerChips({ label, chips, onToggle }: { label: string; chips: L
             key={c.id}
             type="button"
             aria-pressed={c.on}
+            aria-describedby={c.reason && (c.on || c.disabled) ? `${uid}-${c.id}` : undefined}
             disabled={c.disabled}
             onClick={() => onToggle(c.id)}
             className={cn(
@@ -126,7 +129,7 @@ export function LayerChips({ label, chips, onToggle }: { label: string; chips: L
       {reasons.length > 0 && (
         <ul className="flex flex-col gap-0.5 text-[13px] text-subtle">
           {reasons.map((c) => (
-            <li key={c.id}>{c.reason}</li>
+            <li key={c.id} id={`${uid}-${c.id}`}>{c.reason}</li>
           ))}
         </ul>
       )}
@@ -135,9 +138,15 @@ export function LayerChips({ label, chips, onToggle }: { label: string; chips: L
 }
 
 /** Pitch key: observed against estimated players, ball, referee. */
-export function PitchLegend({ text }: { text: { observed: string; imputed: string; ball: string; ref: string } }) {
+export function PitchLegend({ text, zone }: { text: { observed: string; imputed: string; ball: string; ref: string }; zone?: string | null }) {
   return (
     <ul className="flex flex-wrap gap-x-5 gap-y-1.5 text-[13px] text-muted-foreground">
+      {zone && (
+        <li className="flex w-full items-center gap-2">
+          <span aria-hidden className="h-2.5 w-14 shrink-0 rounded-full bg-gradient-to-r from-primary/10 to-primary/70" />
+          {zone}
+        </li>
+      )}
       <li className="flex items-center gap-1.5">
         <svg aria-hidden width="14" height="14"><circle cx="7" cy="7" r="5.5" className="fill-home stroke-graphic" strokeWidth="1" /></svg>
         {text.observed}
@@ -155,5 +164,30 @@ export function PitchLegend({ text }: { text: { observed: string; imputed: strin
         {text.ref}
       </li>
     </ul>
+  );
+}
+
+/** What the pitch mapping of the frame on screen means, in plain words. Nothing is said for an ordinary fitted frame. */
+export function FrameNote({ status }: { status: CalibStatus | null | undefined }) {
+  if (!status || status === "fitted" || status === "frame") return null;
+  const low = status === "interpolated";
+  return (
+    <p role="status" className={cn("flex items-start gap-2 rounded-lg px-3 py-2 text-[13px]", low ? "bg-rewritten/15 text-foreground ring-1 ring-rewritten/40" : "bg-raised text-muted-foreground ring-1 ring-border")}>
+      <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+      {n10.match.calib[status]}
+    </p>
+  );
+}
+
+/** Video pipeline health, from the live "stats" messages or the job's last stats. */
+export function StatsChip({ stats }: { stats: LiveStats | null | undefined }) {
+  if (!stats || (stats.live_ready == null && stats.calibrated_share == null)) return null;
+  const T = n10.match.pipeline;
+  const parts = [stats.live_ready == null ? null : stats.live_ready ? T.ready : T.notReady, stats.calibrated_share == null ? null : T.calibrated(stats.calibrated_share), stats.on_pitch_rate == null ? null : T.onPitch(stats.on_pitch_rate)].filter(Boolean);
+  return (
+    <span className={cn("inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-full bg-raised px-3 py-1.5 text-[13px] ring-1 ring-border", stats.live_ready ? "text-foreground" : "text-muted-foreground")}>
+      <span aria-hidden className={cn("size-2 shrink-0 rounded-full", stats.live_ready ? "bg-verified" : "bg-rewritten")} />
+      {parts.join(" · ")}
+    </span>
   );
 }

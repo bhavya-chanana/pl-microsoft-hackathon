@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 import type { Outcome, Prediction, Side } from "./contract";
 import { n10 } from "./copy";
+import { type Mark, MarkLayer, MarkLegend } from "./fotmob-charts";
 import { pct } from "./lib";
 
 const H = 236;
@@ -21,6 +22,9 @@ type Props = {
   nowMinute?: number | null;
   /** Mark the minute the pitch is showing. */
   cursorMinute?: number | null;
+  /** A shared minute axis (so a chart above lines up) and the goals and cards to mark on it. */
+  xMax?: number;
+  marks?: Mark[];
 };
 
 function nice(max: number): number {
@@ -29,7 +33,7 @@ function nice(max: number): number {
 }
 
 /** Team lines for one head by minute, with the actual shots and goals along the bottom once the match is scored. */
-export function TimelineChart({ docs, head, outcomes, names, nowMinute, cursorMinute }: Props) {
+export function TimelineChart({ docs, head, outcomes, names, nowMinute, cursorMinute, xMax: xMaxProp = 0, marks = [] }: Props) {
   const titleId = useId();
   // Draw at the real pixel width so axis text stays the same size on a phone and on a desktop.
   const box = useRef<HTMLDivElement>(null);
@@ -52,7 +56,7 @@ export function TimelineChart({ docs, head, outcomes, names, nowMinute, cursorMi
     return by;
   }, [docs, head]);
   const lastMinute = Math.max(0, ...series.home.map((p) => p.m), ...series.away.map((p) => p.m));
-  const xMax = Math.max(90, Math.ceil(lastMinute / 15) * 15);
+  const xMax = xMaxProp > 0 ? xMaxProp : Math.max(90, Math.ceil(lastMinute / 15) * 15);
   const yMax = nice(Math.max(0.02, ...series.home.map((p) => p.p), ...series.away.map((p) => p.p)) * 1.1);
   const x = (m: number) => M.l + (m / xMax) * IW;
   const y = (p: number) => M.t + IH - (p / yMax) * IH;
@@ -69,7 +73,8 @@ export function TimelineChart({ docs, head, outcomes, names, nowMinute, cursorMi
     setHover(Math.min(xMax, Math.max(0, Math.round(((m - M.l) / IW) * xMax))));
   };
   const empty = series.home.length + series.away.length === 0;
-  const shots = (outcomes ?? []).filter((o) => o.type === "shot" || o.type === "goal");
+  // Penalty-shootout kicks carry minutes past the match: nothing is drawn beyond the axis.
+  const shots = (outcomes ?? []).filter((o) => (o.type === "shot" || o.type === "goal") && (o.t_s != null ? o.t_s / 60 : o.minute) <= xMax);
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * yMax);
   const path = (pts: Array<{ m: number; p: number }>) => pts.map((pt, i) => `${i ? "L" : "M"}${x(pt.m).toFixed(1)} ${y(pt.p).toFixed(1)}`).join(" ");
   const headLabel = n10.match.heads[head] ?? head;
@@ -85,6 +90,7 @@ export function TimelineChart({ docs, head, outcomes, names, nowMinute, cursorMi
             <span className={side === "home" ? "text-home-text" : "text-away-text"}>{names[side]}</span>
           </span>
         ))}
+        <MarkLegend marks={marks} />
         {outcomes && (
           <span className="inline-flex items-center gap-3 text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
@@ -125,6 +131,7 @@ export function TimelineChart({ docs, head, outcomes, names, nowMinute, cursorMi
           {Array.from({ length: Math.floor(xMax / 15) + 1 }, (_, i) => i * 15).map((m) => (
             <text key={m} x={x(m)} y={H - 6} textAnchor="middle" className="fill-subtle" style={{ fontSize: 11 }}>{m}&prime;</text>
           ))}
+          <MarkLayer marks={marks} x={x} top={M.t} bottom={M.t + IH} />
           {cursorMinute != null && <line x1={x(cursorMinute)} x2={x(cursorMinute)} y1={M.t} y2={M.t + IH} className="stroke-foreground" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="2 3" />}
           {nowMinute != null && <line x1={x(nowMinute)} x2={x(nowMinute)} y1={M.t} y2={M.t + IH} className="stroke-live" strokeWidth={1.5} />}
           {!empty && (

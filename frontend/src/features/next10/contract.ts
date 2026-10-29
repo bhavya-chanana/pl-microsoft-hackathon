@@ -23,6 +23,10 @@ export const Next10Match = z.object({
   kickoff_utc: z.string().nullish(),
   status: z.string().nullish(),
   score: z.object({ home: z.number().nullish(), away: z.number().nullish() }).nullish(),
+  fotmob_id: z.number().nullish(),
+  /** A video clip: the span of match-clock seconds the footage covers. */
+  clock_from_s: z.number().nullish(),
+  clock_to_s: z.number().nullish(),
 });
 export type Next10Match = z.infer<typeof Next10Match>;
 
@@ -88,6 +92,10 @@ export const Entity = z.object({
 });
 export type Entity = z.infer<typeof Entity>;
 
+/** How the frame's pitch mapping was obtained. Interpolated is a guess between two fitted frames, so less certain. */
+export const CalibStatus = z.enum(["fitted", "interpolated", "none", "frame"]);
+export type CalibStatus = z.infer<typeof CalibStatus>;
+
 export const TrackFrame = z.object({
   id: z.string().optional(),
   match_id: z.string().optional(),
@@ -95,6 +103,7 @@ export const TrackFrame = z.object({
   match_clock_s: z.number().nullish(),
   entities: z.array(Entity),
   calibrated: z.boolean().nullish(),
+  calib_status: CalibStatus.nullish().catch(null),
 });
 export type TrackFrame = z.infer<typeof TrackFrame>;
 
@@ -141,9 +150,18 @@ export const Moment = z.object({
   team: z.string().nullish(),
   minute: z.number(),
   t_s: z.number(),
+  match_clock_s: z.number().nullish(),
   xg: z.number().nullish(),
   player: z.string().nullish(),
   label: z.string().nullish(),
+  /** Where the moment came from: "fotmob" (a recorded shot or goal) or "model" (a peak of the model's shot chance). */
+  source: z.string().nullish(),
+  p_shot10: z.number().nullish(),
+  /** "observed": the goal second was found in the footage (within t_s_error_s), not estimated from the minute. */
+  placed: z.string().nullish(),
+  t_s_error_s: z.number().nullish(),
+  scored_by: Side.nullish().catch(null),
+  own_goal: z.boolean().nullish(),
 });
 export type Moment = z.infer<typeof Moment>;
 
@@ -153,6 +171,16 @@ export const LiveMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("frame"), doc: TrackFrame }),
 ]);
 export type LiveMessage = z.infer<typeof LiveMessage>;
+
+/** Live video-pipeline statistics (the socket's "stats" messages, and the `stats` of a video job). */
+export const LiveStats = z.object({
+  live_ready: z.boolean().nullish(),
+  calibrated_share: z.number().nullish(),
+  on_pitch_rate: z.number().nullish(),
+  fps: z.number().nullish(),
+  dropped_frames: z.number().nullish(),
+});
+export type LiveStats = z.infer<typeof LiveStats>;
 
 /** Seconds on the match clock a prediction refers to. */
 export function predictionT(p: Prediction): number {

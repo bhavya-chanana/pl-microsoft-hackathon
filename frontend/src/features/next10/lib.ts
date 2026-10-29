@@ -21,6 +21,17 @@ export function nearestByTime<T>(items: readonly T[], t: number, time: (item: T)
 }
 
 export const nearestFrame = (frames: readonly TrackFrame[], t: number, within = 3) => nearestByTime(frames, t, (f) => f.t_s, within);
+
+/**
+ * The frame to draw at time t: the nearest one that has tracked players, if one lies within `within` seconds
+ * (`shifted` says how far from t it is); otherwise the nearest frame even if empty, so the page can say so.
+ */
+export function pickFrame(frames: readonly TrackFrame[], t: number, within = 3): { frame: TrackFrame; shifted: number } | null {
+  const tracked = nearestByTime(frames.filter((f) => f.entities.length > 0), t, (f) => f.t_s, within);
+  if (tracked) return { frame: tracked, shifted: Math.abs(tracked.t_s - t) };
+  const any = nearestFrame(frames, t, within);
+  return any ? { frame: any, shifted: 0 } : null;
+}
 export const nearestPrediction = (docs: readonly Prediction[], t: number, within = 8) => nearestByTime(docs, t, predictionT, within);
 
 /** The side with the ball in a Next10 forecast: "home"/"away" directly, or a club id/name matched against the match. */

@@ -29,22 +29,33 @@ type Props = {
   receivers?: ReceiverMark[];
   label: string;
   className?: string;
+  /** Players are drawn fainter when the frame's pitch mapping is only interpolated. */
+  lowConfidence?: boolean;
 };
 
-/** Heat cells, drawn under the players: opacity follows probability relative to the likeliest cell. */
+/**
+ * The ball-in-10-seconds forecast as a soft density: cells are blurred together and clipped to the pitch, so no
+ * single cell reads as the prediction. A diffuse forecast (no clear peak) is drawn fainter than a concentrated one.
+ */
 const Zone = memo(function Zone({ zone }: { zone: BallZone }) {
   const w = (2 * PITCH_X) / zone.cols;
   const h = (2 * PITCH_Y) / zone.rows;
   const max = Math.max(...zone.p, 1e-9);
+  const uniform = 1 / zone.p.length;
+  // Peak of 6x the uniform share or more is drawn at full strength; a flat forecast stays faint.
+  const strength = Math.min(1, max / (6 * uniform));
   return (
-    <g aria-hidden>
-      {zone.p.map((p, i) => {
-        const row = Math.floor(i / zone.cols);
-        const col = i % zone.cols;
-        const k = p / max;
-        if (k < 0.04) return null;
-        return <rect key={i} x={zone.x0 + col * w} y={zone.y0 + row * h} width={w} height={h} className="fill-primary" fillOpacity={0.08 + 0.62 * k ** 0.8} />;
-      })}
+    <g aria-hidden clipPath="url(#n10-clip)">
+      <g filter="url(#n10-soften)">
+        {zone.p.map((p, i) => {
+          const row = Math.floor(i / zone.cols);
+          const col = i % zone.cols;
+          const k = p / max;
+          if (k < 0.02) return null;
+          // Slightly oversized cells so the blur starts from a continuous field.
+          return <rect key={i} x={zone.x0 + col * w - 0.4} y={zone.y0 + row * h - 0.4} width={w + 0.8} height={h + 0.8} className="fill-primary" fillOpacity={(0.12 + 0.6 * k ** 1.2) * (0.35 + 0.65 * strength)} />;
+        })}
+      </g>
     </g>
   );
 });
@@ -80,7 +91,7 @@ function Player({ e, rank }: { e: Entity; rank?: ReceiverMark }) {
 }
 
 /** The 2D pitch in metres (origin at the centre spot), with the Next-10s layers. Home attacks towards +x. */
-export function Next10Pitch({ entities, zone, paths = [], ghost, receivers = [], label, className }: Props) {
+export function Next10Pitch({ entities, zone, paths = [], ghost, receivers = [], label, className, lowConfidence = false }: Props) {
   const byId = new Map(entities.map((e) => [e.id, e]));
   // Players first, then refs, with the ball last so nothing covers it.
   const order = (e: Entity) => (e.team === "ball" ? 3 : e.team === "ref" ? 2 : e.observed ? 1 : 0);
@@ -92,6 +103,12 @@ export function Next10Pitch({ entities, zone, paths = [], ghost, receivers = [],
           <rect width={PITCH_X / 6} height={2 * PITCH_Y} className="fill-turf" />
           <rect x={PITCH_X / 6} width={PITCH_X / 6} height={2 * PITCH_Y} className="fill-turf-stripe" />
         </pattern>
+        <clipPath id="n10-clip">
+          <rect x={-PITCH_X} y={-PITCH_Y} width={2 * PITCH_X} height={2 * PITCH_Y} />
+        </clipPath>
+        <filter id="n10-soften" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation={3.4} />
+        </filter>
       </defs>
       <rect x={-PITCH_X - 3} y={-PITCH_Y - 3} width={2 * PITCH_X + 6} height={2 * PITCH_Y + 6} rx={1} fill="url(#n10-stripes)" />
       <g transform={`translate(${-PITCH_X} ${-PITCH_Y})`} aria-hidden>
@@ -112,9 +129,11 @@ export function Next10Pitch({ entities, zone, paths = [], ghost, receivers = [],
           );
         })}
       </g>
-      {sorted.map((e) => (
-        <Player key={e.id} e={e} rank={receivers.find((r) => r.entityId === e.id)} />
-      ))}
+      <g opacity={lowConfidence ? 0.6 : 1} data-low-confidence={lowConfidence || undefined}>
+        {sorted.map((e) => (
+          <Player key={e.id} e={e} rank={receivers.find((r) => r.entityId === e.id)} />
+        ))}
+      </g>
       {receivers.map((r) => {
         const e = byId.get(r.entityId);
         if (!e) return null;

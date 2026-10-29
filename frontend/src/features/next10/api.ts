@@ -6,8 +6,9 @@ import { z } from "zod";
 import { getJson } from "@/lib/api";
 
 import { MOCK } from "./config";
-import { type Moment, Moment as MomentSchema, MatchDetail, Next10Match, Prediction, ScoreDoc, TrackFrame } from "./contract";
-import { mockFrames, mockMatch, mockMatches, mockMoments, mockPredictions, mockVerify } from "./mock";
+import { FotmobDoc } from "./fotmob-contract";
+import { type LiveStats, LiveStats as LiveStatsSchema, type Moment, Moment as MomentSchema, MatchDetail, Next10Match, Prediction, ScoreDoc, TrackFrame } from "./contract";
+import { mockFrames, mockJobs, mockMatch, mockMatches, mockMoments, mockPredictions, mockVerify } from "./mock";
 
 /** Backend paths, ids URL-encoded ("fotmob:123" carries a colon). */
 const path = {
@@ -16,6 +17,8 @@ const path = {
   predictions: (id: string) => `next10/matches/${encodeURIComponent(id)}/predictions`,
   frames: (id: string) => `next10/matches/${encodeURIComponent(id)}/frames`,
   moments: (id: string) => `next10/matches/${encodeURIComponent(id)}/moments`,
+  fotmob: (id: string) => `next10/matches/${encodeURIComponent(id)}/fotmob`,
+  jobs: (id: string) => `next10/matches/${encodeURIComponent(id)}/jobs`,
   verify: "next10/verify",
 };
 
@@ -64,6 +67,18 @@ export async function fetchMoments(id: string): Promise<Moment[]> {
   return getJson(path.moments(id), lenient(MomentSchema));
 }
 
+/** The newest pipeline statistics for a match: from the video job's `stats`, or a stats document itself. */
+export async function fetchStats(id: string): Promise<LiveStats | null> {
+  const docs = MOCK ? await wait(mockJobs(id)) : await getJson(path.jobs(id), z.array(z.unknown()));
+  let found: LiveStats | null = null;
+  for (const doc of docs) {
+    const rec = doc as { stats?: unknown } | null;
+    const parsed = LiveStatsSchema.safeParse(rec?.stats ?? doc);
+    if (parsed.success && (parsed.data.live_ready != null || parsed.data.calibrated_share != null)) found = parsed.data;
+  }
+  return found;
+}
+
 export async function fetchVerify(): Promise<ScoreDoc[]> {
   if (MOCK) return wait(mockVerify());
   return getJson(path.verify, lenient(ScoreDoc));
@@ -72,6 +87,9 @@ export async function fetchVerify(): Promise<ScoreDoc[]> {
 export const useMatches = () => useQuery({ queryKey: ["next10", "matches"], queryFn: fetchMatches, refetchInterval: 30_000 });
 
 export const useMatch = (id: string) => useQuery({ queryKey: ["next10", "match", id], queryFn: () => fetchMatch(id), refetchInterval: 20_000 });
+
+export const useStats = (id: string, live: boolean) =>
+  useQuery({ queryKey: ["next10", "stats", id], queryFn: () => fetchStats(id), refetchInterval: live ? 10_000 : false, retry: false });
 
 export const useVerify = () => useQuery({ queryKey: ["next10", "verify"], queryFn: fetchVerify, refetchInterval: 60_000 });
 
@@ -107,7 +125,7 @@ export function useFramesWindow(id: string, from: number, to: number, poll: numb
 }
 
 /** The newest frame and the newest Next10 forecast: the live follow when the socket is not delivering. */
-export function useLatest(id: string, poll: number | false, enabled: boolean) {
+export function useLatest(id: string, poll: number | false, enabled: boolean, withPrediction = true) {
   const frame = useQuery({
     queryKey: ["next10", "latest-frame", id],
     queryFn: async () => (await fetchFrames(id, { last: 1 })).at(-1) ?? null,
@@ -118,7 +136,20 @@ export function useLatest(id: string, poll: number | false, enabled: boolean) {
     queryKey: ["next10", "latest-n10", id],
     queryFn: async () => (await fetchPredictions(id, { kind: "next10", last: 1 })).at(-1) ?? null,
     refetchInterval: poll,
-    enabled,
+    enabled: enabled && withPrediction,
   });
-  return { frame: frame.data ?? null, prediction: prediction.data ?? null, loading: frame.isPending || prediction.isPending };
+  return { frame: frame.data ?? null, prediction: prediction.data ?? null, loading: frame.isPending || (withPrediction && prediction.isPending) };
 }
+
+/** The FotMob match page (events, stats, shot map, lineups ...). Null when the backend has none: the blocks are then hidden. */
+export async function fetchFotmob(id: string): Promise<FotmobDoc | null> {
+  if (MOCK) return null;
+  try {
+    return await getJson(path.fotmob(id), FotmobDoc);
+  } catch {
+    return null;
+  }
+}
+
+export const useFotmob = (id: string, live: boolean, enabled: boolean) =>
+  useQuery({ queryKey: ["next10", "fotmob", id], queryFn: () => fetchFotmob(id), refetchInterval: live ? 20_000 : false, enabled, retry: false });

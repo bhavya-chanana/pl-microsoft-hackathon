@@ -7,8 +7,15 @@ function Slider({
   value,
   min = 0,
   max = 100,
+  thumbLabel,
+  getAriaValueText,
   ...props
-}: SliderPrimitive.Root.Props) {
+}: SliderPrimitive.Root.Props & {
+  /** Accessible name of each thumb's input (a slider with no name is unannounced). */
+  thumbLabel?: string
+  /** Spoken value, e.g. "2 seconds after the moment". */
+  getAriaValueText?: (formattedValue: string, value: number, index: number) => string
+}) {
   const _values = Array.isArray(value)
     ? value
     : Array.isArray(defaultValue)
@@ -40,6 +47,8 @@ function Slider({
           <SliderPrimitive.Thumb
             data-slot="slider-thumb"
             key={index}
+            getAriaLabel={thumbLabel ? () => thumbLabel : undefined}
+            getAriaValueText={getAriaValueText}
             className="relative block size-3 shrink-0 rounded-full border border-ring bg-white ring-ring/50 transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-3 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3 disabled:pointer-events-none disabled:opacity-50"
           />
         ))}

@@ -61,7 +61,9 @@ export function mockFrame(t: number): TrackFrame {
   }
   entities.push({ id: "ref-1", team: "ref", x: clamp(ball.x * 0.8 - 6, -50, 50), y: clamp(ball.y * 0.5 + 10, -33, 33), observed: true, conf: 0.9 });
   entities.push({ id: "ball", team: "ball", x: ball.x, y: ball.y, observed: true, conf: 0.8 });
-  return { t_s: t, match_clock_s: t, entities, calibrated: true };
+  // A few seconds in every minute are interpolated, so the lower-confidence note can be seen.
+  const interpolated = Math.floor(t) % 60 >= 20 && Math.floor(t) % 60 < 26;
+  return { t_s: t, match_clock_s: t, entities, calibrated: true, calib_status: interpolated ? "interpolated" : "fitted" };
 }
 
 /** Match clock of the mock live match, advancing in real time from where the page loaded. */
@@ -188,6 +190,11 @@ export function mockPredictions(matchId: string, kind: string | null, team: stri
   return out;
 }
 
+export function mockJobs(matchId: string): unknown[] {
+  if (matchId !== "mock:live") return [];
+  return [{ id: "job:mock", match_id: matchId, live_ready: true, stats: { live_ready: true, calibrated_share: 0.8, on_pitch_rate: 0.96, fps: 5, dropped_frames: 0 } }];
+}
+
 /* ------------------------------ moments ------------------------------ */
 
 export function mockMoments(matchId: string): Moment[] {
@@ -201,7 +208,11 @@ export function mockMoments(matchId: string): Moment[] {
     { id: "m3", match_id: matchId, kind: "chance", team_side: "away", team: away, minute: 37, t_s: 37 * 60 + 20, xg: 0.18, player: "Dalli", label: "Shot, blocked" },
     { id: "m4", match_id: matchId, kind: "chance", team_side: "away", team: away, minute: 55, t_s: 55 * 60 + 20, xg: 0.22, player: "Reyes", label: "Shot, wide" },
   ];
-  return matchId === "mock:ft2" ? all.filter((m) => m.kind !== "goal_conceded") : all;
+  if (matchId === "mock:ft2") {
+    // A video-only match: moments are peaks of the model's own shot chance, not recorded events.
+    return all.filter((m) => m.kind !== "goal_conceded").map((m, i) => ({ ...m, source: "model", xg: null, p_shot10: [0.34, 0.27, 0.22][i] ?? 0.2, label: "Model shot-chance peak" }));
+  }
+  return all.map((m) => ({ ...m, source: "fotmob" }));
 }
 
 /* ------------------------------ verification ------------------------------ */

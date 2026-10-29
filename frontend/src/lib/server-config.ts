@@ -35,7 +35,7 @@ export const PROXY_GET = [
   // Next-10s companion (backend flag MATCHLENS_NEXT10=1). Match ids look like "fotmob:123".
   /^next10\/matches$/,
   /^next10\/matches\/[\w:.\-]+$/,
-  /^next10\/matches\/[\w:.\-]+\/(predictions|frames|moments|jobs)$/,
+  /^next10\/matches\/[\w:.\-]+\/(predictions|frames|moments|jobs|fotmob)$/,
   /^next10\/verify$/,
 ];
 

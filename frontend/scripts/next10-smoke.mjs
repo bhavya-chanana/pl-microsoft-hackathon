@@ -7,7 +7,7 @@ import { chromium } from "playwright";
 const [, , base = "http://localhost:3417", shots = ""] = process.argv;
 const PAGES = [
   { path: "/next10", name: "matches", expect: ["Live now", "Northgate Rovers", "Finished"] },
-  { path: "/next10/mock%3Alive", name: "companion", expect: ["Follow live", "Likely receivers", "Seen on video", "Estimated (off screen)"], selector: "[data-observed=false]" },
+  { path: "/next10/mock%3Alive", name: "companion", expect: ["Follow live", "Likely options for the next pass", "Seen on video", "Estimated (off screen)"], selector: "[data-observed=false]" },
   { path: "/next10/mock%3Aft1", name: "companion-finished", expect: ["Full time", "Actual shots"] },
   { path: "/next10/verify", name: "verify", expect: ["Verification board", "Beat baseline", "Reliability"] },
   { path: "/next10/mock%3Aft1/moments", name: "moments", expect: ["Play it out", "Goal conceded", "Model expectation"], selector: "[role=radio]" },

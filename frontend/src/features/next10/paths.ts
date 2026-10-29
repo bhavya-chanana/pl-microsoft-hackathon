@@ -12,13 +12,15 @@ export function pathsFrom(doc: Prediction | null, entities: Entity[], opts: { mo
   const lines: PathLine[] = [];
   for (const t of set.entities) {
     const start = byId.get(t.entity_id);
-    const tone = t.entity_id === "ball" ? "ball" : start?.team === "away" ? "away" : "home";
+    // Tracker ids churn from frame to frame: a line for an entity that is not drawn would start from nowhere.
+    if (!start) continue;
+    const tone = t.entity_id === "ball" ? "ball" : start.team === "away" ? "away" : "home";
     t.modes.forEach((mode, k) => {
       if (opts.modes === "best" && k > 0) return;
       if (opts.modes === "alternatives" && k === 0) return;
       if (mode.path.length === 0) return;
-      const points: Array<[number, number]> = start ? [[start.x, start.y], ...mode.path] : mode.path;
-      lines.push({ key: `${opts.prefix ?? "p"}-${t.entity_id}-${k}`, points, weight: Math.min(1, Math.max(0.1, mode.p * 1.4)), tone, dashed: k > 0 });
+      const points: Array<[number, number]> = [[start.x, start.y], ...mode.path];
+      lines.push({ key: `${opts.prefix ?? "p"}-${t.entity_id}-${k}`, points, weight: opts.modes === "best" ? 0.85 : Math.min(1, Math.max(0.1, mode.p * 1.4)), tone, dashed: k > 0 });
     });
   }
   return lines;

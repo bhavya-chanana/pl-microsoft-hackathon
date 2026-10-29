@@ -86,23 +86,41 @@ export function VerdictChip({ verdict }: { verdict: Verdict }) {
 
 const f3 = (v: number | null | undefined) => (v == null ? "–" : v.toFixed(3));
 
-/** Model against the two guesses, one bar each; the value is printed on every bar. */
-function ErrorBars({ title, rows }: { title: string; rows: Array<{ label: string; value: number | null | undefined; model?: boolean }> }) {
+/** The model's error against the base-rate guess, signed, in words: bars that start at 0 cannot show a 0.001 gap. */
+function gapAgainst(model: number | null | undefined, base: number | null | undefined): string | null {
+  if (model == null || base == null) return null;
+  const d = model - base;
+  if (Math.abs(d) < 0.00005) return "Same as the base-rate guess";
+  return `${d > 0 ? "+" : "−"}${Math.abs(d).toFixed(4)} against the base-rate guess, ${d > 0 ? "worse" : "better"}`;
+}
+
+/**
+ * Model against the two guesses, one bar each, the value printed on every bar. Only the lowest (best) row is coloured:
+ * a long bar for the model is not good news, and which one wins is stated in words under the title.
+ */
+function ErrorBars({ title, rows, gap }: { title: string; rows: Array<{ label: string; value: number | null | undefined; model?: boolean }>; gap?: string | null }) {
   const max = Math.max(1e-9, ...rows.map((r) => r.value ?? 0));
+  const present = rows.filter((r) => r.value != null);
+  const best = present.length > 1 ? Math.min(...present.map((r) => r.value as number)) : null;
+  const winners = best == null ? 0 : present.filter((r) => (r.value as number) === best).length;
   return (
     <div className="flex flex-col gap-1.5">
       <p className="text-[13px] font-medium text-muted-foreground">
         {title} <span className="font-normal text-subtle">· {T.lowerIsBetter}</span>
       </p>
-      {rows.map((r) => (
-        <div key={r.label} className="grid grid-cols-[7.5rem_1fr_3.5rem] items-center gap-2 text-sm">
-          <span className={cn("truncate", r.model ? "font-medium" : "text-muted-foreground")}>{r.label}</span>
-          <span className="h-2 overflow-hidden rounded-full bg-muted" role="presentation">
-            <span className={cn("block h-full rounded-full", r.model ? "bg-primary" : "bg-subtle")} style={{ width: `${((r.value ?? 0) / max) * 100}%` }} />
-          </span>
-          <span className="text-right font-display font-semibold tnum">{f3(r.value)}</span>
-        </div>
-      ))}
+      {gap && <p className="text-[13px] text-foreground tnum">{gap}</p>}
+      {rows.map((r) => {
+        const wins = best != null && winners === 1 && r.value === best;
+        return (
+          <div key={r.label} className="grid grid-cols-[7.5rem_1fr_3.5rem] items-center gap-2 text-sm">
+            <span className={cn("truncate", r.model ? "font-medium" : "text-muted-foreground")}>{r.label}</span>
+            <span className="h-2 overflow-hidden rounded-full bg-muted" role="presentation">
+              <span className={cn("block h-full rounded-full", wins ? "bg-primary" : "bg-subtle")} style={{ width: `${((r.value ?? 0) / max) * 100}%` }} />
+            </span>
+            <span className={cn("text-right font-display font-semibold tnum", wins && "text-primary")}>{f3(r.value)}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -133,13 +151,17 @@ export function ReliabilityPlot({ bins, label }: { bins: Reliability[] | null | 
         <line x1={x(0)} y1={y(0)} x2={x(max)} y2={y(max)} className="stroke-subtle" strokeDasharray="4 3" />
         <polyline points={filled.map((b) => `${x(b.mean_p)},${y(b.freq)}`).join(" ")} className="fill-none stroke-primary" strokeWidth={1.5} />
         {filled.map((b) => (
-          <circle key={b.lo} cx={x(b.mean_p)} cy={y(b.freq)} r={2.5 + 4.5 * Math.sqrt(b.n / nMax)} className="fill-primary stroke-card" strokeWidth={1.5}>
-            <title>{`Predicted ${(b.mean_p * 100).toFixed(1)}%, happened ${(b.freq * 100).toFixed(1)}% (${b.n} predictions)`}</title>
-          </circle>
+          <g key={b.lo}>
+            <circle cx={x(b.mean_p)} cy={y(b.freq)} r={2.5 + 4.5 * Math.sqrt(b.n / nMax)} className={b.n < nMax * 0.05 ? "fill-card stroke-primary" : "fill-primary stroke-card"} strokeWidth={b.n < nMax * 0.05 ? 1.2 : 1.5}>
+              <title>{`Predicted ${(b.mean_p * 100).toFixed(1)}%, happened ${(b.freq * 100).toFixed(1)}% (${b.n} predictions)`}</title>
+            </circle>
+            <text x={x(b.mean_p) + 4 + 4.5 * Math.sqrt(b.n / nMax)} y={y(b.freq) - 3} className="fill-muted-foreground" style={{ fontSize: 8.5 }}>n={b.n}</text>
+          </g>
         ))}
         <text x={(P.l + S - P.r) / 2} y={S - 3} textAnchor="middle" className="fill-muted-foreground" style={{ fontSize: 10 }}>{T.axisPredicted}</text>
         <text transform={`translate(11 ${(P.t + S - P.b) / 2}) rotate(-90)`} textAnchor="middle" className="fill-muted-foreground" style={{ fontSize: 10 }}>{T.axisObserved}</text>
       </svg>
+      <figcaption className="text-[12px] text-subtle tnum">{`Dot size and the n label show how many predictions fall in each bin (${Math.min(...filled.map((b) => b.n))} to ${nMax}). Hollow dots have very few.`}</figcaption>
     </figure>
   );
 }
@@ -158,6 +180,7 @@ function HeadCard({ head, score }: { head: string; score: HeadScore }) {
         <VerdictChip verdict={verdictOf(score)} />
       </div>
       <ErrorBars
+        gap={gapAgainst(score.brier, score.brier_baseline)}
         title={T.brier}
         rows={[
           { label: T.model, value: score.brier, model: true },
@@ -166,6 +189,7 @@ function HeadCard({ head, score }: { head: string; score: HeadScore }) {
         ]}
       />
       <ErrorBars
+        gap={gapAgainst(score.logloss, score.logloss_baseline)}
         title={T.logloss}
         rows={[
           { label: T.model, value: score.logloss, model: true },
